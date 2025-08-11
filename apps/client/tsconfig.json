@@ -1,0 +1,18 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "extends": "tsconfig/react.json",
+    "compilerOptions": {
+        "baseUrl": "./",
+        "noEmit": true,
+        "moduleResolution": "bundler",
+        "module": "ESNext",
+        "types": ["vitest"]
+    },
+    "include": [
+        "src/**/*",
+        "eslint.config.mjs",
+        "vite.config.ts",
+        "vitest.config.ts",
+        "vitest.setup.ts"
+    ]
+}

@@ -1,0 +1,14 @@
+{
+    "extends": "tsconfig/node.json",
+    "compilerOptions": {
+        "outDir": "./dist"
+    },
+    "include": [
+        "src/**/*",
+        "eslint.config.mjs",
+        "esbuild.config.mjs",
+        "esbuild.dev.config.mjs",
+        "jest.config.ts"
+    ],
+    "exclude": ["node_modules", "dist"]
+}

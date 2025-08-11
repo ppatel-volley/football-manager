@@ -1,0 +1,23 @@
+{
+    "recommendations": [
+        /* This will enable IDE linting support. */
+
+        "dbaeumer.vscode-eslint",
+
+        /* This will enable IDE formatting support. */
+
+        "esbenp.prettier-vscode",
+
+        /* Useful in-line error messages. */
+
+        "usernamehw.errorlens",
+
+        /* Useful tool to be able to search TODOs and NOTEs */
+
+        "exodiusstudios.comment-anchors",
+
+        /* Useful tool to automagically convert strings to template strings. */
+
+        "meganrogge.template-string-converter"
+    ]
+}
