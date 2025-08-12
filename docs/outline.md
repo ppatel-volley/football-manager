@@ -29,7 +29,7 @@ A user can instruct their team to 'defend' which will cause the players to rarel
 
 ***Balance***
 
-A user can instruct their team to 'defend' which will cause the players to rarely venture out of their half and make it very difficult, but not impossible, for the opposition to score. The downside for this action is that it would be very difficult for the users team to score a goal as well.
+A user can instruct their team to be 'balanced' which will allow the team to search for opportunites to score but not at the expense of leaving themselves vulnerable to attack.
 
 ***Attack***
 

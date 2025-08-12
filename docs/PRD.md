@@ -2,18 +2,19 @@
 
 ## 1. Executive Summary
 
-**Product Name**: Super Soccer Manager: Pro Edition  
-**Version**: 1.0  
+**Product Name**: Super Soccer Manager: Pro Edition
+**Version**: 1.0
 **Date**: 12 August 2025
 
 ### 1.1 Product Vision
-A real-time multiplayer voice-controlled football (soccer) simulation game featuring AI-controlled players that respond to tactical voice commands. Players manage teams through voice instructions during live matches with authentic football rules and mechanics.
+A voice-controlled football (soccer) simulation game featuring AI-controlled players that respond to tactical voice commands. Players manage teams through voice instructions during live matches with authentic football rules and mechanics. The game supports both single-player (human vs AI) and multiplayer (human vs human) modes.
 
 ### 1.2 Core Value Proposition
 - **Accessibility**: Voice control removes barriers of traditional gaming interfaces
 - **Immersion**: Feel like a real football manager on the touchline
 - **Real-time Strategy**: Dynamic tactical changes during live gameplay
 - **Authentic Football**: Based on official Laws of the Game
+- **Flexible Play Modes**: Single-player practice against AI or competitive multiplayer matches
 
 ## 2. Product Overview
 
@@ -39,9 +40,11 @@ A real-time multiplayer voice-controlled football (soccer) simulation game featu
 ### 3.1 Core Gameplay Loop
 
 #### 3.1.1 Match Setup
+- **Game Mode Selection**: Choose between single-player (vs AI) or multiplayer (vs human)
 - **Team Selection**: Choose from user's current team or opponents in league
 - **Formation Selection**: Choose tactical formation (4-4-2, 4-3-3, 3-5-2, etc.)
-- **Match Type**: League matches, friendly matches, or cup competitions
+- **Match Type**: League matches, friendly matches, cup competitions, or practice matches
+- **AI Difficulty** (Single-player): Beginner, Amateur, Professional, or Expert AI opponents
 - **Team Generation**: New users receive auto-generated team with National League quality players
 
 #### 3.1.2 Live Match Experience
@@ -143,17 +146,24 @@ A real-time multiplayer voice-controlled football (soccer) simulation game featu
 
 ### 3.4 AI Behaviour System
 
-#### 3.4.1 Player Intelligence
+#### 3.4.1 Player Intelligence (All Players)
 - **Attribute-Based Decision Making**: Actions influenced by player statistics
 - **Role-Specific Behaviour**: Position-appropriate default actions
 - **Team Cohesion**: Coordinated movement and positioning
 - **Fatigue Management**: Performance degradation over match duration
 
-#### 3.4.2 Formation AI
+#### 3.4.2 Formation AI (All Players)
 - **Dynamic Positioning**: Players maintain formation structure
 - **Defensive Shape**: Organised defensive lines and covering
 - **Attacking Movement**: Coordinated forward runs and support play
 - **Transition Play**: Swift changes between attacking and defending phases
+
+#### 3.4.3 AI Opponent System (Single-Player Mode)
+- **Difficulty Levels**: Beginner, Amateur, Professional, Expert
+- **Tactical Awareness**: AI responds to player's tactical changes
+- **Adaptive Behaviour**: AI learns from player patterns during match
+- **Realistic Decision Making**: AI makes mistakes based on difficulty level
+- **Counter-Tactics**: AI adjusts formation and style to counter player strategy
 
 ### 3.5 Match Officiating System
 
@@ -213,7 +223,7 @@ A real-time multiplayer voice-controlled football (soccer) simulation game featu
 
 ### 4.4 Performance Requirements
 - **Frame Rate**: Minimum 30 FPS during match play
-- **Memory Usage**: Maximum 512MB RAM consumption
+- **Memory Usage**: Maximum 256MB RAM consumption
 - **Network Bandwidth**: Optimised for 1 Mbps connections
 - **Device Compatibility**: Support for devices with 2GB+ RAM
 
@@ -260,7 +270,7 @@ A real-time multiplayer voice-controlled football (soccer) simulation game featu
 
 ### 6.3 Audio Design
 - **Commentary System**: Dynamic match commentary responsive to events
-- **Crowd Audio System**: 
+- **Crowd Audio System**:
   - **Ambient Crowd Noise**: Continuous background crowd murmur varying by match intensity
   - **Event-Driven Reactions**: Specific crowd responses to match events:
     - **Goals**: Massive cheers for scoring team, groans from opposition supporters
@@ -297,7 +307,7 @@ A real-time multiplayer voice-controlled football (soccer) simulation game featu
 
 ### 7.2 Server Infrastructure
 - **VGF Server**: Node.js Express server with VGF integration
-- **Redis Storage**: Session storage and match state persistence  
+- **Redis Storage**: Session storage and match state persistence
 - **Socket.IO Transport**: Real-time bidirectional communication
 - **Scaling Capability**: Support for concurrent matches and users
 
