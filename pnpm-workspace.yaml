@@ -1,5 +1,11 @@
 packages:
-  - "apps/*"
-  - "packages/*"
-
+  - apps/*
+  - packages/*
 injectWorkspacePackages: true
+onlyBuiltDependencies:
+  - '@swc/core'
+  - '@volley/logger'
+  - '@volley/vgf'
+  - aws-sdk
+  - esbuild
+  - protobufjs

@@ -97,48 +97,365 @@ enum CommandType
 
 ### 3.2 Game Engine Architecture
 
-#### 3.2.1 Match Engine Core
+#### 3.2.1 Enhanced Match Engine Core
 ```typescript
-class MatchEngine
+class MatchEngine implements Entity  // Core match engine implementation
 {
   private gameState: GameState;
+  private entities: Map<string, Entity>;     // All game entities (players, ball, referee)
   private players: Map<string, Player>;
+  private ball: Ball;
   private referee: Referee;
   private physics: PhysicsEngine;
-  private masterAI: MasterAIController;     // Updated to use new AI system
+  private masterAI: MasterAIController;
+  private stateManager: MatchStateManager;   // Finite State Machine for match phases
   private performanceMonitor: PerformanceMonitor;
+  private eventSystem: EventSystem;          // For decoupled event handling
+  
+  // Core game loop implementation
+  public processFrame(deltaTime: number): void
+  {
+    // 1. Update all entities
+    for (const entity of this.entities.values())
+    {
+      entity.update(deltaTime);
+    }
+    
+    // 2. Process physics
+    this.physics.update(deltaTime);
+    
+    // 3. Handle AI decisions
+    this.masterAI.processFrame(this.gameState, deltaTime);
+    
+    // 4. Update match state
+    this.stateManager.update(this.gameState, deltaTime);
+    
+    // 5. Check rules and events
+    this.processMatchEvents();
+    
+    // 6. Render (if applicable)
+    this.render();
+  }
 
-  public processFrame(deltaTime: number): void;
   public handlePlayerAction(action: GameAction): void;
   public handleTacticalInstruction(instruction: TacticalCommand): void;
   public checkRules(): RuleViolation[];
   public getAIPerformanceMetrics(): AIQualityMetrics;
+  
+  // Entity interface implementation
+  public update(deltaTime: number): void;
+  public render(renderer: Renderer): void;
+  public getBounds(): Circle;
+  public dispose(): void;
+}
+
+// Enhanced Entity system implementation
+interface Entity
+{
+  id: string;
+  position: Vector2;
+  bounds: Circle;               // For collision detection
+  active: boolean;              // Whether entity is active in simulation
+  
+  update(deltaTime: number): void;
+  render(renderer: Renderer): void;
+  getBounds(): Circle;
+  dispose(): void;
+}
+
+// Match State Management with proper FSM
+enum MatchState
+{
+  INTRODUCTION = 'introduction',       // Pre-match setup
+  PREPARE_FOR_KICKOFF = 'prepare_kickoff',
+  IN_PLAY = 'in_play',
+  THROW_IN = 'throw_in',
+  CORNER_KICK = 'corner_kick',
+  FREE_KICK = 'free_kick',
+  PENALTY = 'penalty',
+  GOAL_SCORED = 'goal_scored',
+  HALF_TIME = 'half_time',
+  FULL_TIME = 'full_time'
+}
+
+class MatchStateManager
+{
+  private currentState: MatchState;
+  private stateTimer: number;
+  private stateHandlers: Map<MatchState, StateHandler>;
+  
+  public update(gameState: GameState, deltaTime: number): void
+  {
+    const handler = this.stateHandlers.get(this.currentState);
+    if (handler)
+    {
+      handler.update(gameState, deltaTime);
+      
+      // Check for state transitions
+      const nextState = handler.checkTransitions(gameState);
+      if (nextState && nextState !== this.currentState)
+      {
+        this.transitionToState(nextState, gameState);
+      }
+    }
+  }
+  
+  private transitionToState(newState: MatchState, gameState: GameState): void
+  {
+    // Exit current state
+    const currentHandler = this.stateHandlers.get(this.currentState);
+    if (currentHandler)
+    {
+      currentHandler.exit(gameState);
+    }
+    
+    // Enter new state
+    const newHandler = this.stateHandlers.get(newState);
+    if (newHandler)
+    {
+      newHandler.enter(gameState);
+    }
+    
+    this.currentState = newState;
+    this.stateTimer = 0;
+  }
+}
+
+interface StateHandler
+{
+  enter(gameState: GameState): void;
+  update(gameState: GameState, deltaTime: number): void;
+  exit(gameState: GameState): void;
+  checkTransitions(gameState: GameState): MatchState | null;
 }
 ```
 
-#### 3.2.2 Game State Management
+#### 3.2.2 Enhanced Game State Management
 ```typescript
+// Enhanced match phases with state machine implementation
+enum MatchPhase
+{
+  INTRODUCTION = 'introduction',       // Pre-match team presentation
+  PREPARE_FOR_KICKOFF = 'prepare_kickoff', // Player positioning for kickoff
+  KICKOFF = 'kickoff',                 // Kick-off in progress
+  IN_PLAY = 'in_play',                 // Active gameplay with ball in play
+  OUT_OF_PLAY = 'out_of_play',         // Ball out of bounds
+  THROW_IN = 'throw_in',               // Throw-in restart
+  CORNER_KICK = 'corner_kick',         // Corner kick restart
+  FREE_KICK = 'free_kick',             // Free kick restart
+  PENALTY = 'penalty',                 // Penalty kick
+  GOAL_SCORED = 'goal_scored',         // Goal celebration and reset
+  HALF_TIME = 'half_time',             // Half-time transition
+  FULL_TIME = 'full_time'              // Match completed
+}
+
 interface GameState
 {
   matchId: string;
   phase: MatchPhase;
+  previousPhase: MatchPhase;           // For returning from stoppages
   time: MatchTime;
   score: Score;
   teams: [Team, Team];
   ball: Ball;
+  referee: Referee;
+  weather: WeatherConditions;
   events: MatchEvent[];
+  statistics: MatchStatistics;
+  
+  // Kickoff management
+  kickoffTeam: 'HOME' | 'AWAY';
+  initialKickoffTeam: 'HOME' | 'AWAY';
+  restartPosition: Vector2 | null;     // Position for restarts (throw-ins, etc.)
+  restartTeam: 'HOME' | 'AWAY' | null;
+  
+  // Match state timing
+  phaseStartTime: number;              // When current phase started
+  phaseElapsedTime: number;            // Time in current phase
+  
+  // Advanced match context
+  possession: 'HOME' | 'AWAY' | null;  // Current team in possession
+  lastTouch: Player | null;            // Last player to touch ball
+  pressureLevel: number;               // 0-1, attacking pressure intensity
+  tempo: number;                       // 0-1, pace of play
 }
 
 interface MatchTime
 {
-  elapsed: number;        // Minutes elapsed (0-90+)
-  period: 1 | 2;         // First or second half
-  stoppage: number;      // Added time
-  realTimeStart: number; // Unix timestamp
+  elapsed: number;                     // Real minutes elapsed (0-90+)
+  footballTime: string;                // Formatted time display ("23:45", "90+2")
+  period: 1 | 2;                      // First or second half
+  stoppage: number;                   // Added time in minutes
+  realTimeStart: number;              // Unix timestamp when match started
+  realTimeElapsed: number;            // Real seconds elapsed (300 = 5 minutes)
+  halfTimeTriggered: boolean;         // Half-time transition completed
+  
+  // Enhanced timing inspired by realistic football
+  accelerationFactor: number;         // 18x (5 real minutes = 90 football minutes)
+  lastUpdate: number;                 // Last time update timestamp
+}
+
+interface WeatherConditions
+{
+  type: 'clear' | 'overcast' | 'light_rain' | 'heavy_rain' | 'snow';
+  visibility: number;                 // 0-1, affects player vision
+  windSpeed: number;                  // 0-10, affects ball physics
+  windDirection: number;              // 0-360 degrees
+  temperature: number;                // Celsius, affects player stamina
+  pitchCondition: number;             // 0-1, pitch quality (dry to waterlogged)
+}
+
+interface MatchStatistics
+{
+  possession: [number, number];        // Possession percentage [home, away]
+  shots: [number, number];
+  shotsOnTarget: [number, number];
+  corners: [number, number];
+  fouls: [number, number];
+  cards: [CardEvent[], CardEvent[]];
+  passes: [number, number];            // Total passes attempted
+  passAccuracy: [number, number];     // Pass completion percentage
+  tackles: [number, number];          // Successful tackles
+  interceptions: [number, number];    // Ball interceptions
+  offside: [number, number];          // Offside calls
+  
+  // Advanced statistics
+  heatmaps: PlayerHeatmap[];          // Player position data
+  touchMap: BallTouchData[];          // Ball touch locations
+  pressureMap: PressureData[];        // Defensive pressure zones
 }
 ```
 
+#### 3.2.3 Half-Time System Implementation
+
+The half-time system manages the transition between the first and second halves, ensuring proper team positioning and kick-off team alternation.
+
+```typescript
+interface HalfTimeManager
+{
+  detectHalfTimeReached(matchTime: MatchTime): boolean;
+  resetPlayersToFormation(teams: [Team, Team]): void;
+  switchKickoffTeam(currentKickoff: 'HOME' | 'AWAY', initialKickoff: 'HOME' | 'AWAY'): 'HOME' | 'AWAY';
+  transitionToSecondHalf(gameState: GameState): GameState;
+}
+
+class HalfTimeManager implements HalfTimeManager
+{
+  public detectHalfTimeReached(matchTime: MatchTime): boolean 
+  {
+    const halfDuration = MATCH_DURATION / 2;
+    return matchTime.elapsed >= halfDuration && 
+           !matchTime.halfTimeTriggered && 
+           matchTime.period === 2;
+  }
+
+  public resetPlayersToFormation(teams: [Team, Team]): void
+  {
+    teams.forEach(team => {
+      team.players.forEach(player => {
+        // Reset to formation positions within own half
+        player.position = { ...player.basePosition };
+        player.targetPosition = { ...player.basePosition };
+        player.state = PlayerState.WAITING_KICKOFF;
+        player.hasBall = false;
+      });
+    });
+  }
+
+  public switchKickoffTeam(currentKickoff: 'HOME' | 'AWAY', initialKickoff: 'HOME' | 'AWAY'): 'HOME' | 'AWAY'
+  {
+    // Team that didn't kick off first half kicks off second half
+    return initialKickoff === 'HOME' ? 'AWAY' : 'HOME';
+  }
+
+  public transitionToSecondHalf(gameState: GameState): GameState
+  {
+    return {
+      ...gameState,
+      phase: MatchPhase.KICKOFF,
+      kickoffTeam: this.switchKickoffTeam(gameState.kickoffTeam, gameState.initialKickoffTeam),
+      time: {
+        ...gameState.time,
+        halfTimeTriggered: true
+      }
+    };
+  }
+}
+```
+
+**Half-Time Transition Flow**:
+1. **Detection**: Monitor elapsed time for half-time trigger (2.5 minutes)
+2. **Formation Reset**: All players return to base formation positions in own half
+3. **Ball Reset**: Ball returns to center circle, clears all possession
+4. **Team Switch**: Alternate kick-off team (opposite of first half)
+5. **Phase Transition**: PLAY → HALF_TIME → KICKOFF → PLAY
+6. **Event Cleanup**: Clear all scheduled AI events and actions
+
 ### 3.3 Advanced AI System Architecture
+
+#### 3.3.1 Multi-Layer AI Decision Framework
+Advanced AI system with sophisticated team controller and entity management:
+
+```typescript
+// Enhanced AI architecture with proper separation of concerns
+interface AIController
+{
+  teamId: string;
+  difficulty: AIDifficulty;
+  tacticalMemory: TacticalMemory;
+  currentStrategy: TeamStrategy;
+  
+  // Core decision-making implementation
+  calculateTacticalSituation(gameState: GameState): TacticalSituation;
+  assignPlayerRoles(players: Player[], opponents: Player[]): RoleAssignment[];
+  updateFormationDynamics(ballPosition: Vector2, possession: TeamPossession): FormationUpdate;
+  
+  // Greedy algorithm for efficient player assignment
+  optimizePlayerPositioning(availablePositions: Vector2[], players: Player[]): PositionAssignment[];
+}
+
+// Advanced tactical situation calculation
+interface TacticalSituation
+{
+  // Positional metrics
+  depth: number;              // How deep the team is positioned (0-1)
+  width: number;              // How wide the formation is spread (0-1)
+  focus: number;              // Concentration around ball area (0-1)
+  
+  // Dynamic tactical factors implementation
+  offensiveBias: number;      // -1 (fully defensive) to 1 (fully attacking)
+  pressureLevel: number;      // Intensity of defensive pressure (0-1)
+  spaceControl: number;       // Area of pitch controlled (0-1)
+  
+  // Context-aware adjustments
+  scoreInfluence: number;     // Tactical adjustment based on scoreline
+  timeInfluence: number;      // Urgency based on match time
+  fatigueInfluence: number;   // Player stamina impact on tactics
+}
+
+// Enhanced player state management implementation
+interface PlayerAIState
+{
+  // Possession states
+  hasPossession: boolean;
+  hasBestPossession: boolean;     // Closest to ball on team
+  hasUniquePossession: boolean;   // Only player who can reach ball
+  
+  // Predictive calculations
+  timeNeededToGetToBall: number;  // Milliseconds to reach ball
+  ballAcquisitionProbability: number; // 0-1 chance of getting ball
+  
+  // Tactical context
+  currentRole: DynamicRole;
+  assignedOpponent: Player | null; // Man-marking assignment
+  markingQuality: number;         // 0-1 effectiveness of marking
+  
+  // Performance metrics
+  fatigueLevel: number;           // 0-1 current fatigue
+  performanceMultiplier: number;  // Context-based performance boost/penalty
+  averageVelocity: Vector2;       // Recent movement pattern
+  positionHistory: Vector2[];     // Last N positions for analysis
+}
 
 #### 3.3.1 Hierarchical AI Decision Framework
 ```typescript
@@ -153,27 +470,27 @@ interface AIDecision
   riskAssessment: RiskProfile;
 }
 
-// Master AI Controller orchestrating all AI systems
-class MasterAIController
+// Unified AI System Implementation (consolidating MasterAIController functionality)
+class TeamAIController implements AIController
 {
   private spatialAnalysis: VoronoiPositioning;
   private ballProgression: BallProgressionEngine;
-  private tacticalInterpreter: TacticalInstructionSystem;
-  private opponentAI: OpponentAI;
+  private tacticalEngine: TacticalEngine;
+  private greedyAssignment: GreedyAssignmentEngine;
   
+  public teamId: string;
+  public difficulty: AIDifficulty;
+  public tacticalMemory: TacticalMemory;
+  public currentStrategy: TeamStrategy;
+  
+  // Core AI processing
   public processFrame(gameState: GameState): void;
-  public handleTacticalInstruction(instruction: TacticalCommand): void;
-  public updateFormationPositioning(formation: Formation): void;
-}
-
-// AI Opponent System (Single-Player Mode)
-class OpponentAI
-{
-  private difficulty: AIDifficulty;
-  private tacticalStyle: TacticalStyle;
-  private reactionTime: number;
-  private adaptiveMemory: TacticalMemory;
+  public calculateTacticalSituation(gameState: GameState): TacticalSituation;
+  public assignPlayerRoles(players: Player[], opponents: Player[]): RoleAssignment[];
+  public updateFormationDynamics(ballPosition: Vector2, possession: TeamPossession): FormationUpdate;
+  public optimizePlayerPositioning(availablePositions: Vector2[], players: Player[]): PositionAssignment[];
   
+  // Single-player opponent behavior
   public makeTeamDecision(gameState: GameState): TacticalCommand;
   public respondToPlayerAction(playerCommand: VoiceCommand): void;
   public updateTacticalApproach(matchSituation: MatchSituation): void;
@@ -354,19 +671,275 @@ interface EPVCalculation
 }
 ```
 
-#### 3.3.4 Tactical Instruction Interpretation System
+#### 3.3.4 Advanced Tactical Engine
 ```typescript
-class TacticalInstructionSystem
+class TacticalEngine
 {
   private currentMentality: TacticalMentality;
-  private dutyDistribution: DutyDistribution;
-  private instructionTemplates: Map<TacticalCommand, InstructionTemplate>;
+  private formationManager: DynamicFormationManager;
+  private roleAssignmentEngine: HungarianAlgorithm;  // Optimal role assignment
+  private tacticalMemory: TacticalMemory;
   
-  public processTacticalCommand(command: TacticalCommand): TeamAdjustments;
-  public updatePlayerDuties(mentality: TacticalMentality): PlayerDutyMap;
-  public calculateFormationShift(instruction: TacticalCommand): FormationAdjustment;
-  public applyRealTimeAdjustments(players: Player[], instruction: TacticalCommand): void;
+  // Core tactical processing implementation
+  public calculateTeamPositioning(gameState: GameState): TeamPositioning
+  {
+    const ballPosition = gameState.ball.position;
+    const possession = this.determinePossession(gameState);
+    
+    // Calculate tactical factors
+    const depth = this.calculateFormationDepth(gameState.teams[0].players, ballPosition);
+    const width = this.calculateFormationWidth(gameState.teams[0].players, ballPosition);
+    const focus = this.calculateFocusAroundBall(gameState.teams[0].players, ballPosition);
+    
+    // Apply dynamic tactical adjustments
+    return {
+      depth: this.applyContextualDepth(depth, gameState),
+      width: this.applyContextualWidth(width, gameState),
+      focus: this.applyContextualFocus(focus, gameState),
+      offensiveBias: this.calculateOffensiveBias(gameState),
+      pressureLevel: this.calculatePressureLevel(gameState)
+    };
+  }
+  
+  // Greedy algorithm implementation for efficient player positioning
+  public optimizePlayerAssignments(
+    players: Player[], 
+    availableRoles: TacticalRole[], 
+    gameContext: GameContext
+  ): RoleAssignment[]
+  {
+    // Cost matrix calculation
+    const costMatrix: number[][] = [];
+    
+    for (let i = 0; i < players.length; i++)
+    {
+      costMatrix[i] = [];
+      for (let j = 0; j < availableRoles.length; j++)
+      {
+        costMatrix[i][j] = this.calculateAssignmentCost(players[i], availableRoles[j], gameContext);
+      }
+    }
+    
+    // Solve assignment problem using greedy algorithm for better performance
+    const assignments = this.greedyAssignment.solve(costMatrix);
+    
+    return assignments.map((roleIndex, playerIndex) => ({
+      playerId: players[playerIndex].id,
+      assignedRole: availableRoles[roleIndex],
+      confidenceLevel: 1 - (costMatrix[playerIndex][roleIndex] / this.getMaxCost()),
+      transitionTime: this.calculateRoleTransitionTime(players[playerIndex], availableRoles[roleIndex])
+    }));
+  }
+  
+  // Dynamic formation adjustment implementation
+  public adjustFormationDynamically(
+    baseFormation: Formation,
+    tacticalSituation: TacticalSituation,
+    gameContext: GameContext
+  ): DynamicFormation
+  {
+    const adjustments: PositionAdjustment[] = [];
+    
+    // Apply depth adjustments based on tactical situation
+    const depthModifier = this.calculateDepthAdjustment(tacticalSituation, gameContext);
+    
+    // Apply width adjustments
+    const widthModifier = this.calculateWidthAdjustment(tacticalSituation, gameContext);
+    
+    // Apply focus adjustments (concentration around ball)
+    const focusModifier = this.calculateFocusAdjustment(tacticalSituation, gameContext);
+    
+    // Generate position adjustments for each player
+    for (const position of baseFormation.positions)
+    {
+      adjustments.push({
+        originalPosition: position,
+        adjustedPosition: {
+          x: position.x + (depthModifier * position.x) + (focusModifier * this.getBallInfluence(position)),
+          y: position.y + (widthModifier * (position.y - 0.5))
+        },
+        adjustmentReason: this.getAdjustmentReason(tacticalSituation, position)
+      });
+    }
+    
+    return {
+      baseFormation,
+      adjustments,
+      tacticalContext: tacticalSituation,
+      confidenceLevel: this.calculateFormationConfidence(adjustments)
+    };
+  }
+  
+  // Man-marking system implementation
+  public assignManMarking(
+    defenders: Player[],
+    opponents: Player[],
+    gameState: GameState
+  ): MarkingAssignment[]
+  {
+    const threatAssessments = opponents.map(opponent => ({
+      player: opponent,
+      threatLevel: this.calculateThreatLevel(opponent, gameState),
+      markingRequirement: this.calculateMarkingRequirement(opponent, gameState)
+    }));
+    
+    // Sort by threat level (most dangerous first)
+    threatAssessments.sort((a, b) => b.threatLevel - a.threatLevel);
+    
+    const assignments: MarkingAssignment[] = [];
+    const availableDefenders = [...defenders];
+    
+    // Assign defenders to most threatening opponents first
+    for (const threat of threatAssessments)
+    {
+      if (availableDefenders.length === 0) break;
+      
+      // Find best defender for this threat
+      const bestDefender = this.findBestDefenderForThreat(availableDefenders, threat, gameState);
+      
+      if (bestDefender)
+      {
+        assignments.push({
+          defenderId: bestDefender.id,
+          opponentId: threat.player.id,
+          markingType: threat.markingRequirement,
+          expectedEffectiveness: this.calculateMarkingEffectiveness(bestDefender, threat.player)
+        });
+        
+        // Remove assigned defender from available pool
+        const defenderIndex = availableDefenders.findIndex(d => d.id === bestDefender.id);
+        availableDefenders.splice(defenderIndex, 1);
+      }
+    }
+    
+    return assignments;
+  }
+  
+  private calculateAssignmentCost(player: Player, role: TacticalRole, context: GameContext): number
+  {
+    let cost = 0;
+    
+    // Attribute-role compatibility
+    cost += this.getAttributeRoleMismatch(player.attributes, role);
+    
+    // Position-role distance cost
+    cost += this.getPositionRoleDistance(player.position, role.idealPosition);
+    
+    // Fatigue penalty
+    cost += player.stamina < 0.7 ? (0.7 - player.stamina) * 50 : 0;
+    
+    // Context-specific adjustments
+    cost += this.getContextualRoleCost(player, role, context);
+    
+    return cost;
+  }
 }
+
+// Greedy Assignment Engine for performance-optimized role assignment
+class GreedyAssignmentEngine
+{
+  // Simple greedy algorithm - much faster than Hungarian algorithm
+  public solve(costMatrix: number[][]): number[]
+  {
+    const assignments: number[] = [];
+    const assignedRoles: Set<number> = new Set();
+    const numPlayers = costMatrix.length;
+    const numRoles = costMatrix[0]?.length || 0;
+    
+    // For each player, find the best available role
+    for (let playerIndex = 0; playerIndex < numPlayers; playerIndex++)
+    {
+      let bestRoleIndex = -1;
+      let bestCost = Infinity;
+      
+      // Find the lowest cost available role for this player
+      for (let roleIndex = 0; roleIndex < numRoles; roleIndex++)
+      {
+        if (!assignedRoles.has(roleIndex) && costMatrix[playerIndex][roleIndex] < bestCost)
+        {
+          bestCost = costMatrix[playerIndex][roleIndex];
+          bestRoleIndex = roleIndex;
+        }
+      }
+      
+      // Assign the role
+      if (bestRoleIndex !== -1)
+      {
+        assignments[playerIndex] = bestRoleIndex;
+        assignedRoles.add(bestRoleIndex);
+      }
+      else
+      {
+        // Fallback: assign any available role
+        for (let roleIndex = 0; roleIndex < numRoles; roleIndex++)
+        {
+          if (!assignedRoles.has(roleIndex))
+          {
+            assignments[playerIndex] = roleIndex;
+            assignedRoles.add(roleIndex);
+            break;
+          }
+        }
+      }
+    }
+    
+    return assignments;
+  }
+}
+
+// Enhanced tactical memory system
+interface TacticalMemory
+{
+  // Pattern recognition
+  opponentPatterns: OpponentPattern[];
+  successfulTactics: TacticalSuccess[];
+  failedApproaches: TacticalFailure[];
+  
+  // Dynamic learning
+  adaptationHistory: TacticalAdaptation[];
+  performanceMetrics: PerformanceTracking[];
+  
+  // Context-aware storage
+  situationalTactics: Map<MatchSituation, PreferredTactic>;
+  playerSpecificMemory: Map<string, PlayerTacticalData>;
+}
+
+// Role assignment results
+interface RoleAssignment
+{
+  playerId: string;
+  assignedRole: TacticalRole;
+  confidenceLevel: number;        // 0-1, how suitable this assignment is
+  transitionTime: number;         // Seconds to fully adapt to role
+  previousRole?: TacticalRole;    // For smooth transitions
+}
+
+interface MarkingAssignment
+{
+  defenderId: string;
+  opponentId: string;
+  markingType: 'tight' | 'loose' | 'zonal';
+  expectedEffectiveness: number;  // 0-1, predicted success rate
+  priority: number;               // 1-10, importance of this marking
+}
+
+// Dynamic formation system
+interface DynamicFormation
+{
+  baseFormation: Formation;
+  adjustments: PositionAdjustment[];
+  tacticalContext: TacticalSituation;
+  confidenceLevel: number;        // 0-1, how well formation suits situation
+}
+
+interface PositionAdjustment
+{
+  originalPosition: Vector2;
+  adjustedPosition: Vector2;
+  adjustmentReason: string;       // Why this adjustment was made
+  temporaryAdjustment: boolean;   // Whether adjustment reverts after situation
+}
+```
 
 // Tactical mentality affects entire team behaviour
 interface TacticalMentality
@@ -728,38 +1301,152 @@ This comprehensive AI architecture provides realistic football simulation throug
 
 ### 3.4 Physics and Movement System
 
-#### 3.4.1 Ball Physics
+#### 3.4.1 Enhanced Ball Physics Implementation
 ```typescript
 class BallPhysics
 {
-  position: Vector2;
-  velocity: Vector2;
+  position: Vector3;          // Include Z-axis for height calculations
+  velocity: Vector3;
+  lastPosition: Vector3;      // For bounce calculations
   spin: number;
+  mass: number = 0.43;        // FIFA regulation ball mass (430g)
+  dragCoefficient: number = 0.350; // Realistic drag coefficient
+  gravity: number = 9.81;     // Earth gravity (m/s²)
+  bounceEnergyLoss: number = 0.7; // Energy retained after bounce
+  owner: Player | null;       // Current ball possessor
 
   public update(deltaTime: number, weather: WeatherConditions): void;
-  public applyForce(force: Vector2, contactPoint: Vector2): void;
+  public applyKick(force: Vector2, player: Player): void;
+  public checkGroundBounce(): boolean;
+  public calculateDrag(velocity: Vector3): Vector3;
+  public applyGravity(deltaTime: number): void;
   public checkCollisions(players: Player[], boundaries: Boundary[]): Collision[];
+}
+
+// Realistic physics constants implementation
+interface PhysicsConstants
+{
+  BALL_MASS: 0.43;              // kg (FIFA regulation)
+  AIR_DENSITY: 1.225;           // kg/m³ at sea level
+  DRAG_COEFFICIENT: 0.350;      // Sphere drag coefficient
+  GRAVITY: 9.81;                // m/s² Earth gravity
+  BOUNCE_DAMPING: 0.7;          // Energy loss per bounce
+  ROLLING_FRICTION: 0.1;        // Ground friction coefficient
+  SPIN_DECAY_RATE: 0.95;        // Spin reduction per frame
 }
 ```
 
-#### 3.4.2 Player Movement and Sprite Animation
+#### 3.4.2 Advanced Player Movement System
 ```typescript
 interface PlayerMovement
 {
   targetPosition: Vector2;
   currentPosition: Vector2;
-  facing: number;
-  speed: number;
+  destination: Vector2;         // Pathfinding destination
+  facing: number;               // Direction player is facing (radians)
+  speed: number;                // Current movement speed
+  maxSpeed: number;             // Player's top speed
+  acceleration: number;         // Speed increase rate
+  deceleration: number;         // Speed decrease rate
+  turningSpeed: number;         // How fast player can change direction
   spriteAnimation: SpriteAnimation;
+  movementState: MovementState;
+  lastMovementUpdate: number;   // For smooth interpolation
 }
 
 interface SpriteAnimation
 {
   currentFrame: number;
   frameCount: number;
-  frameRate: number; // FPS for animation
-  animationType: 'idle' | 'running' | 'kicking' | 'celebration';
+  frameRate: number;            // FPS for animation (8-12 typical)
+  animationType: AnimationType;
   spriteSheet: HTMLImageElement;
+  frameTime: number;            // Elapsed time for current frame
+  animationSpeed: number;       // Speed multiplier for animation
+  direction: number;            // 8-directional animation support
+}
+
+enum AnimationType
+{
+  IDLE = 'idle',
+  RUNNING = 'running',
+  SPRINTING = 'sprinting',
+  KICKING = 'kicking',
+  TACKLING = 'tackling',
+  HEADING = 'heading',
+  CELEBRATION = 'celebration',
+  INJURY = 'injury'
+}
+
+enum MovementState
+{
+  STATIONARY = 'stationary',
+  WALKING = 'walking',
+  JOGGING = 'jogging',
+  RUNNING = 'running',
+  SPRINTING = 'sprinting',
+  TURNING = 'turning',
+  STOPPING = 'stopping'
+}
+
+// Enhanced movement calculations implementation
+class PlayerMovementController
+{
+  public updatePosition(player: Player, deltaTime: number): void
+  {
+    const dx = player.targetPosition.x - player.position.x;
+    const dy = player.targetPosition.y - player.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Arrival threshold - player stops when close enough
+    if (distance < 5.0) 
+    {
+      player.movementState = MovementState.STATIONARY;
+      return;
+    }
+    
+    // Calculate movement direction
+    const moveDirection = { x: dx / distance, y: dy / distance };
+    
+    // Apply acceleration/deceleration
+    const targetSpeed = this.calculateTargetSpeed(player, distance);
+    player.speed = this.interpolateSpeed(player.speed, targetSpeed, deltaTime);
+    
+    // Update position
+    const moveDistance = player.speed * deltaTime;
+    player.position.x += moveDirection.x * moveDistance;
+    player.position.y += moveDirection.y * moveDistance;
+    
+    // Update facing direction smoothly
+    this.updateFacingDirection(player, moveDirection, deltaTime);
+    
+    // Update sprite animation based on movement
+    this.updateAnimationState(player);
+  }
+  
+  private calculateTargetSpeed(player: Player, distanceToTarget: number): number
+  {
+    // Slow down when approaching target
+    const slowdownDistance = 50.0;
+    if (distanceToTarget < slowdownDistance)
+    {
+      return player.maxSpeed * (distanceToTarget / slowdownDistance);
+    }
+    return player.maxSpeed;
+  }
+  
+  private interpolateSpeed(currentSpeed: number, targetSpeed: number, deltaTime: number): number
+  {
+    const acceleration = targetSpeed > currentSpeed ? 200.0 : 400.0; // Deceleration is faster
+    const speedChange = acceleration * deltaTime;
+    
+    if (Math.abs(targetSpeed - currentSpeed) < speedChange)
+    {
+      return targetSpeed;
+    }
+    
+    return currentSpeed + (targetSpeed > currentSpeed ? speedChange : -speedChange);
+  }
 }
 ```
 
@@ -1010,11 +1697,120 @@ interface DisplayConfig
 }
 ```
 
-## 8. Data Models
+## 8. Enhanced Data Models
 
 ### 8.1 Core Game Entities
 
-#### 8.1.1 Team Structure
+#### 8.1.1 Enhanced Player Model
+```typescript
+interface Player extends Entity  // Implementing Entity pattern
+{
+  // Basic identification
+  id: string;
+  name: string;
+  kitNumber: number;
+  team: 'HOME' | 'AWAY';
+  
+  // Physical properties
+  position: Vector2;
+  destination: Vector2;         // Target position for movement
+  facing: number;               // Direction facing (radians)
+  bounds: Circle;               // Collision detection
+  
+  // Movement characteristics (derived from attributes)
+  currentSpeed: number;         // Current movement speed
+  facing: number;               // Direction facing (radians)
+  turningSpeed: number;         // Direction change rate (derived from agility)
+  
+  // Game state
+  playerType: 'OUTFIELD' | 'GOALKEEPER';
+  state: PlayerState;
+  hasBall: boolean;
+  stamina: number;              // 0-100, affects performance
+  confidence: number;           // 0-100, affects decision making
+  
+  // Formation and tactics
+  basePosition: Vector2;        // Formation position
+  role: PlayerRole;
+  instructions: PlayerInstructions;
+  
+  // Attributes (0-20 scale like Football Manager)
+  attributes: PlayerAttributes;
+  
+  // Animation and rendering
+  spriteAnimation: SpriteAnimation;
+  height: number;               // For header calculations
+  
+  // Captain status
+  isCaptain: boolean;
+  
+  // Entity interface methods
+  update(deltaTime: number): void;
+  render(renderer: Renderer): void;
+  getBounds(): Circle;
+  inPosition(): boolean;        // Whether player has reached destination
+}
+
+interface PlayerAttributes
+{
+  // Technical skills
+  ballControl: number;          // Ball handling ability
+  dribbling: number;            // 1v1 dribbling skill
+  passing: number;              // Short and medium passing
+  longPassing: number;          // Long range passing ability
+  shooting: number;             // Shot power and accuracy
+  heading: number;              // Aerial ability
+  freeKickTaking: number;       // Set piece ability
+  
+  // Mental attributes
+  vision: number;               // Ability to spot passes/runs
+  decisions: number;            // Decision making under pressure
+  concentration: number;        // Focus during match
+  composure: number;            // Performance under pressure
+  anticipation: number;         // Reading the game
+  
+  // Physical attributes
+  pace: number;                 // Raw speed
+  acceleration: number;         // Speed increase rate
+  stamina: number;              // Endurance levels
+  strength: number;             // Physical power
+  jumping: number;              // Leap height
+  agility: number;              // Balance and quick movements
+  
+  // Defensive skills
+  tackling: number;             // Tackle success rate
+  marking: number;              // Man-to-man defending
+  positioning: number;          // Defensive positioning
+  
+  // Mental/Social attributes
+  teamwork: number;             // Following team instructions
+  workRate: number;             // Effort and energy levels
+  leadership: number;           // Captain and influence ability
+}
+
+enum PlayerRole
+{
+  GOALKEEPER = 'goalkeeper',
+  CENTRE_BACK = 'centre_back',
+  FULL_BACK = 'full_back',
+  DEFENSIVE_MIDFIELDER = 'defensive_midfielder',
+  CENTRAL_MIDFIELDER = 'central_midfielder',
+  ATTACKING_MIDFIELDER = 'attacking_midfielder',
+  WINGER = 'winger',
+  STRIKER = 'striker'
+}
+
+interface PlayerInstructions
+{
+  mentality: 'very_defensive' | 'defensive' | 'balanced' | 'attacking' | 'very_attacking';
+  passingStyle: 'short' | 'mixed' | 'long';
+  crossingStyle: 'low' | 'mixed' | 'high';
+  tacklingStyle: 'easy' | 'normal' | 'hard';
+  markingAssignment: Player | null; // Specific player to mark
+}
+```
+
+#### 8.1.2 Team Structure
 ```typescript
 interface Team
 {
@@ -1096,37 +1892,321 @@ interface PerformanceMetrics
 
 ## 10. Testing Strategy
 
-### 10.1 Unit Testing
+### 10.1 Comprehensive Testing Strategy
 
-#### 10.1.1 Game Logic Tests
+#### 10.1.1 AI System Tests
 ```typescript
-describe('AIController', () =>
+describe('TacticalEngine', () =>
 {
-  test('should make appropriate decisions based on player attributes', () =>
+  describe('Hungarian Algorithm Role Assignment', () =>
   {
-    const player = createPlayerWithAttributes({ decisions: 8.5, positioning: 7.0 });
-    const gameState = createGameState({ phase: 'defending' });
+    test('should assign optimal roles based on player attributes and game context', () =>
+    {
+      const players = [
+        createPlayer({ attributes: { positioning: 9, tackling: 8, passing: 6 } }), // Defender
+        createPlayer({ attributes: { vision: 9, passing: 9, shooting: 7 } }),      // Midfielder
+        createPlayer({ attributes: { pace: 9, shooting: 8, dribbling: 8 } })       // Attacker
+      ];
+      
+      const availableRoles = [
+        { type: 'CENTRE_BACK', idealPosition: { x: 0.2, y: 0.5 } },
+        { type: 'CENTRAL_MIDFIELDER', idealPosition: { x: 0.5, y: 0.5 } },
+        { type: 'STRIKER', idealPosition: { x: 0.8, y: 0.5 } }
+      ];
+      
+      const gameContext = createGameContext({ matchTime: 45, score: [0, 0] });
+      
+      const assignments = tacticalEngine.optimizePlayerAssignments(players, availableRoles, gameContext);
+      
+      // Verify optimal assignment
+      expect(assignments[0].assignedRole.type).toBe('CENTRE_BACK');
+      expect(assignments[1].assignedRole.type).toBe('CENTRAL_MIDFIELDER');
+      expect(assignments[2].assignedRole.type).toBe('STRIKER');
+      
+      // Check confidence levels
+      assignments.forEach(assignment => {
+        expect(assignment.confidenceLevel).toBeGreaterThan(0.7);
+      });
+    });
+  });
+  
+  describe('Dynamic Formation Adjustment', () =>
+  {
+    test('should adjust formation depth based on tactical situation', () =>
+    {
+      const baseFormation = createFormation('4-4-2');
+      const tacticalSituation = {
+        depth: 0.3,           // Defensive positioning
+        width: 0.6,           // Moderate width
+        focus: 0.8,           // High focus around ball
+        offensiveBias: -0.4,  // Defensive bias
+        pressureLevel: 0.7    // High pressure
+      };
+      
+      const gameContext = createGameContext({ 
+        matchTime: 85,        // Late in match
+        score: [1, 0],        // Leading by one
+        possession: 'AWAY'    // Opposition has ball
+      });
+      
+      const dynamicFormation = tacticalEngine.adjustFormationDynamically(
+        baseFormation,
+        tacticalSituation,
+        gameContext
+      );
+      
+      // Verify defensive adjustments
+      const defenderAdjustments = dynamicFormation.adjustments.filter(adj => 
+        adj.originalPosition.x < 0.4  // Defensive third
+      );
+      
+      defenderAdjustments.forEach(adjustment => {
+        // Defenders should move deeper when defending a lead
+        expect(adjustment.adjustedPosition.x).toBeLessThan(adjustment.originalPosition.x);
+      });
+      
+      expect(dynamicFormation.confidenceLevel).toBeGreaterThan(0.6);
+    });
+  });
+  
+  describe('Man-Marking Assignment', () =>
+  {
+    test('should assign defenders to most threatening opponents', () =>
+    {
+      const defenders = [
+        createDefender({ attributes: { tackling: 8, positioning: 9, pace: 7 } }),
+        createDefender({ attributes: { tackling: 7, positioning: 8, pace: 8 } })
+      ];
+      
+      const opponents = [
+        createOpponent({ attributes: { shooting: 9, pace: 8, dribbling: 7 }, position: { x: 0.7, y: 0.3 } }),
+        createOpponent({ attributes: { shooting: 6, pace: 6, passing: 8 }, position: { x: 0.6, y: 0.7 } })
+      ];
+      
+      const gameState = createGameState({ 
+        ballPosition: { x: 0.8, y: 0.4 },
+        phase: 'IN_PLAY'
+      });
+      
+      const assignments = tacticalEngine.assignManMarking(defenders, opponents, gameState);
+      
+      // Most dangerous opponent should be marked by best available defender
+      const mostThreatening = opponents[0]; // Higher shooting + pace
+      const assignmentForThreat = assignments.find(a => a.opponentId === mostThreatening.id);
+      
+      expect(assignmentForThreat).toBeDefined();
+      expect(assignmentForThreat!.markingType).toBe('tight'); // High threat = tight marking
+      expect(assignmentForThreat!.expectedEffectiveness).toBeGreaterThan(0.6);
+    });
+  });
+});
 
-    const decisions = aiController.evaluateOptions(player, gameState);
-    expect(decisions[0].action.type).toBe('DEFENSIVE_POSITIONING');
+describe('PlayerAI State Management', () =>
+{
+  test('should accurately calculate ball acquisition time', () =>
+  {
+    const player = createPlayer({
+      position: { x: 100, y: 100 },
+      attributes: { pace: 8, acceleration: 7 }
+    });
+    
+    const ballPosition = { x: 200, y: 150 };
+    const ballVelocity = { x: 50, y: 25 };
+    
+    const acquisitionTime = playerAI.calculateBallAcquisitionTime(player, ballPosition, ballVelocity);
+    
+    // Should be realistic time based on distance and player speed
+    expect(acquisitionTime).toBeGreaterThan(1000); // At least 1 second
+    expect(acquisitionTime).toBeLessThan(5000);    // At most 5 seconds
+  });
+  
+  test('should update possession states correctly', () =>
+  {
+    const team = createTeam([
+      createPlayer({ id: 'player1', position: { x: 100, y: 100 } }),
+      createPlayer({ id: 'player2', position: { x: 200, y: 100 } }),
+      createPlayer({ id: 'player3', position: { x: 300, y: 100 } })
+    ]);
+    
+    const ballPosition = { x: 150, y: 100 };
+    
+    playerAI.updatePossessionStates(team.players, ballPosition);
+    
+    // Closest player should have best possession
+    const player2 = team.players.find(p => p.id === 'player2')!;
+    expect(player2.aiState.hasBestPossession).toBe(true);
+    
+    // Others should not
+    const otherPlayers = team.players.filter(p => p.id !== 'player2');
+    otherPlayers.forEach(player => {
+      expect(player.aiState.hasBestPossession).toBe(false);
+    });
+  });
+});
+
+describe('Physics Integration Tests', () =>
+{
+  test('should handle ball bounce physics correctly', () =>
+  {
+    const ball = createBall({
+      position: { x: 100, y: 100, z: 50 },  // Ball in air
+      velocity: { x: 0, y: 0, z: -20 }      // Falling down
+    });
+    
+    ballPhysics.update(ball, 0.016); // One frame at 60 FPS
+    
+    if (ball.position.z <= 0) // Hit ground
+    {
+      // Should bounce with reduced energy
+      expect(ball.velocity.z).toBeGreaterThan(0);  // Bouncing up
+      expect(ball.velocity.z).toBeLessThan(14);     // Energy loss (70% retention)
+    }
+  });
+  
+  test('should apply realistic drag to ball movement', () =>
+  {
+    const ball = createBall({
+      position: { x: 0, y: 0, z: 0 },
+      velocity: { x: 100, y: 0, z: 0 }  // Fast horizontal movement
+    });
+    
+    const initialSpeed = Math.sqrt(
+      ball.velocity.x ** 2 + ball.velocity.y ** 2 + ball.velocity.z ** 2
+    );
+    
+    // Update multiple frames
+    for (let i = 0; i < 60; i++) {
+      ballPhysics.update(ball, 0.016);
+    }
+    
+    const finalSpeed = Math.sqrt(
+      ball.velocity.x ** 2 + ball.velocity.y ** 2 + ball.velocity.z ** 2
+    );
+    
+    // Speed should decrease due to drag
+    expect(finalSpeed).toBeLessThan(initialSpeed);
+    expect(finalSpeed).toBeGreaterThan(initialSpeed * 0.5); // But not too much
   });
 });
 ```
 
-### 10.2 Integration Testing
+### 10.2 Advanced Integration Testing
 
-#### 10.2.1 Voice Command Pipeline
+#### 10.2.1 Tactical System Integration
 ```typescript
-describe('Voice Command Integration', () =>
+describe('Full Tactical System Integration', () =>
 {
-  test('should process voice command end-to-end', async () =>
+  test('should process tactical command through complete pipeline', async () =>
   {
+    const gameState = createGameState({
+      phase: 'IN_PLAY',
+      teams: [createTeam('HOME'), createTeam('AWAY')],
+      ballPosition: { x: 0.3, y: 0.5 }
+    });
+    
+    // Voice command processing
     const audioInput = createMockAudioStream('attack');
-    const command = await voiceProcessor.recogniseSpeech(audioInput);
-    const action = commandParser.parseCommand(command);
+    const voiceCommand = await voiceProcessor.recogniseSpeech(audioInput);
+    const tacticalCommand = commandParser.parseCommand(voiceCommand);
+    
+    // AI processing
+    const tacticalSituation = tacticalEngine.calculateTeamPositioning(gameState);
+    const roleAssignments = tacticalEngine.optimizePlayerAssignments(
+      gameState.teams[0].players,
+      getTacticalRoles('ATTACKING'),
+      createGameContext(gameState)
+    );
+    
+    // Formation adjustment
+    const adjustedFormation = tacticalEngine.adjustFormationDynamically(
+      gameState.teams[0].formation,
+      tacticalSituation,
+      createGameContext(gameState)
+    );
+    
+    // Verify complete pipeline
+    expect(tacticalCommand.type).toBe('TACTICAL_CHANGE');
+    expect(tacticalCommand.data.mentality).toBe('ATTACKING');
+    expect(roleAssignments.length).toBe(11); // Full team
+    expect(adjustedFormation.tacticalContext.offensiveBias).toBeGreaterThan(0);
+    
+    // Check that attacking players moved forward
+    const attackers = roleAssignments.filter(r => r.assignedRole.type.includes('STRIKER'));
+    const attackerPositions = adjustedFormation.adjustments
+      .filter(adj => attackers.some(a => a.assignedRole.idealPosition === adj.originalPosition));
+    
+    attackerPositions.forEach(pos => {
+      expect(pos.adjustedPosition.x).toBeGreaterThan(pos.originalPosition.x);
+    });
+  });
+  
+  test('should handle complex match situation with multiple systems', () =>
+  {
+    const gameState = createComplexGameState({
+      phase: 'IN_PLAY',
+      matchTime: 89,            // Late in match
+      score: [1, 2],            // Losing by one
+      ballPossession: 'HOME',   // Player has ball
+      ballPosition: { x: 0.7, y: 0.3 }, // Attacking third
+      weather: { type: 'heavy_rain', visibility: 0.7 },
+      playerStamina: [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.6, 0.5, 0.4, 0.3] // Varied fatigue
+    });
+    
+    // Process AI decisions for desperate attacking
+    const aiDecisions = masterAI.processFrame(gameState, 0.016);
+    
+    // Verify tactical adjustments for desperate situation
+    expect(aiDecisions.tacticalChanges.offensiveBias).toBeGreaterThan(0.8); // Very attacking
+    expect(aiDecisions.formationAdjustments).toBeDefined();
+    
+    // Check that tired players are positioned strategically
+    const tiredPlayers = gameState.teams[0].players.filter(p => p.stamina < 0.5);
+    tiredPlayers.forEach(player => {
+      const decision = aiDecisions.individualPlayerActions.find(d => d.playerId === player.id);
+      expect(decision?.conservingEnergy).toBe(true); // Should conserve energy
+    });
+    
+    // Weather should affect decision making
+    expect(aiDecisions.ballProgressionDecision?.preferredPlayStyle).toBe('direct_play'); // Less passing in rain
+  });
+});
 
-    expect(action.type).toBe('TACTICAL_CHANGE');
-    expect(action.data.style).toBe('ATTACKING');
+#### 10.2.2 Physics and AI Integration
+```typescript
+describe('Physics-AI Integration', () =>
+{
+  test('should coordinate ball physics with player AI decisions', () =>
+  {
+    const gameState = createGameState({
+      ball: {
+        position: { x: 100, y: 100, z: 5 },
+        velocity: { x: 50, y: 30, z: 0 },
+        spin: 0.2
+      }
+    });
+    
+    // Multiple players should calculate acquisition times
+    const players = gameState.teams[0].players;
+    
+    // Process one frame
+    ballPhysics.update(gameState.ball, 0.016);
+    
+    players.forEach(player => {
+      playerAI.updateAIState(player, gameState);
+    });
+    
+    // Find player with best ball acquisition
+    const bestPlayer = players.reduce((best, current) => 
+      current.aiState.ballAcquisitionProbability > best.aiState.ballAcquisitionProbability 
+        ? current : best
+    );
+    
+    // Best player should move toward predicted ball position
+    const ballPrediction = ballPhysics.predictPosition(gameState.ball, bestPlayer.aiState.timeNeededToGetToBall);
+    const targetDistance = Vector2.distance(bestPlayer.targetPosition, ballPrediction);
+    
+    expect(targetDistance).toBeLessThan(50); // Should target predicted position
+    expect(bestPlayer.aiState.hasBestPossession).toBe(true);
   });
 });
 ```

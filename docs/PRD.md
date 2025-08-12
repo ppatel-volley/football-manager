@@ -49,7 +49,7 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 #### 3.1.2 Live Match Experience
 - **Real-time Duration**: 5 minutes real-time representing 90 minutes game time (18x acceleration)
-- **Two Halves**: 2.25 minutes each with 15-second half-time break
+- **Two Halves**: 2.25 minutes each with automatic half-time transition
 - **Stoppage Time**: Added automatically based on match events
 - **Top-down View**: Bird's eye view of football pitch with player positioning
 
@@ -200,6 +200,14 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Throw-ins**: When ball crosses touchline
 - **Free Kicks**: Direct and indirect based on foul type
 - **Penalty Kicks**: For direct free kick fouls in penalty area
+
+#### 3.6.3 Half-Time Procedures
+- **Automatic Transition**: When first half reaches 2.5 minutes (halfway point), game automatically transitions to second half
+- **Formation Reset**: All players return to their designated formation positions in their own half
+- **Kick-off Team Switch**: The team that did not kick off in the first half kicks off the second half
+- **Team Positioning**: All players must be in their own half before second half kick-off, maintaining proper formation structure
+- **Ball Reset**: Ball returns to center circle for second half kick-off
+- **Game Phase**: Seamless transition from PLAY phase → HALF_TIME phase → KICKOFF phase for second half
 
 ## 4. Technical Requirements
 
