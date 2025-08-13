@@ -2,36 +2,103 @@
 
 ## 1. Executive Summary
 
-**Document Version**: 1.0
-**Date**: 12 August 2025
+**Document Version**: 1.1
+**Date**: 13 August 2025
 **Product**: Super Soccer Manager: Pro Edition
-**Architecture**: Voice-controlled football management game supporting single-player and multiplayer modes
+**Architecture**: Voice-controlled football management game with POC focus on AI evaluation
 
-This Technical Design Document outlines the technical architecture, implementation details, and asset requirements for developing Super Soccer Manager: Pro Edition. The game supports both single-player (human vs AI) and multiplayer (human vs human) gameplay modes.
+This Technical Design Document outlines the technical architecture and implementation details for developing Super Soccer Manager: Pro Edition. The current focus is on **Phase 1 POC** - a proof-of-concept demonstrating AI-controlled football matches for evaluation and foundation validation.
+
+### 1.1 POC Scope Definition
+
+**Primary Goal**: Demonstrate viable AI football simulation with formation adherence and realistic match flow
+
+**In-Scope for POC**:
+- AI vs AI autonomous match simulation
+- 2D Canvas physics (no Z-axis/height)
+- Ball in/out detection with basic restarts (throw-ins, corners, goal kicks)
+- Half-time transitions with team switching
+- Formation-based player positioning (pre-defined 4-4-2, 4-3-3)
+- Basic statistics tracking (possession, shots, corners)
+- FireTV Stick 4K Max optimisation (30+ FPS target)
+
+**Explicitly Out-of-Scope**:
+- Voice command system (Phase 2)
+- Offside detection and foul system
+- Advanced AI learning and adaptation
+- Real-time multiplayer functionality
+- Commentary and audio systems
+
+### 1.2 Deterministic Simulation Policy
+
+**Critical Requirement**: All simulation logic (AI decisions, physics, formation positioning) MUST use deterministic game time to ensure reproducible behaviour across different devices, runs, and test scenarios.
+
+**Forbidden in Simulation Logic**:
+- `Date.now()` - Wall-clock time (non-deterministic)
+- `performance.now()` - High-resolution wall-clock time
+- `Math.random()` without seeded RNG
+- Any system-dependent timing
+
+**Required for Simulation**:
+- Fixed timestep game loop (33.33ms steps)
+- Seeded pseudo-random number generation
+- Game time passed as `deltaTime` parameter to all AI and physics systems
+- Clamped delta time to prevent "spiral of death" scenarios
+
+**Benefits**:
+- Reproducible test scenarios for AI evaluation
+- Consistent behaviour across FireTV devices with different performance characteristics
+- Deterministic regression testing for formation adherence and match outcomes
+
+### 1.3 Component Phase Mapping
+
+| Component | POC Status | Phase 2 Status | Implementation Notes |
+|-----------|------------|-----------------|----------------------|
+| **Match Phases** | ⚠️ Limited | Complete | POC: KICKOFF, IN_PLAY, OUT_OF_PLAY, THROW_IN, CORNER_KICK, GOAL_KICK<br/>Phase 2: +FREE_KICK, +PENALTY, +OFFSIDE |
+| **AI Difficulty** | ✅ Full | Enhanced | BEGINNER, AMATEUR, PROFESSIONAL, WORLD_CLASS |
+| **Physics Engine** | ✅ 2D Only | 3D Enhanced | POC: Simple 2D Canvas physics<br/>Phase 2: +Ball height, +Spin effects, +Advanced trajectories |
+| **Formation System** | ⚠️ Basic | FET Integrated | POC: Predefined 4-4-2/4-3-3 templates<br/>Phase 2: FET-TDD schema consumption |
+| **Player Attributes** | ✅ Full | Enhanced | 0.0-10.0 scale (PRD specification) |
+| **Match Statistics** | ⚠️ Minimal | Advanced | POC: Possession, shots, corners<br/>Phase 2: +Passes, +Fouls, +Cards, +Heatmaps |
+| **Voice Commands** | ❌ Disabled | ✅ Full | Completely out of scope for POC |
+| **Multiplayer** | ❌ Disabled | ✅ Full | POC: AI vs AI evaluation only |
+| **Rules System** | ⚠️ Basic | Complete | POC: Ball boundaries, goals, basic restarts<br/>Phase 2: +Offside, +Fouls, +Cards, +Advanced restarts |
+
+**Legend**: ✅ Fully implemented | ⚠️ Limited implementation | ❌ Not implemented
 
 ## 2. System Architecture Overview
 
-### 2.1 High-Level Architecture
+### 2.1 POC Architecture Overview
 
 ```
-Single-Player Mode (Human vs AI):
-┌─────────────────┐    ┌─────────────────┐
-│   Client (TV)   │────│  Local Engine   │
-│  - React App    │    │  - AI Opponent  │
-│  - Voice Input  │    │  - Match Logic  │ 
-│  - Canvas 2D    │    │  - Team Control │
-└─────────────────┘    └─────────────────┘
+POC Single-Client Architecture:
+┌─────────────────────────────────────────┐
+│           React Client (FireTV)         │
+│  ┌─────────────────────────────────────┐ │
+│  │         Game Manager                │ │
+│  │  ┌─────────────┐ ┌─────────────────┐│ │
+│  │  │    Team     │ │    Team         ││ │
+│  │  │   (Home)    │ │   (Away)        ││ │
+│  │  │             │ │                 ││ │
+│  │  └─────────────┘ └─────────────────┘│ │
+│  │         │                │          │ │
+│  │         └────────┬───────┘          │ │
+│  │                  │                  │ │
+│  │              Ball Class             │ │
+│  │                                     │ │
+│  └─────────────────────────────────────┘ │
+│                                           │
+│  Canvas 2D Renderer   │   AI Controllers  │
+│  Physics Engine       │   Match Logic     │
+└─────────────────────────────────────────┘
 
-Multiplayer Mode (Human vs Human):
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Client (TV)   │────│  VGF Server     │────│   Redis Store   │
-│  - React App    │    │  - Game Logic   │    │  - Game State   │
-│  - Voice Input  │    │  - Match Engine │    │  - User Data    │
-│  - Canvas 2D    │    │  - Socket.IO    │    │  - Sessions     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │
-         └───────────────────────┘
-           Real-time Socket.IO
+Future Multiplayer (Phase 2):
+┌─────────────────┐    ┌─────────────────┐
+│   Client (TV)   │────│  VGF Server     │
+│  - Game Manager │    │  - Match Engine │
+│  - Voice Input  │    │  - Socket.IO    │
+│  - Canvas 2D    │    │  - Redis Store  │
+└─────────────────┘    └─────────────────┘
 ```
 
 ### 2.2 Technology Stack
@@ -95,50 +162,2248 @@ enum CommandType
 }
 ```
 
-### 3.2 Game Engine Architecture
+### 3.2 Core Game Architecture
 
-#### 3.2.1 Match Engine Core
+#### 3.2.1 Game Manager Class Hierarchy
+
+**Central Architecture**: Game Manager orchestrates Team, Player, and Ball classes for match simulation
+
 ```typescript
-class MatchEngine
+class GameManager {
+  // Core game entities
+  private homeTeam: Team;
+  private awayTeam: Team;
+  private ball: Ball;
+  private referee: Referee;
+
+  // Game systems
+  private physicsEngine: Physics2DEngine;
+  // POC: simple predefined formations; Phase 2: replace with FET adapter
+  private formationManager: FormationManager; // POC placeholder
+  private aiControllers: Map<string, TeamAIController>;
+  private matchState: MatchState;
+  private statistics: MatchStatistics;
+
+  // Performance optimization
+  private positionBuffer: Float32Array;      // All player positions (44 floats)
+  private lastUpdateTime: number;
+  private frameTimeTarget: number = 33;      // 30 FPS target (33ms per frame as per PRD)
+
+  constructor(homeTeam: Team, awayTeam: Team) {
+    this.homeTeam = homeTeam;
+    this.awayTeam = awayTeam;
+    this.ball = new Ball();
+    this.referee = new Referee();
+
+    // Initialize game systems
+    this.physicsEngine = new Physics2DEngine();
+    // POC placeholder; Phase 2: load formations via FET export adapter
+    this.formationManager = new FormationManager();
+    this.aiControllers = new Map();
+    this.statistics = new MatchStatistics();
+
+    // Set up AI controllers for both teams
+    this.aiControllers.set(homeTeam.id, new TeamAIController(homeTeam, "4-4-2"));
+    this.aiControllers.set(awayTeam.id, new TeamAIController(awayTeam, "4-3-3"));
+
+    // Pre-allocate position buffer for SIMD optimization
+    this.positionBuffer = new Float32Array(44); // 22 players * 2 coordinates
+
+    this.matchState = MatchState.PREPARING_KICKOFF;
+    this.lastUpdateTime = 0; // Initialize to 0, use game time in update loop
+  }
+
+  // Main game loop - called every frame (target 30 FPS)
+  public update(currentTime: number): void {
+    // **DETERMINISTIC TIMEBASE POLICY**
+    // All simulation logic MUST use game time, never wall-clock time (Date.now(), performance.now())
+    // This ensures reproducible AI behaviour and physics across different devices/runs
+
+    const deltaTime = (currentTime - this.lastUpdateTime) / 1000.0; // Convert to seconds
+    this.lastUpdateTime = currentTime;
+
+    // Fixed timestep approach: limit delta time to prevent non-deterministic behaviour
+    const clampedDelta = Math.min(deltaTime, 1.0 / 30.0); // Fixed 30 FPS timestep (33.33ms)
+
+    // Update match state first
+    this.updateMatchState(clampedDelta);
+
+    if (this.matchState === MatchState.IN_PLAY) {
+      // CRITICAL: AI and physics MUST use clampedDelta, never raw system time
+      this.updateAI(clampedDelta);        // Deterministic AI decisions
+      this.updatePhysics(clampedDelta);   // Deterministic physics simulation
+      this.updateStatistics(clampedDelta); // Statistics tracking
+    }
+
+    // Handle state transitions
+    this.checkStateTransitions();
+  }
+
+  private updateAI(deltaTime: number): void {
+    const gameContext = this.buildGameContext();
+
+    // Update both team AI controllers
+    this.aiControllers.get(this.homeTeam.id)?.update(gameContext, deltaTime);
+    this.aiControllers.get(this.awayTeam.id)?.update(gameContext, deltaTime);
+
+    // Update individual player AI
+    this.homeTeam.updatePlayers(gameContext, deltaTime);
+    this.awayTeam.updatePlayers(gameContext, deltaTime);
+  }
+
+  private updatePhysics(deltaTime: number): void {
+    // Update ball physics
+    this.ball.update(deltaTime);
+
+    // Check ball boundaries (POC scope: basic in/out detection)
+    this.checkBallBoundaries();
+
+    // Update player positions using Float32Array optimization
+    this.updatePlayerPositions(deltaTime);
+
+    // Check ball-player collisions
+    this.checkBallPlayerCollisions();
+  }
+
+  private updatePlayerPositions(deltaTime: number): void {
+    // Fill position buffer with current player positions
+    let bufferIndex = 0;
+
+    for (const player of this.homeTeam.players) {
+      this.positionBuffer[bufferIndex++] = player.position.x;
+      this.positionBuffer[bufferIndex++] = player.position.y;
+    }
+
+    for (const player of this.awayTeam.players) {
+      this.positionBuffer[bufferIndex++] = player.position.x;
+      this.positionBuffer[bufferIndex++] = player.position.y;
+    }
+
+    // Use optimized formation system for bulk position updates
+    const ballPosition = new Float32Array([this.ball.position.x, this.ball.position.y]);
+
+    this.formationManager.updatePlayerPositions(
+      ballPosition,
+      this.positionBuffer,
+      this.getFormationTargets(),
+      deltaTime
+    );
+
+    // Apply updated positions back to player objects
+    this.applyPositionsFromBuffer();
+  }
+
+  private buildGameContext(): GameContext {
+    return {
+      matchState: this.matchState,
+      ball: this.ball,
+      homeTeam: this.homeTeam,
+      awayTeam: this.awayTeam,
+      possession: this.determinePossession(),
+      matchTime: this.getMatchTime(),
+      statistics: this.statistics
+    };
+  }
+
+  public getState(): GameManagerState {
+    return {
+      homeTeam: this.homeTeam,
+      awayTeam: this.awayTeam,
+      ball: this.ball,
+      matchState: this.matchState,
+      statistics: this.statistics,
+      matchTime: this.getMatchTime()
+    };
+  }
+}
+
+interface GameContext {
+  matchState: MatchState;
+  ball: Ball;
+  homeTeam: Team;
+  awayTeam: Team;
+  possession: 'HOME' | 'AWAY' | null;
+  matchTime: MatchTime;
+  statistics: MatchStatistics;
+}
+
+interface GameManagerState {
+  homeTeam: Team;
+  awayTeam: Team;
+  ball: Ball;
+  matchState: MatchState;
+  statistics: MatchStatistics;
+  matchTime: MatchTime;
+}
+```
+
+#### 3.2.2 Team Class Implementation
+
+```typescript
+class Team {
+  public readonly id: string;
+  public readonly name: string;
+  public readonly players: Player[];
+  public readonly formation: string;
+  public captain: Player;
+
+  private formationPositions: Float32Array;
+  private teamColor: 'HOME' | 'AWAY';
+  private currentPhase: 'ATTACK' | 'DEFEND' | 'TRANSITION';
+
+  constructor(
+    id: string,
+    name: string,
+    players: Player[],
+    formation: string = "4-4-2",
+    teamColor: 'HOME' | 'AWAY'
+  ) {
+    this.id = id;
+    this.name = name;
+    this.players = players;
+    this.formation = formation;
+    this.teamColor = teamColor;
+    this.currentPhase = 'TRANSITION';
+
+    // Assign captain (highest-rated player)
+    this.captain = this.findCaptain();
+    this.captain.isCaptain = true;
+
+    // Initialize formation positions
+    this.formationPositions = this.generateFormationPositions(formation);
+    this.positionPlayersInFormation();
+  }
+
+  private findCaptain(): Player {
+    return this.players.reduce((captain, player) =>
+      player.overallRating > captain.overallRating ? player : captain
+    );
+  }
+
+  public updatePlayers(context: GameContext, deltaTime: number): void {
+    // Update each player's AI and movement
+    for (const player of this.players) {
+      player.update(context, deltaTime);
+    }
+  }
+
+  public getPlayersInPositionOrder(): Player[] {
+    // Return players ordered by formation position (GK, DEF, MID, ATT)
+    return [...this.players].sort((a, b) => {
+      const positionOrder = {
+        'GOALKEEPER': 0,
+        'CENTRE_BACK': 1, 'FULL_BACK': 1,
+        'CENTRAL_MIDFIELDER': 2, 'WINGER': 2,
+        'STRIKER': 3
+      };
+
+      return (positionOrder[a.role] || 99) - (positionOrder[b.role] || 99);
+    });
+  }
+
+  private generateFormationPositions(formation: string): Float32Array {
+    // Generate normalized positions based on formation
+    // This integrates with the Float32Array optimization system
+
+    switch (formation) {
+      case "4-4-2":
+        return this.create442Positions();
+      case "4-3-3":
+        return this.create433Positions();
+      default:
+        return this.create442Positions(); // Default fallback
+    }
+  }
+
+  private create442Positions(): Float32Array {
+    // Mirror positions for away team (attacking left instead of right)
+    const baseX = this.teamColor === 'HOME' ? 0.0 : 1.0;
+    const direction = this.teamColor === 'HOME' ? 1 : -1;
+
+    return new Float32Array([
+      // Goalkeeper
+      baseX + (0.05 * direction), 0.5,
+
+      // Defense (4)
+      baseX + (0.25 * direction), 0.2,  // Left back
+      baseX + (0.20 * direction), 0.35, // Center back left
+      baseX + (0.20 * direction), 0.65, // Center back right
+      baseX + (0.25 * direction), 0.8,  // Right back
+
+      // Midfield (4)
+      baseX + (0.45 * direction), 0.15, // Left midfield
+      baseX + (0.50 * direction), 0.35, // Center midfield left
+      baseX + (0.50 * direction), 0.65, // Center midfield right
+      baseX + (0.45 * direction), 0.85, // Right midfield
+
+      // Attack (2)
+      baseX + (0.75 * direction), 0.4,  // Striker left
+      baseX + (0.75 * direction), 0.6   // Striker right
+    ]);
+  }
+}
+```
+
+#### 3.2.3 Player Class Implementation
+
+```typescript
+class Player {
+  // Identity
+  public readonly id: string;
+  public readonly name: string;
+  public readonly kitNumber: number;
+  public role: PlayerRole;
+  public isCaptain: boolean = false;
+
+  // Physical state
+  public position: Vector2;
+  public targetPosition: Vector2;
+  public velocity: Vector2;
+  public facing: number; // Radians
+
+  // Game state
+  public hasBall: boolean = false;
+  public stamina: number = 100; // 0-100
+  public confidence: number = 80; // 0-100
+
+  // Attributes (from PRD specification)
+  public attributes: PlayerAttributes;
+  public overallRating: number;
+
+  // AI state
+  private aiState: PlayerAIState;
+  private movementController: PlayerMovementController;
+
+  constructor(
+    id: string,
+    name: string,
+    kitNumber: number,
+    role: PlayerRole,
+    attributes: PlayerAttributes
+  ) {
+    this.id = id;
+    this.name = name;
+    this.kitNumber = kitNumber;
+    this.role = role;
+    this.attributes = attributes;
+
+    // Calculate overall rating from attributes
+    this.overallRating = this.calculateOverallRating();
+
+    // Initialize position (set by team formation)
+    this.position = { x: 0.5, y: 0.5 };
+    this.targetPosition = { x: 0.5, y: 0.5 };
+    this.velocity = { x: 0, y: 0 };
+    this.facing = 0;
+
+    // Initialize AI state
+    this.aiState = new PlayerAIState();
+    this.movementController = new PlayerMovementController();
+  }
+
+  public update(context: GameContext, deltaTime: number): void {
+    // Update AI decision making
+    this.updateAI(context, deltaTime);
+
+    // Update movement towards target
+    this.updateMovement(deltaTime);
+
+    // Update stamina
+    this.updateStamina(deltaTime);
+  }
+
+  private updateAI(context: GameContext, deltaTime: number): void {
+    // Basic AI decisions based on game context and player attributes
+
+    if (context.ball.owner === null) {
+      // Ball is loose - decide whether to chase it
+      this.aiState.timeToReachBall = this.calculateTimeToReachBall(context.ball);
+
+      if (this.shouldChaseBall(context)) {
+        this.targetPosition = this.predictBallInterception(context.ball);
+      } else {
+        // Maintain formation position with slight ball influence
+        this.targetPosition = this.getFormationPosition(context);
+      }
+    } else if (context.ball.owner?.team === this.getTeam(context)) {
+      // Team has possession - support or make runs
+      this.targetPosition = this.getSupportPosition(context);
+    } else {
+      // Opposition has possession - defend
+      this.targetPosition = this.getDefensivePosition(context);
+    }
+  }
+
+  private calculateOverallRating(): number {
+    // Calculate overall rating based on role-specific attribute weightings
+    const roleWeights = this.getRoleAttributeWeights(this.role);
+    let totalRating = 0;
+    let totalWeight = 0;
+
+    for (const [attribute, weight] of Object.entries(roleWeights)) {
+      if (this.attributes[attribute] !== undefined) {
+        totalRating += this.attributes[attribute] * weight;
+        totalWeight += weight;
+      }
+    }
+
+    return totalWeight > 0 ? (totalRating / totalWeight) * 10 : 50; // Convert to 0-100 scale
+  }
+
+  private getRoleAttributeWeights(role: PlayerRole): Record<string, number> {
+    const weights = {
+      [PlayerRole.GOALKEEPER]: {
+        handling: 0.2, reflexes: 0.2, aerialReach: 0.15,
+        oneOnOnes: 0.15, distribution: 0.1, positioning: 0.18
+      },
+      [PlayerRole.CENTRE_BACK]: {
+        tackling: 0.2, marking: 0.2, heading: 0.18,
+        positioning: 0.15, strength: 0.12, passing: 0.15
+      },
+      [PlayerRole.FULL_BACK]: {
+        tackling: 0.15, marking: 0.12, pace: 0.18,
+        crossing: 0.15, stamina: 0.15, passing: 0.25
+      },
+      [PlayerRole.CENTRAL_MIDFIELDER]: {
+        passing: 0.25, vision: 0.2, stamina: 0.15,
+        ballControl: 0.15, decisions: 0.12, tackling: 0.13
+      },
+      [PlayerRole.WINGER]: {
+        pace: 0.2, crossing: 0.18, dribbling: 0.18,
+        stamina: 0.15, passing: 0.15, shooting: 0.14
+      },
+      [PlayerRole.STRIKER]: {
+        shooting: 0.25, finishing: 0.2, pace: 0.15,
+        positioning: 0.15, heading: 0.12, ballControl: 0.13
+      }
+    };
+
+    return weights[role] || weights[PlayerRole.CENTRAL_MIDFIELDER];
+  }
+}
+
+// **CANONICAL** Player attributes from PRD specification (0.0-10.0 scale)
+interface PlayerAttributes {
+  // Physical Attributes (0.0-10.0 scale as per PRD)
+  pace: number;           // Sprint speed
+  acceleration: number;   // Reaching top speed
+  stamina: number;        // Match-long performance
+  strength: number;       // Physical duels
+  jumpingReach: number;   // Aerial ability
+  agility: number;        // Direction changes
+  balance: number;        // Stability
+
+  // Technical Attributes (0.0-10.0 scale as per PRD)
+  ballControl: number;    // First touch quality
+  dribbling: number;      // Maintaining possession whilst moving
+  passing: number;        // Accuracy and range
+  crossing: number;       // Wide delivery quality
+  shooting: number;       // Power and accuracy
+  finishing: number;      // Goal conversion
+  longShots: number;      // Distance shooting
+  freeKickTaking: number; // Dead ball expertise
+  penaltyTaking: number;  // Penalty conversion
+
+  // Mental Attributes (0.0-10.0 scale as per PRD)
+  decisions: number;      // Choice quality
+  composure: number;      // Pressure performance
+  concentration: number;  // Focus maintenance
+  positioning: number;    // Tactical awareness
+  anticipation: number;   // Game reading
+  vision: number;         // Opportunity spotting
+  workRate: number;       // Effort levels
+  teamwork: number;       // Collective play
+  leadership: number;     // Teammate influence
+
+  // Defensive Attributes (0.0-10.0 scale as per PRD)
+  tackling: number;       // Ground challenges
+  marking: number;        // Opponent tracking
+  heading: number;        // Aerial defending
+  interceptions: number;  // Pass reading
+
+  // Goalkeeping Attributes - optional (0.0-10.0 scale as per PRD)
+  handling?: number;      // Ball security
+  reflexes?: number;      // Reaction time
+  aerialReach?: number;   // Cross claiming
+  oneOnOnes?: number;     // Close-range saves
+  distribution?: number;  // Ball delivery
+  shooting: number;
+  heading: number;
+  freeKickTaking: number;
+
+  // Mental attributes
+  vision: number;
+  decisions: number;
+  concentration: number;
+  composure: number;
+  anticipation: number;
+
+  // Physical attributes
+  pace: number;
+  acceleration: number;
+  stamina: number;
+  strength: number;
+  jumping: number;
+  agility: number;
+
+  // Defensive skills
+  tackling: number;
+  marking: number;
+  positioning: number;
+
+  // Mental/Social attributes
+  teamwork: number;
+  workRate: number;
+  leadership: number;
+
+  // Goalkeeper-specific (optional)
+  handling?: number;
+  reflexes?: number;
+  aerialReach?: number;
+  oneOnOnes?: number;
+  distribution?: number;
+}
+```
+
+#### 3.2.4 Ball Class Implementation
+
+```typescript
+// **POC ONLY** - Simplified 2D Ball (no height/3D effects)
+class Ball {
+  public position: Vector2;
+  public velocity: Vector2;
+  public owner: Player | null;
+  public lastTouchedBy: Player | null;
+  public isMoving: boolean = false;
+
+  private radius: number = 0.01; // Normalized ball size
+  private friction: number = 0.98; // 2% velocity loss per frame
+
+  constructor() {
+    this.position = { x: 0.5, y: 0.5 }; // Center of pitch
+    this.velocity = { x: 0, y: 0 };
+    this.owner = null;
+    this.lastTouchedBy = null;
+  }
+
+  public update(deltaTime: number): void {
+    if (this.owner) {
+      // Ball follows the player who owns it
+      this.followOwner(deltaTime);
+    } else {
+      // Ball moves freely with physics
+      this.updateFreeMovement(deltaTime);
+    }
+  }
+
+  private updateFreeMovement(deltaTime: number): void {
+    // **POC ONLY** - Simple 2D movement
+    this.position.x += this.velocity.x * deltaTime;
+    this.position.y += this.velocity.y * deltaTime;
+
+    // Apply 2D friction
+    this.velocity.x *= this.friction;
+    this.velocity.y *= this.friction;
+
+    // Stop very slow movement (performance optimization)
+    const minVelocity = 0.01;
+    if (Math.abs(this.velocity.x) < minVelocity && Math.abs(this.velocity.y) < minVelocity) {
+      this.velocity.x = 0;
+      this.velocity.y = 0;
+      this.isMoving = false;
+    } else {
+      this.isMoving = true;
+    }
+  }
+
+  private followOwner(deltaTime: number): void {
+    if (!this.owner) return;
+
+    // Ball stays close to player who owns it
+    const targetX = this.owner.position.x + Math.cos(this.owner.facing) * 0.03;
+    const targetY = this.owner.position.y + Math.sin(this.owner.facing) * 0.03;
+
+    // Smooth interpolation to target position
+    const lerpFactor = Math.min(deltaTime * 5.0, 1.0);
+    this.position.x += (targetX - this.position.x) * lerpFactor;
+    this.position.y += (targetY - this.position.y) * lerpFactor;
+
+    this.velocity.x = 0;
+    this.velocity.y = 0;
+  }
+
+  public kick(direction: Vector2, power: number, kicker: Player): void {
+    // Apply kick to ball
+    this.velocity.x = direction.x * power * 0.5;
+    this.velocity.y = direction.y * power * 0.5;
+
+    // Ball is no longer owned
+    this.owner = null;
+    this.lastTouchedBy = kicker;
+  }
+
+  public isOutOfBounds(): { out: boolean; side?: 'left' | 'right' | 'top' | 'bottom' } {
+    if (this.position.x < 0) return { out: true, side: 'left' };
+    if (this.position.x > 1) return { out: true, side: 'right' };
+    if (this.position.y < 0) return { out: true, side: 'top' };
+    if (this.position.y > 1) return { out: true, side: 'bottom' };
+
+    return { out: false };
+  }
+
+  public isInGoal(): { inGoal: boolean; side?: 'home' | 'away' } {
+    const goalWidth = 0.2; // 20% of pitch width
+    const goalY = (1 - goalWidth) / 2;
+
+    // Check if ball is in goal area and crossed goal line
+    if (this.position.y >= goalY && this.position.y <= goalY + goalWidth) {
+      if (this.position.x <= 0) return { inGoal: true, side: 'home' };
+      if (this.position.x >= 1) return { inGoal: true, side: 'away' };
+    }
+
+    return { inGoal: false };
+  }
+}
+```
+
+### 3.6 POC 2D Physics Engine
+
+**POC Constraint**: Simple 2D Canvas physics with no Z-axis simulation. Complex 3D physics, ball height/elevation, realistic spin effects, and complex trajectory simulation are explicitly out-of-scope.
+
+#### 3.6.1 Physics2DEngine Implementation
+```typescript
+class Physics2DEngine {
+  private fieldBounds: FieldBounds;
+  private collisionDetector: CircularCollisionDetector;
+
+  constructor() {
+    this.fieldBounds = new FieldBounds();
+    this.collisionDetector = new CircularCollisionDetector();
+  }
+
+  public updateBall(ball: Ball, deltaTime: number): void {
+    if (ball.owner) {
+      this.updatePossessedBall(ball, deltaTime);
+    } else {
+      this.updateFreeBall(ball, deltaTime);
+    }
+
+    // Check boundaries for out-of-play detection
+    this.checkBallBoundaries(ball);
+  }
+
+  private updateFreeBall(ball: Ball, deltaTime: number): void {
+    // Simple 2D velocity integration
+    ball.position.x += ball.velocity.x * deltaTime;
+    ball.position.y += ball.velocity.y * deltaTime;
+
+    // Apply basic 2D friction
+    const frictionFactor = 0.98; // 2% velocity loss per frame
+    ball.velocity.x *= frictionFactor;
+    ball.velocity.y *= frictionFactor;
+
+    // Stop very slow movement (performance optimization)
+    const minVelocity = 0.01;
+    if (Math.abs(ball.velocity.x) < minVelocity && Math.abs(ball.velocity.y) < minVelocity) {
+      ball.velocity.x = 0;
+      ball.velocity.y = 0;
+      ball.isMoving = false;
+    } else {
+      ball.isMoving = true;
+    }
+  }
+
+  public updatePlayers(players: Player[], deltaTime: number): void {
+    for (const player of players) {
+      this.updatePlayerMovement(player, deltaTime);
+    }
+
+    // Check player-ball collisions
+    this.checkPlayerBallCollisions(players, this.ball);
+  }
+
+  private updatePlayerMovement(player: Player, deltaTime: number): void {
+    // Simple movement towards target position
+    const dx = player.targetPosition.x - player.position.x;
+    const dy = player.targetPosition.y - player.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > 1) { // Threshold to prevent jittering
+      const moveSpeed = player.speed * deltaTime;
+      const normalizedDx = dx / distance;
+      const normalizedDy = dy / distance;
+
+      player.position.x += normalizedDx * Math.min(moveSpeed, distance);
+      player.position.y += normalizedDy * Math.min(moveSpeed, distance);
+    }
+
+    // Clamp to field boundaries
+    this.fieldBounds.clampPlayerPosition(player);
+  }
+
+  private checkPlayerBallCollisions(players: Player[], ball: Ball): void {
+    if (ball.owner) return; // Ball is already possessed
+
+    const ballRadius = 8; // pixels
+    const playerRadius = 15; // pixels
+    const collisionDistance = ballRadius + playerRadius;
+
+    for (const player of players) {
+      const distance = this.calculateDistance(player.position, ball.position);
+
+      if (distance < collisionDistance) {
+        // Player gains possession
+        ball.owner = player;
+        ball.possessor = player.id;
+        player.hasBall = true;
+
+        // Stop ball velocity
+        ball.velocity.x = 0;
+        ball.velocity.y = 0;
+        ball.isMoving = false;
+
+        break;
+      }
+    }
+  }
+}
+
+class FieldBounds {
+  private readonly margin = 10; // pixels from edge
+
+  public clampPlayerPosition(player: Player): void {
+    player.position.x = Math.max(this.margin, Math.min(POC_CONFIG.FIELD_WIDTH - this.margin, player.position.x));
+    player.position.y = Math.max(this.margin, Math.min(POC_CONFIG.FIELD_HEIGHT - this.margin, player.position.y));
+  }
+
+  public isBallOutOfPlay(ballPosition: Vector2): { out: boolean; side?: 'left' | 'right' | 'top' | 'bottom' } {
+    if (ballPosition.x < 0) return { out: true, side: 'left' };
+    if (ballPosition.x > POC_CONFIG.FIELD_WIDTH) return { out: true, side: 'right' };
+    if (ballPosition.y < 0) return { out: true, side: 'top' };
+    if (ballPosition.y > POC_CONFIG.FIELD_HEIGHT) return { out: true, side: 'bottom' };
+
+    return { out: false };
+  }
+}
+```
+
+### 3.7 FireTV Performance Specifications
+
+**Target Device**: Amazon FireTV Stick 4K Max (2021)
+- **SoC**: Quad-core ARM Cortex-A55 @1.8GHz
+- **GPU**: ARM Mali-G52 MC1
+- **RAM**: 2GB DDR4
+- **Browser**: Amazon Silk Browser (Chromium-based)
+
+#### 3.7.1 Performance Targets
+```typescript
+interface FireTVPerformanceTargets {
+  frameRate: {
+    target: 30; // FPS minimum during active gameplay
+    maximum: 60; // FPS cap to conserve resources
+  };
+
+  timing: {
+    frameBudget: 33; // ms total per frame (PRD specification)
+    gameLogicBudget: 20; // ms for AI + physics
+    renderBudget: 13; // ms for Canvas 2D operations
+  };
+
+  memory: {
+    jsHeapLimit: 256; // MB peak usage (PRD specification)
+    textureMemory: 128; // MB for all sprites and assets (PRD specification)
+    totalBudget: 512; // MB total application footprint
+  };
+
+  canvas: {
+    maxDrawCalls: 500; // per frame (PRD specification: <500 draw calls per frame)
+    maxSprites: 22; // players
+    maxParticles: 0; // disabled for POC
+  };
+}
+
+class FireTVPerformanceMonitor {
+  private frameTimeHistory: number[] = [];
+  private memoryUsageHistory: number[] = [];
+  private readonly historyLength = 300; // 10 seconds at 30 FPS
+
+  public recordFrameTime(frameTime: number): void {
+    this.frameTimeHistory.push(frameTime);
+    if (this.frameTimeHistory.length > this.historyLength) {
+      this.frameTimeHistory.shift();
+    }
+
+    // Trigger fallbacks if performance degrades
+    const averageFrameTime = this.getAverageFrameTime();
+    if (averageFrameTime > 33) { // Above 30 FPS budget (PRD specification)
+      this.triggerPerformanceFallbacks();
+    }
+  }
+
+  private triggerPerformanceFallbacks(): void {
+    // Reduce AI update frequency
+    POC_CONFIG.AI_UPDATE_INTERVAL_SECONDS = 2; // From 1 second to 2 seconds
+
+    // Reduce render quality
+    this.enableSimplifiedRendering();
+
+    console.warn('FireTV performance fallbacks activated');
+  }
+
+  private enableSimplifiedRendering(): void {
+    // Reduce visual fidelity for better performance
+    // - Disable player shadows
+    // - Reduce player sprite animation frames
+    // - Simplify ball trail effects
+  }
+
+  public getPerformanceReport(): FireTVPerformanceReport {
+    return {
+      averageFrameTime: this.getAverageFrameTime(),
+      frameDrop: this.getFrameDropPercentage(),
+      memoryUsage: this.getCurrentMemoryUsage(),
+      fallbacksActive: this.areFallbacksActive()
+    };
+  }
+}
+
+interface FireTVPerformanceReport {
+  averageFrameTime: number; // ms
+  frameDrop: number; // percentage of frames over budget
+  memoryUsage: number; // MB current usage
+  fallbacksActive: boolean;
+}
+```
+
+#### 3.7.2 Canvas 2D Optimization
+```typescript
+class OptimizedCanvas2DRenderer {
+  private context: CanvasRenderingContext2D;
+  private spriteCache: Map<string, ImageBitmap> = new Map();
+  private drawCallCount: number = 0;
+  private readonly maxDrawCalls = 500;
+
+  public renderFrame(gameState: GameManagerState): void {
+    this.drawCallCount = 0;
+
+    // Clear canvas efficiently
+    this.clearCanvas();
+
+    // Render in order: field -> players -> ball -> UI
+    this.renderField();
+    this.renderPlayers(gameState.homeTeam.players);
+    this.renderPlayers(gameState.awayTeam.players);
+    this.renderBall(gameState.ball);
+    this.renderUI(gameState);
+
+    // Performance check
+    if (this.drawCallCount > this.maxDrawCalls) {
+      console.warn(`Draw calls exceeded budget: ${this.drawCallCount}/${this.maxDrawCalls}`);
+    }
+  }
+
+  private renderPlayers(players: Player[]): void {
+    // Batch render players to minimize context switches
+    for (const player of players) {
+      this.renderPlayer(player);
+      this.drawCallCount++;
+    }
+  }
+
+  private renderPlayer(player: Player): void {
+    const sprite = this.getSpriteFromCache(player.team, player.playerType);
+
+    // Simple circle for POC - no complex sprites
+    this.context.fillStyle = player.team === 'RED' ? '#FF0000' : '#0000FF';
+    this.context.beginPath();
+    this.context.arc(player.position.x, player.position.y, 15, 0, Math.PI * 2);
+    this.context.fill();
+
+    // Player name (simplified)
+    if (player.hasBall) {
+      this.context.strokeStyle = '#FFFF00';
+      this.context.lineWidth = 3;
+      this.context.stroke();
+    }
+  }
+
+  private renderBall(ball: Ball): void {
+    // **POC ONLY** - Simple 2D ball rendering
+    const ballRadius = 8; // Fixed radius for POC
+
+    // Simple white ball
+    this.context.fillStyle = '#FFFFFF';
+    this.context.beginPath();
+    this.context.arc(ball.position.x, ball.position.y, ballRadius, 0, Math.PI * 2);
+    this.context.fill();
+
+    // Ball outline
+    this.context.strokeStyle = '#000000';
+    this.context.lineWidth = 1;
+    this.context.stroke();
+
+    this.drawCallCount++;
+  }
+
+  // **PHASE 2 ONLY** - Advanced ball rendering with height effects
+  private renderBallWithHeight(ball: Ball): void {
+    // Render drop shadow for height perception
+    if (ball.height > 0) {
+      this.renderBallShadow(ball);
+    }
+
+    // Scale ball based on height for 3D effect in 2D
+    const heightScaleFactor = 1 + (ball.height * 0.3); // 30% max size increase
+    const ballRadius = 8 * heightScaleFactor;
+
+    // Ball color gets lighter as it goes higher
+    const heightBrightness = Math.min(255, 200 + (ball.height * 55));
+    this.context.fillStyle = `rgb(${heightBrightness}, ${heightBrightness}, ${heightBrightness})`;
+
+    this.context.beginPath();
+    this.context.arc(ball.position.x, ball.position.y, ballRadius, 0, Math.PI * 2);
+    this.context.fill();
+
+    // Ball outline
+    this.context.strokeStyle = '#000000';
+    this.context.lineWidth = 1;
+    this.context.stroke();
+
+    this.drawCallCount++;
+  }
+
+  private renderBallShadow(ball: Ball): void {
+    // Shadow gets larger and more diffuse the higher the ball
+    const shadowRadius = 6 + (ball.height * 4); // Shadow grows with height
+    const shadowOpacity = Math.max(0.1, 0.4 - (ball.height * 0.2)); // Fades with height
+
+    this.context.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`;
+    this.context.beginPath();
+    this.context.arc(ball.position.x, ball.position.y + 2, shadowRadius, 0, Math.PI * 2);
+    this.context.fill();
+
+    this.drawCallCount++;
+  }
+}
+```
+
+### 3.8 Player Abilities System
+
+**POC Constraint**: Basic attribute-driven behaviour with simplified ability execution. Complex skill animations and detailed ability mechanics are deferred to Phase 2.
+
+#### 3.8.1 Core Player Abilities
+
+**Passing Abilities**:
+- **Short Passing**: Building up play through close-range distribution. Requires precision over power, quick decision-making, and accurate placement to feet or into space ahead of teammate
+- **Long Passing**: Switching play across the field or finding teammates in distant positions. Requires power, accuracy, and vision to spot distant targets
+- **Wall Pass (Give-and-Go)**: Breaking through defensive lines using quick combination play. Requires precise timing and immediate movement after passing
+- **Through Pass**: Creating direct goal-scoring opportunities by exploiting defensive gaps. Ball played into space between or behind defenders
+- **Cross-field Pass**: Long-range passes to switch the point of attack, typically used by defenders and central midfielders
+
+**Dribbling Abilities**:
+- **Basic Step-Over**: Throw foot over ball to feint direction, then push ball with outside of other foot
+- **Simple Cut (Inside/Outside)**: Sharp directional change using inside or outside of foot
+- **Body Feint**: Drop shoulder and lean to suggest direction before going opposite way
+- **Nutmeg**: Push ball through opponent's legs and accelerate past them
+- **Cruyff Turn**: Fake pass/shot, drag ball behind standing leg with inside of foot, turn 180°
+- **Stop and Go**: Sudden deceleration followed by explosive acceleration
+
+**Header Abilities**:
+- **Standing Header**: Ground-based execution with minimal vertical movement
+- **Jumping Header**: Most common type requiring elevation and timing
+- **Diving Header**: Dynamic technique requiring full body commitment
+- **Defensive Headers**: Clearing danger from defensive zones
+- **Attacking Headers**: Converting crosses and corner kicks into goals
+- **Flick Headers**: Subtle redirections to teammates
+
+**Tackling Abilities**:
+- **Standing Tackle**: Defender remains on feet throughout challenge
+- **Sliding Tackle**: Sliding along ground with leg extended to dispossess
+- **Block Tackle**: Uses body positioning to obstruct ball movement
+- **Interception**: Reading play to cut out passes before they reach target
+- **Shoulder Charge**: Legal physical challenge using shoulder-to-shoulder contact
+- **Recovery Tackle**: Last-ditch defensive action to prevent goal-scoring opportunities
+
+#### 3.8.2 Player Attribute System
+
+**Note**: Uses canonical PlayerAttributes interface from section 3.2.1 (0.0-10.0 scale as per PRD specification).
+
+class AttributeCalculator {
+  public calculateOverallRating(attributes: PlayerAttributes, playerType: PlayerType): number {
+    const weights = this.getPositionWeights(playerType);
+    let weightedSum = 0;
+    let totalWeight = 0;
+
+    for (const [attribute, value] of Object.entries(attributes)) {
+      const weight = weights[attribute] || 0;
+      weightedSum += value * weight;
+      totalWeight += weight;
+    }
+
+    return totalWeight > 0 ? weightedSum / totalWeight : 0;
+  }
+
+  private getPositionWeights(playerType: PlayerType): Record<string, number> {
+    switch (playerType) {
+      case 'GOALKEEPER':
+        return {
+          handling: 1.0, reflexes: 1.0, aerialReach: 0.8, oneOnOnes: 0.9,
+          distribution: 0.7, positioning: 0.8, concentration: 0.8
+        };
+
+      case 'DEFENDER':
+        return {
+          tackling: 1.0, marking: 1.0, heading: 0.9, interceptions: 0.8,
+          positioning: 0.9, strength: 0.8, pace: 0.7, passing: 0.6
+        };
+
+      case 'MIDFIELDER':
+        return {
+          passing: 1.0, vision: 0.9, ballControl: 0.8, stamina: 0.8,
+          positioning: 0.8, decisions: 0.7, tackling: 0.6, dribbling: 0.6
+        };
+
+      case 'FORWARD':
+        return {
+          finishing: 1.0, shooting: 0.9, pace: 0.8, dribbling: 0.8,
+          ballControl: 0.7, positioning: 0.8, strength: 0.6, crossing: 0.5
+        };
+
+      default:
+        return {};
+    }
+  }
+}
+```
+
+#### 3.8.3 Formation-Based Player Positioning
+```typescript
+// Integration with existing formation system from earlier sections
+class FormationAwarePlayer extends Player {
+  private formationPosition: Vector2;
+  private roleSpecificBehaviour: RoleSpecificBehaviour;
+
+  constructor(basePlayer: Player, formation: FormationData, role: string) {
+    super(basePlayer);
+    this.formationPosition = formation.getPositionForRole(role);
+    this.roleSpecificBehaviour = new RoleSpecificBehaviour(role);
+  }
+
+  public update(gameContext: GameContext, deltaTime: number): void {
+    // Get formation target from Float32Array optimized system
+    const formationTarget = this.getFormationTarget(gameContext);
+
+    // Apply role-specific adjustments
+    const adjustedTarget = this.roleSpecificBehaviour.adjustPosition(
+      formationTarget,
+      gameContext,
+      this.attributes
+    );
+
+    // Update player with enhanced position
+    this.targetPosition = adjustedTarget;
+    super.update(gameContext, deltaTime);
+  }
+
+  private getFormationTarget(gameContext: GameContext): Vector2 {
+    // Use the optimized formation system from section 3.1
+    return this.formationManager.getPlayerPosition(
+      this.role,
+      gameContext.ball.position,
+      gameContext.matchPhase
+    );
+  }
+}
+
+class RoleSpecificBehaviour {
+  constructor(private role: string) {}
+
+  public adjustPosition(
+    basePosition: Vector2,
+    context: GameContext,
+    attributes: PlayerAttributes
+  ): Vector2 {
+    switch (this.role) {
+      case 'CB_LEFT':
+      case 'CB_RIGHT':
+        return this.adjustDefenderPosition(basePosition, context, attributes);
+
+      case 'CDM':
+        return this.adjustDefensiveMidfielderPosition(basePosition, context, attributes);
+
+      case 'ST_LEFT':
+      case 'ST_RIGHT':
+        return this.adjustStrikerPosition(basePosition, context, attributes);
+
+      default:
+        return basePosition;
+    }
+  }
+
+  private adjustDefenderPosition(pos: Vector2, context: GameContext, attr: PlayerAttributes): Vector2 {
+    // Higher positioning attribute = better defensive positioning
+    const positioningBonus = (attr.positioning - 5) * 0.02; // ±10% adjustment
+
+    return {
+      x: pos.x,
+      y: pos.y + (context.ball.position.y - pos.y) * positioningBonus
+    };
+  }
+}
+```
+
+#### 3.2.5 Enhanced Match Engine Core
+```typescript
+class MatchEngine implements Entity  // Core match engine implementation
 {
   private gameState: GameState;
+  private entities: Map<string, Entity>;     // All game entities (players, ball, referee)
   private players: Map<string, Player>;
+  private ball: Ball;
   private referee: Referee;
   private physics: PhysicsEngine;
-  private masterAI: MasterAIController;     // Updated to use new AI system
+  private masterAI: MasterAIController;
+  private stateManager: MatchStateManager;   // Finite State Machine for match phases
   private performanceMonitor: PerformanceMonitor;
+  private eventSystem: EventSystem;          // For decoupled event handling
 
-  public processFrame(deltaTime: number): void;
+  // Core game loop implementation
+  public processFrame(deltaTime: number): void
+  {
+    // 1. Update all entities
+    for (const entity of this.entities.values())
+    {
+      entity.update(deltaTime);
+    }
+
+    // 2. Process physics
+    this.physics.update(deltaTime);
+
+    // 3. Handle AI decisions
+    this.masterAI.processFrame(this.gameState, deltaTime);
+
+    // 4. Update match state
+    this.stateManager.update(this.gameState, deltaTime);
+
+    // 5. Check rules and events
+    this.processMatchEvents();
+
+    // 6. Render (if applicable)
+    this.render();
+  }
+
   public handlePlayerAction(action: GameAction): void;
   public handleTacticalInstruction(instruction: TacticalCommand): void;
   public checkRules(): RuleViolation[];
   public getAIPerformanceMetrics(): AIQualityMetrics;
+
+  // Entity interface implementation
+  public update(deltaTime: number): void;
+  public render(renderer: Renderer): void;
+  public getBounds(): Circle;
+  public dispose(): void;
+}
+
+// Enhanced Entity system implementation
+interface Entity
+{
+  id: string;
+  position: Vector2;
+  bounds: Circle;               // For collision detection
+  active: boolean;              // Whether entity is active in simulation
+
+  update(deltaTime: number): void;
+  render(renderer: Renderer): void;
+  getBounds(): Circle;
+  dispose(): void;
+}
+
+// Match State Management with proper FSM
+enum MatchState
+{
+  INTRODUCTION = 'introduction',       // Pre-match setup
+  PREPARE_FOR_KICKOFF = 'prepare_kickoff',
+  IN_PLAY = 'in_play',
+  THROW_IN = 'throw_in',
+  CORNER_KICK = 'corner_kick',
+  FREE_KICK = 'free_kick',             // **PHASE 2 ONLY**
+  PENALTY = 'penalty',                 // **PHASE 2 ONLY**
+  GOAL_SCORED = 'goal_scored',
+  HALF_TIME = 'half_time',
+  FULL_TIME = 'full_time'
+}
+
+class MatchStateManager
+{
+  private currentState: MatchState;
+  private stateTimer: number;
+  private stateHandlers: Map<MatchState, StateHandler>;
+
+  public update(gameState: GameState, deltaTime: number): void
+  {
+    const handler = this.stateHandlers.get(this.currentState);
+    if (handler)
+    {
+      handler.update(gameState, deltaTime);
+
+      // Check for state transitions
+      const nextState = handler.checkTransitions(gameState);
+      if (nextState && nextState !== this.currentState)
+      {
+        this.transitionToState(nextState, gameState);
+      }
+    }
+  }
+
+  private transitionToState(newState: MatchState, gameState: GameState): void
+  {
+    // Exit current state
+    const currentHandler = this.stateHandlers.get(this.currentState);
+    if (currentHandler)
+    {
+      currentHandler.exit(gameState);
+    }
+
+    // Enter new state
+    const newHandler = this.stateHandlers.get(newState);
+    if (newHandler)
+    {
+      newHandler.enter(gameState);
+    }
+
+    this.currentState = newState;
+    this.stateTimer = 0;
+  }
+}
+
+interface StateHandler
+{
+  enter(gameState: GameState): void;
+  update(gameState: GameState, deltaTime: number): void;
+  exit(gameState: GameState): void;
+  checkTransitions(gameState: GameState): MatchState | null;
 }
 ```
 
-#### 3.2.2 Game State Management
+#### 3.2.2 Enhanced Game State Management
 ```typescript
+// Enhanced match phases with state machine implementation
+enum MatchPhase
+{
+  INTRODUCTION = 'introduction',       // Pre-match team presentation
+  PREPARE_FOR_KICKOFF = 'prepare_kickoff', // Player positioning for kickoff
+  KICKOFF = 'kickoff',                 // Kick-off in progress
+  IN_PLAY = 'in_play',                 // Active gameplay with ball in play
+  OUT_OF_PLAY = 'out_of_play',         // Ball out of bounds
+  THROW_IN = 'throw_in',               // Throw-in restart
+  CORNER_KICK = 'corner_kick',         // Corner kick restart
+  GOAL_KICK = 'goal_kick',             // Goal kick restart (opposing players must exit penalty area)
+  FREE_KICK = 'free_kick',             // **PHASE 2 ONLY** - Free kick restart
+  PENALTY = 'penalty',                 // **PHASE 2 ONLY** - Penalty kick
+  GOAL_SCORED = 'goal_scored',         // Goal celebration and reset
+  HALF_TIME = 'half_time',             // Half-time transition
+  FULL_TIME = 'full_time'              // Match completed
+}
+
 interface GameState
 {
   matchId: string;
   phase: MatchPhase;
+  previousPhase: MatchPhase;           // For returning from stoppages
   time: MatchTime;
   score: Score;
   teams: [Team, Team];
   ball: Ball;
+  referee: Referee;
+  weather: WeatherConditions;
   events: MatchEvent[];
+  statistics: MatchStatistics;
+
+  // Kickoff management
+  kickoffTeam: 'HOME' | 'AWAY';
+  initialKickoffTeam: 'HOME' | 'AWAY';
+  restartPosition: Vector2 | null;     // Position for restarts (throw-ins, etc.)
+  restartTeam: 'HOME' | 'AWAY' | null;
+
+  // Match state timing
+  phaseStartTime: number;              // When current phase started
+  phaseElapsedTime: number;            // Time in current phase
+
+  // Advanced match context
+  possession: 'HOME' | 'AWAY' | null;  // Current team in possession
+  lastTouch: Player | null;            // Last player to touch ball
+  pressureLevel: number;               // 0-1, attacking pressure intensity
+  tempo: number;                       // 0-1, pace of play
 }
 
 interface MatchTime
 {
-  elapsed: number;        // Minutes elapsed (0-90+)
-  period: 1 | 2;         // First or second half
-  stoppage: number;      // Added time
-  realTimeStart: number; // Unix timestamp
+  elapsed: number;                     // Real minutes elapsed (0-90+)
+  footballTime: string;                // Formatted time display ("23:45", "90+2")
+  period: 1 | 2;                      // First or second half
+  stoppage: number;                   // Added time in minutes
+  realTimeStart: number;              // Unix timestamp when match started
+  realTimeElapsed: number;            // Real seconds elapsed (300 = 5 minutes)
+  halfTimeTriggered: boolean;         // Half-time transition completed
+
+  // Enhanced timing inspired by realistic football
+  accelerationFactor: number;         // 18x (5 real minutes = 90 football minutes)
+  lastUpdate: number;                 // Last time update timestamp
+}
+
+### 3.6.5 Goal Kick Implementation (POC)
+
+**FIFA Law 16 Compliance**: Implementation follows FIFA Laws of the Game for goal kick procedures.
+
+#### 3.6.5.1 Goal Kick State Machine
+```typescript
+enum GoalKickPhase {
+  AWAITING_POSITIONING = 'awaiting_positioning',  // Waiting for players to exit penalty area
+  READY_TO_KICK = 'ready_to_kick',               // All players correctly positioned
+  BALL_IN_PLAY = 'ball_in_play'                  // Goal kick taken, ball is active
+}
+
+interface GoalKickState {
+  phase: GoalKickPhase;
+  kickingTeam: 'HOME' | 'AWAY';
+  ballPosition: Vector2;                         // Within goal area (6-yard box)
+  playersExitingPenaltyArea: Player[];           // Opposing players still exiting
+  canTakeKick: boolean;                          // Referee allows kick
+  timeInPhase: number;                           // Seconds in current phase
+}
+
+class GoalKickController {
+  private penaltyAreaBounds: FieldZone;
+  private goalAreaBounds: FieldZone;
+  
+  constructor() {
+    // Define penalty area (18-yard box) and goal area (6-yard box) bounds
+    this.penaltyAreaBounds = this.calculatePenaltyAreaBounds();
+    this.goalAreaBounds = this.calculateGoalAreaBounds();
+  }
+  
+  public initiateGoalKick(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): GoalKickState {
+    const ballPosition = this.placeBallInGoalArea(kickingTeam);
+    const opposingPlayers = this.getOpposingPlayers(gameState, kickingTeam);
+    const playersInPenaltyArea = opposingPlayers.filter(player => 
+      this.isPlayerInPenaltyArea(player.position, kickingTeam)
+    );
+    
+    return {
+      phase: playersInPenaltyArea.length > 0 ? GoalKickPhase.AWAITING_POSITIONING : GoalKickPhase.READY_TO_KICK,
+      kickingTeam,
+      ballPosition,
+      playersExitingPenaltyArea: playersInPenaltyArea,
+      canTakeKick: playersInPenaltyArea.length === 0,
+      timeInPhase: 0
+    };
+  }
+  
+  public updateGoalKickState(goalKickState: GoalKickState, gameState: GameState, deltaTime: number): GoalKickState {
+    goalKickState.timeInPhase += deltaTime;
+    
+    switch (goalKickState.phase) {
+      case GoalKickPhase.AWAITING_POSITIONING:
+        return this.updateAwaitingPositioning(goalKickState, gameState);
+        
+      case GoalKickPhase.READY_TO_KICK:
+        return this.updateReadyToKick(goalKickState, gameState);
+        
+      case GoalKickPhase.BALL_IN_PLAY:
+        // Goal kick completed, transition back to normal play
+        gameState.phase = MatchPhase.IN_PLAY;
+        break;
+    }
+    
+    return goalKickState;
+  }
+  
+  private updateAwaitingPositioning(goalKickState: GoalKickState, gameState: GameState): GoalKickState {
+    const opposingPlayers = this.getOpposingPlayers(gameState, goalKickState.kickingTeam);
+    const playersStillInPenaltyArea = opposingPlayers.filter(player => 
+      this.isPlayerInPenaltyArea(player.position, goalKickState.kickingTeam)
+    );
+    
+    // Check if all players are attempting to leave (moving away from penalty area center)
+    const playersAttemptingToLeave = playersStillInPenaltyArea.filter(player => 
+      this.isPlayerAttemptingToExit(player, goalKickState.kickingTeam)
+    );
+    
+    goalKickState.playersExitingPenaltyArea = playersStillInPenaltyArea;
+    
+    // Allow quick goal kick if players are actively leaving penalty area
+    const allowQuickKick = playersStillInPenaltyArea.length === 0 || 
+                          (playersAttemptingToLeave.length === playersStillInPenaltyArea.length);
+    
+    if (allowQuickKick) {
+      goalKickState.phase = GoalKickPhase.READY_TO_KICK;
+      goalKickState.canTakeKick = true;
+      goalKickState.timeInPhase = 0;
+    }
+    
+    return goalKickState;
+  }
+  
+  private updateReadyToKick(goalKickState: GoalKickState, gameState: GameState): GoalKickState {
+    // AI automatically takes goal kick after brief delay
+    if (goalKickState.timeInPhase > 2.0) { // 2 second delay for realism
+      this.executeGoalKick(goalKickState, gameState);
+      goalKickState.phase = GoalKickPhase.BALL_IN_PLAY;
+    }
+    
+    return goalKickState;
+  }
+  
+  private executeGoalKick(goalKickState: GoalKickState, gameState: GameState): void {
+    const goalkeeper = this.findGoalkeeper(gameState, goalKickState.kickingTeam);
+    
+    if (goalkeeper) {
+      // Move goalkeeper to ball position
+      goalkeeper.position = { ...goalKickState.ballPosition };
+      
+      // Execute kick - ball becomes in play
+      const kickDirection = this.calculateKickDirection(gameState, goalKickState.kickingTeam);
+      const kickPower = 0.8; // Moderate power for POC
+      
+      gameState.ball.position = { ...goalKickState.ballPosition };
+      gameState.ball.velocity = {
+        x: kickDirection.x * kickPower,
+        y: kickDirection.y * kickPower
+      };
+      
+      gameState.ball.isMoving = true;
+      gameState.ball.possessor = null; // Ball is free
+      gameState.lastTouch = goalkeeper;
+    }
+  }
+  
+  private isPlayerInPenaltyArea(playerPosition: Vector2, defendingTeam: 'HOME' | 'AWAY'): boolean {
+    const penaltyArea = this.getPenaltyAreaForTeam(defendingTeam);
+    
+    return playerPosition.x >= penaltyArea.left && 
+           playerPosition.x <= penaltyArea.right && 
+           playerPosition.y >= penaltyArea.top && 
+           playerPosition.y <= penaltyArea.bottom;
+  }
+  
+  private isPlayerAttemptingToExit(player: Player, defendingTeam: 'HOME' | 'AWAY'): boolean {
+    const penaltyAreaCenter = this.getPenaltyAreaCenter(defendingTeam);
+    const distanceToCenterNow = this.calculateDistance(player.position, penaltyAreaCenter);
+    const distanceToCenterTarget = this.calculateDistance(player.targetPosition, penaltyAreaCenter);
+    
+    // Player is attempting to exit if moving away from penalty area center
+    return distanceToCenterTarget > distanceToCenterNow;
+  }
+  
+  private placeBallInGoalArea(kickingTeam: 'HOME' | 'AWAY'): Vector2 {
+    const goalArea = this.getGoalAreaForTeam(kickingTeam);
+    
+    // Place ball in center of goal area for POC simplicity
+    return {
+      x: (goalArea.left + goalArea.right) / 2,
+      y: (goalArea.top + goalArea.bottom) / 2
+    };
+  }
+  
+  private calculateKickDirection(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): Vector2 {
+    // Simple POC implementation - kick toward center field
+    const fieldCenter = { x: POC_CONFIG.FIELD_WIDTH / 2, y: POC_CONFIG.FIELD_HEIGHT / 2 };
+    const ballPos = gameState.ball.position;
+    
+    const direction = {
+      x: fieldCenter.x - ballPos.x,
+      y: fieldCenter.y - ballPos.y
+    };
+    
+    const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+    
+    return {
+      x: direction.x / magnitude,
+      y: direction.y / magnitude
+    };
+  }
 }
 ```
 
+#### 3.6.5.2 AI Behavior During Goal Kicks
+```typescript
+class GoalKickAIBehavior {
+  public updatePlayerDuringGoalKick(player: Player, goalKickState: GoalKickState, gameState: GameState): void {
+    const isKickingTeam = player.team === goalKickState.kickingTeam;
+    
+    if (isKickingTeam) {
+      this.handleKickingTeamPlayer(player, goalKickState, gameState);
+    } else {
+      this.handleOpposingTeamPlayer(player, goalKickState, gameState);
+    }
+  }
+  
+  private handleOpposingTeamPlayer(player: Player, goalKickState: GoalKickState, gameState: GameState): void {
+    const isInPenaltyArea = this.isPlayerInPenaltyArea(player.position, goalKickState.kickingTeam);
+    
+    if (isInPenaltyArea) {
+      // Must attempt to leave penalty area
+      const exitDirection = this.calculateExitDirection(player.position, goalKickState.kickingTeam);
+      player.targetPosition = {
+        x: player.position.x + exitDirection.x * 50, // Move 50 pixels toward exit
+        y: player.position.y + exitDirection.y * 50
+      };
+      
+      player.state = PlayerState.MAINTAINING_POSITION; // Don't interfere with other AI
+    } else {
+      // Position outside penalty area, prepare for when ball comes into play
+      player.targetPosition = this.calculateReadyPosition(player, goalKickState);
+      player.state = PlayerState.MAINTAINING_POSITION;
+    }
+  }
+  
+  private handleKickingTeamPlayer(player: Player, goalKickState: GoalKickState, gameState: GameState): void {
+    if (player.playerType === 'GOALKEEPER') {
+      // Goalkeeper moves to ball to take the kick
+      player.targetPosition = { ...goalKickState.ballPosition };
+    } else {
+      // Other players position for receiving the goal kick
+      player.targetPosition = this.calculateReceivingPosition(player, goalKickState);
+    }
+    
+    player.state = PlayerState.MAINTAINING_POSITION;
+  }
+}
+```
+
+### 3.6.6 Goalkeeper Ball Handling System (POC)
+
+**FIFA Law 12 Compliance**: Goalkeeper can handle ball within penalty area, 6-second rule when ball is in hands.
+
+#### 3.6.6.1 Goalkeeper Ball States
+```typescript
+enum GoalkeeperBallState {
+  NO_POSSESSION = 'no_possession',         // Goalkeeper doesn't have ball
+  AT_FEET = 'at_feet',                    // Ball on ground, can dribble
+  IN_HANDS = 'in_hands',                  // Ball caught/picked up, 6-second rule
+  DISTRIBUTING = 'distributing'           // In process of releasing ball
+}
+
+interface GoalkeeperPossession {
+  state: GoalkeeperBallState;
+  timeInHands: number;                    // Seconds ball has been in hands
+  distributionMethod: 'drop_kick' | 'throw' | 'roll' | 'punt' | null;
+  targetPlayer: Player | null;            // Intended recipient for distribution
+  maxHandsTime: number;                   // 6 seconds (FIFA Law 12)
+}
+
+class GoalkeeperController {
+  private possession: GoalkeeperPossession;
+  private penaltyAreaBounds: FieldZone;
+  
+  constructor() {
+    this.possession = {
+      state: GoalkeeperBallState.NO_POSSESSION,
+      timeInHands: 0,
+      distributionMethod: null,
+      targetPlayer: null,
+      maxHandsTime: 6.0
+    };
+    
+    this.penaltyAreaBounds = this.calculatePenaltyAreaBounds();
+  }
+  
+  public updateGoalkeeperPossession(goalkeeper: Player, gameState: GameState, deltaTime: number): void {
+    if (!this.isGoalkeeperInPenaltyArea(goalkeeper)) {
+      // Outside penalty area - no special handling allowed
+      this.possession.state = GoalkeeperBallState.NO_POSSESSION;
+      return;
+    }
+    
+    switch (this.possession.state) {
+      case GoalkeeperBallState.NO_POSSESSION:
+        this.checkForBallAcquisition(goalkeeper, gameState);
+        break;
+        
+      case GoalkeeperBallState.AT_FEET:
+        this.updateAtFeetState(goalkeeper, gameState, deltaTime);
+        break;
+        
+      case GoalkeeperBallState.IN_HANDS:
+        this.updateInHandsState(goalkeeper, gameState, deltaTime);
+        break;
+        
+      case GoalkeeperBallState.DISTRIBUTING:
+        this.updateDistributingState(goalkeeper, gameState, deltaTime);
+        break;
+    }
+  }
+  
+  private updateInHandsState(goalkeeper: Player, gameState: GameState, deltaTime: number): void {
+    this.possession.timeInHands += deltaTime;
+    
+    // Trigger opposing team retreat when goalkeeper has ball in hands
+    this.triggerOpposingTeamRetreat(gameState, goalkeeper.team);
+    
+    // Must distribute within 6 seconds (FIFA Law 12)
+    if (this.possession.timeInHands >= this.possession.maxHandsTime) {
+      this.forcedDistribution(goalkeeper, gameState);
+      return;
+    }
+    
+    // AI decision: choose distribution method
+    if (this.possession.timeInHands > 2.0) { // Hold for 2 seconds to assess options
+      const distributionDecision = this.chooseDistributionMethod(goalkeeper, gameState);
+      this.executeDistribution(goalkeeper, gameState, distributionDecision);
+    }
+  }
+  
+  private chooseDistributionMethod(goalkeeper: Player, gameState: GameState): DistributionDecision {
+    const teammates = this.getTeammates(goalkeeper, gameState);
+    const opposingPlayers = this.getOpposingPlayers(goalkeeper, gameState);
+    
+    // Assess tactical situation
+    const nearbyTeammates = teammates.filter(player => 
+      this.calculateDistance(goalkeeper.position, player.position) < 200
+    );
+    
+    const opposingPressure = opposingPlayers.filter(player =>
+      this.calculateDistance(goalkeeper.position, player.position) < 300
+    ).length;
+    
+    if (opposingPressure > 2 || nearbyTeammates.length === 0) {
+      // High pressure or no nearby options - go long
+      return {
+        method: 'drop_kick',
+        target: this.findLongDistributionTarget(teammates),
+        power: 0.9, // High power for distance
+        reason: 'escape_pressure'
+      };
+    } else {
+      // Safe to distribute short
+      return {
+        method: Math.random() > 0.5 ? 'throw' : 'roll',
+        target: this.findShortDistributionTarget(nearbyTeammates),
+        power: 0.4, // Moderate power for accuracy
+        reason: 'maintain_possession'
+      };
+    }
+  }
+  
+  private executeDistribution(goalkeeper: Player, gameState: GameState, decision: DistributionDecision): void {
+    this.possession.state = GoalkeeperBallState.DISTRIBUTING;
+    this.possession.distributionMethod = decision.method;
+    this.possession.targetPlayer = decision.target;
+    
+    const direction = this.calculateDistributionDirection(goalkeeper.position, decision.target.position);
+    
+    switch (decision.method) {
+      case 'drop_kick':
+        this.executeDropKick(gameState, direction, decision.power);
+        break;
+        
+      case 'throw':
+        this.executeThrow(gameState, direction, decision.power);
+        break;
+        
+      case 'roll':
+        this.executeRoll(gameState, direction, decision.power);
+        break;
+        
+      case 'punt':
+        this.executePunt(gameState, direction, decision.power);
+        break;
+    }
+  }
+  
+  private executeDropKick(gameState: GameState, direction: Vector2, power: number): void {
+    // Drop kick: ball is dropped and kicked for long distribution
+    const velocity = {
+      x: direction.x * power * 800, // High speed for distance
+      y: direction.y * power * 800
+    };
+    
+    gameState.ball.velocity = velocity;
+    gameState.ball.isMoving = true;
+    gameState.ball.possessor = null;
+    
+    // Reset goalkeeper possession
+    this.resetPossession();
+  }
+  
+  private executeThrow(gameState: GameState, direction: Vector2, power: number): void {
+    // Hand throw: accurate short distribution
+    const velocity = {
+      x: direction.x * power * 400, // Moderate speed for accuracy
+      y: direction.y * power * 400
+    };
+    
+    gameState.ball.velocity = velocity;
+    gameState.ball.isMoving = true;
+    gameState.ball.possessor = null;
+    
+    this.resetPossession();
+  }
+  
+  private executeRoll(gameState: GameState, direction: Vector2, power: number): void {
+    // Ground roll: very short, accurate distribution
+    const velocity = {
+      x: direction.x * power * 200, // Low speed, stays on ground
+      y: direction.y * power * 200
+    };
+    
+    gameState.ball.velocity = velocity;
+    gameState.ball.isMoving = true;
+    gameState.ball.possessor = null;
+    
+    this.resetPossession();
+  }
+  
+  private triggerOpposingTeamRetreat(gameState: GameState, goalkeepingTeam: 'HOME' | 'AWAY'): void {
+    const opposingTeam = goalkeepingTeam === 'HOME' ? 'AWAY' : 'HOME';
+    const opposingPlayers = gameState.teams.find(team => team.name === opposingTeam)?.players || [];
+    
+    // Opposing players retreat toward own half to defend counter-attack
+    opposingPlayers.forEach(player => {
+      if (player.playerType !== 'GOALKEEPER') {
+        const ownHalfX = opposingTeam === 'HOME' ? 
+          POC_CONFIG.FIELD_WIDTH * 0.25 : 
+          POC_CONFIG.FIELD_WIDTH * 0.75;
+        
+        // Move toward own half, maintaining some width
+        player.targetPosition = {
+          x: ownHalfX,
+          y: player.basePosition.y + (Math.random() - 0.5) * 100
+        };
+        
+        player.state = PlayerState.DEFENDING; // Switch to defensive mindset
+      }
+    });
+  }
+  
+  private resetPossession(): void {
+    this.possession = {
+      state: GoalkeeperBallState.NO_POSSESSION,
+      timeInHands: 0,
+      distributionMethod: null,
+      targetPlayer: null,
+      maxHandsTime: 6.0
+    };
+  }
+}
+
+interface DistributionDecision {
+  method: 'drop_kick' | 'throw' | 'roll' | 'punt';
+  target: Player;
+  power: number; // 0.0-1.0
+  reason: 'escape_pressure' | 'maintain_possession' | 'counter_attack';
+}
+```
+
+#### 3.6.6.2 Enhanced Ball Class for Goalkeeper Handling
+```typescript
+// Extension to existing Ball class
+interface Ball {
+  // ... existing properties
+  inGoalkeeperHands: boolean;              // Ball is held by goalkeeper
+  goalkeeperPossessor: Player | null;      // Which goalkeeper has it
+  timeInHands: number;                     // Seconds in goalkeeper's hands
+  
+  // New methods for goalkeeper handling
+  pickUpByGoalkeeper(goalkeeper: Player): void;
+  dropFromHands(): void;
+  isWithinGoalkeeperReach(goalkeeper: Player): boolean;
+}
+
+class EnhancedBall extends Ball {
+  public pickUpByGoalkeeper(goalkeeper: Player): void {
+    if (this.isWithinGoalkeeperReach(goalkeeper)) {
+      this.inGoalkeeperHands = true;
+      this.goalkeeperPossessor = goalkeeper;
+      this.possessor = goalkeeper.id;
+      this.velocity = { x: 0, y: 0 };
+      this.isMoving = false;
+      this.timeInHands = 0;
+    }
+  }
+  
+  public dropFromHands(): void {
+    this.inGoalkeeperHands = false;
+    this.goalkeeperPossessor = null;
+    this.timeInHands = 0;
+    // Ball remains at goalkeeper's feet until kicked
+  }
+  
+  public isWithinGoalkeeperReach(goalkeeper: Player): boolean {
+    const distance = this.calculateDistance(this.position, goalkeeper.position);
+    return distance < 15; // 15 pixels reach for POC
+  }
+}
+```
+
+#### 3.6.6.3 Tactical AI Response to Goalkeeper Possession
+```typescript
+class TacticalAIResponse {
+  public respondToGoalkeeperPossession(gameState: GameState, goalkeepingTeam: 'HOME' | 'AWAY'): void {
+    const opposingTeam = goalkeepingTeam === 'HOME' ? 'AWAY' : 'HOME';
+    const opposingPlayers = this.getTeamPlayers(gameState, opposingTeam);
+    
+    // Immediate tactical response: retreat and prepare for counter-attack defense
+    opposingPlayers.forEach(player => {
+      if (player.playerType !== 'GOALKEEPER') {
+        this.setRetreatBehavior(player, opposingTeam);
+      }
+    });
+    
+    // Adjust formation to defensive shape
+    this.adjustFormationForDefense(gameState, opposingTeam);
+  }
+  
+  private setRetreatBehavior(player: Player, team: 'HOME' | 'AWAY'): void {
+    const ownHalfCenterX = team === 'HOME' ? 
+      POC_CONFIG.FIELD_WIDTH * 0.25 : 
+      POC_CONFIG.FIELD_WIDTH * 0.75;
+    
+    // Players retreat but maintain some attacking potential
+    const retreatIntensity = player.attributes?.positioning || 0.5; // Use positioning attribute
+    
+    player.targetPosition = {
+      x: player.basePosition.x + (ownHalfCenterX - player.basePosition.x) * retreatIntensity * 0.6,
+      y: player.basePosition.y
+    };
+    
+    player.state = PlayerState.DEFENDING;
+  }
+}
+```
+
+#### 3.6.6.4 FIFA Law 12 Enhanced Goalkeeper System
+
+```typescript
+class FIFALaw12GoalkeeperController extends GoalkeeperController {
+  private passBackViolations: PassBackViolation[] = [];
+  private sweepingBehaviour: SweeperKeeperBehaviour;
+  
+  constructor() {
+    super();
+    this.sweepingBehaviour = new SweeperKeeperBehaviour();
+  }
+  
+  public checkPassBackRule(ball: Ball, lastTouchPlayer: Player, goalkeeper: Player): boolean {
+    // FIFA Law 12: Goalkeeper cannot handle ball deliberately passed by teammate's foot
+    if (!lastTouchPlayer || lastTouchPlayer.team !== goalkeeper.team) {
+      return true; // Legal - not from teammate
+    }
+    
+    if (!this.wasDeliberateFootPass(lastTouchPlayer, ball)) {
+      return true; // Legal - deflection, header, or chest pass
+    }
+    
+    // Violation detected
+    this.recordPassBackViolation(goalkeeper, lastTouchPlayer);
+    return false;
+  }
+  
+  public canOutfieldPlayerChallenge(goalkeeper: Player, challengingPlayer: Player, ball: Ball): boolean {
+    // FIFA Law 12: Outfield players cannot tackle/dispossess goalkeeper when ball is in hands
+    if (challengingPlayer.playerType === 'GOALKEEPER') {
+      return true; // Goalkeeper vs goalkeeper is allowed
+    }
+    
+    if (ball.inGoalkeeperHands && ball.goalkeeperPossessor === goalkeeper.id) {
+      return false; // Cannot challenge when ball is in keeper's hands
+    }
+    
+    // Can challenge when ball is at goalkeeper's feet
+    const distanceToKeeper = this.calculateDistance(ball.position, goalkeeper.position);
+    const ballAtFeet = distanceToKeeper < 15 && !ball.inGoalkeeperHands;
+    
+    return ballAtFeet;
+  }
+  
+  private wasDeliberateFootPass(player: Player, ball: Ball): boolean {
+    // Simple POC logic: check if player was in passing state and used foot
+    const wasInPassingAction = player.state === PlayerState.ATTACKING || 
+                              player.state === PlayerState.MAINTAINING_POSITION;
+    const ballSpeed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2);
+    
+    // Deliberate passes typically have controlled speed
+    return wasInPassingAction && ballSpeed > 50 && ballSpeed < 200;
+  }
+  
+  private recordPassBackViolation(goalkeeper: Player, passer: Player): void {
+    const violation: PassBackViolation = {
+      timestamp: Date.now(),
+      goalkeeper: goalkeeper.id,
+      passer: passer.id,
+      penaltyAwarded: 'indirect_free_kick'
+    };
+    
+    this.passBackViolations.push(violation);
+    // Award indirect free kick to opposing team at the spot of the handling
+  }
+  
+  // Enhanced 6-second rule with progressive urgency
+  private enforceEnhanced6SecondRule(goalkeeper: Player, gameState: GameState, deltaTime: number): void {
+    if (this.possession.state !== GoalkeeperBallState.IN_HANDS) return;
+    
+    this.possession.timeInHands += deltaTime;
+    
+    // Progressive urgency system
+    if (this.possession.timeInHands > 4.0) {
+      // Warning phase - goalkeeper becomes more urgent
+      this.increaseDistributionUrgency(goalkeeper);
+    }
+    
+    if (this.possession.timeInHands > 5.5) {
+      // Critical phase - must distribute immediately
+      this.forcedUrgentDistribution(goalkeeper, gameState);
+    }
+    
+    if (this.possession.timeInHands >= 6.0) {
+      // Violation - indirect free kick
+      this.awardIndirectFreeKick(gameState, goalkeeper);
+    }
+  }
+  
+  private increaseDistributionUrgency(goalkeeper: Player): void {
+    // Reduce decision time and prefer quicker distribution methods
+    goalkeeper.speed *= 1.2; // Slight speed increase to show urgency
+  }
+}
+
+// Sweeper-keeper behaviour for modern goalkeeper role
+class SweeperKeeperBehaviour {
+  private rushOutThreshold: number = 300; // Distance threshold for rushing out
+  private maxRushDistance: number = 200;  // Maximum distance from goal
+  
+  public shouldRushOut(goalkeeper: Player, gameState: GameState): boolean {
+    const ball = gameState.ball;
+    const opponentWithBall = this.getOpponentBallCarrier(gameState, goalkeeper.team);
+    
+    if (!opponentWithBall) return false;
+    
+    // Calculate threat level
+    const distanceToGoal = this.calculateDistance(
+      opponentWithBall.position, 
+      this.getGoalPosition(goalkeeper.team)
+    );
+    
+    const opponentSpeed = this.calculatePlayerSpeed(opponentWithBall);
+    const timeToGoal = distanceToGoal / Math.max(opponentSpeed, 1);
+    
+    // Rush out criteria
+    const isInRushZone = distanceToGoal < this.rushOutThreshold;
+    const canReachFirst = this.canGoalkeeperReachFirst(goalkeeper, opponentWithBall, ball);
+    const lowRisk = timeToGoal > 1.5; // Enough time to reach and clear
+    
+    return isInRushZone && canReachFirst && lowRisk;
+  }
+  
+  public executeSweepingAction(goalkeeper: Player, gameState: GameState): void {
+    const ball = gameState.ball;
+    const interceptPoint = this.calculateOptimalInterceptPoint(goalkeeper, ball);
+    
+    // Move outside penalty area if necessary for sweep
+    const clampedInterceptPoint = this.clampToSafeRushDistance(
+      goalkeeper, 
+      interceptPoint, 
+      this.maxRushDistance
+    );
+    
+    goalkeeper.targetPosition = clampedInterceptPoint;
+    goalkeeper.state = PlayerState.SWEEPING;
+    goalkeeper.speed *= 1.4; // Increased speed for sweeping action
+  }
+  
+  private calculateOptimalInterceptPoint(goalkeeper: Player, ball: Ball): Vector2 {
+    // Predict ball trajectory and find optimal intercept point
+    const ballVelocity = ball.velocity;
+    const ballPosition = ball.position;
+    
+    // Simple linear prediction (POC level)
+    const timeSteps = 10;
+    let bestInterceptPoint = ballPosition;
+    let minTimeToIntercept = Infinity;
+    
+    for (let t = 1; t <= timeSteps; t++) {
+      const futureTime = t * 0.1; // 0.1 second steps
+      const futureBallPos = {
+        x: ballPosition.x + ballVelocity.x * futureTime,
+        y: ballPosition.y + ballVelocity.y * futureTime
+      };
+      
+      const keeperTravelTime = this.calculateDistance(goalkeeper.position, futureBallPos) / 
+                              (goalkeeper.speed || 100);
+      
+      if (keeperTravelTime < futureTime && futureTime < minTimeToIntercept) {
+        minTimeToIntercept = futureTime;
+        bestInterceptPoint = futureBallPos;
+      }
+    }
+    
+    return bestInterceptPoint;
+  }
+}
+
+// Enhanced goalkeeper communication and defensive organisation
+class GoalkeeperLeadershipController {
+  public organiseDefensiveLine(goalkeeper: Player, gameState: GameState): void {
+    const teammates = this.getTeamPlayers(gameState, goalkeeper.team)
+      .filter(p => p.playerType === 'OUTFIELD');
+    
+    const ballPosition = gameState.ball.position;
+    const threatLevel = this.assessThreatLevel(gameState, goalkeeper.team);
+    
+    // Adjust defensive line based on ball position and threat
+    const optimalDefenseLineX = this.calculateOptimalDefenseLinePosition(
+      goalkeeper, 
+      ballPosition, 
+      threatLevel
+    );
+    
+    teammates.forEach(player => {
+      if (this.isDefensivePlayer(player)) {
+        this.adjustPlayerToDefensiveLine(player, optimalDefenseLineX);
+      }
+    });
+  }
+  
+  private calculateOptimalDefenseLinePosition(
+    goalkeeper: Player, 
+    ballPosition: Vector2, 
+    threatLevel: number
+  ): number {
+    const goalX = this.getGoalPosition(goalkeeper.team).x;
+    const baseLine = goalX + (goalkeeper.team === 'HOME' ? 100 : -100);
+    
+    // Adjust line based on ball position and threat
+    const ballAdjustment = (ballPosition.x - goalX) * 0.3 * threatLevel;
+    
+    return baseLine + ballAdjustment;
+  }
+  
+  public coordinateSetPieceDefense(goalkeeper: Player, gameState: GameState): void {
+    // Command defensive positioning for set pieces
+    if (gameState.phase === 'CORNER_KICK' || gameState.phase === 'GOAL_KICK') {
+      this.setCornerDefensePositions(goalkeeper, gameState);
+    }
+  }
+}
+
+interface PassBackViolation {
+  timestamp: number;
+  goalkeeper: string;
+  passer: string;
+  penaltyAwarded: 'indirect_free_kick';
+}
+
+// Goalkeeper protection and collision rules
+class GoalkeeperPhysicalProtection {
+  public canPlayerApproachGoalkeeper(
+    player: Player, 
+    goalkeeper: Player, 
+    ball: Ball, 
+    gameState: GameState
+  ): boolean {
+    // Players can always approach, but cannot make physical challenges when ball is in hands
+    return true;
+  }
+  
+  public canPlayerMakePhysicalChallenge(
+    challengingPlayer: Player, 
+    goalkeeper: Player, 
+    ball: Ball
+  ): boolean {
+    // FIFA Law 12: Cannot tackle/dispossess when ball is in goalkeeper's hands
+    if (ball.inGoalkeeperHands && ball.goalkeeperPossessor === goalkeeper.id) {
+      return false;
+    }
+    
+    // Can challenge when ball is at goalkeeper's feet (within reach distance)
+    const distanceToKeeper = this.calculateDistance(ball.position, goalkeeper.position);
+    const ballAtFeet = distanceToKeeper < 15; // POC: 15 pixel reach distance
+    
+    return ballAtFeet && !ball.inGoalkeeperHands;
+  }
+  
+  public handleIllegalGoalkeeperChallenge(
+    challengingPlayer: Player,
+    goalkeeper: Player, 
+    gameState: GameState
+  ): void {
+    // Award indirect free kick for challenging goalkeeper with ball in hands
+    // This would be a development-time safety check
+    console.warn(`Illegal challenge: ${challengingPlayer.id} attempted to tackle goalkeeper with ball in hands`);
+    
+    // In full implementation, this would award an indirect free kick
+    // For POC, we just prevent the action from occurring
+  }
+  
+  private calculateDistance(pos1: Vector2, pos2: Vector2): number {
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+}
+```
+
+interface WeatherConditions
+{
+  type: 'clear' | 'overcast' | 'light_rain' | 'heavy_rain' | 'snow';
+  visibility: number;                 // 0-1, affects player vision
+  windSpeed: number;                  // 0-10, affects ball physics
+  windDirection: number;              // 0-360 degrees
+  temperature: number;                // Celsius, affects player stamina
+  pitchCondition: number;             // 0-1, pitch quality (dry to waterlogged)
+}
+
+interface MatchStatistics
+{
+  possession: [number, number];        // Possession percentage [home, away]
+  shots: [number, number];
+  shotsOnTarget: [number, number];
+  corners: [number, number];
+  fouls: [number, number];             // **PHASE 2 ONLY**
+  cards: [CardEvent[], CardEvent[]];   // **PHASE 2 ONLY**
+  passes: [number, number];            // **PHASE 2 ONLY** - Total passes attempted
+  passAccuracy: [number, number];     // **PHASE 2 ONLY** - Pass completion percentage
+  tackles: [number, number];          // **PHASE 2 ONLY** - Successful tackles
+  interceptions: [number, number];    // Ball interceptions
+  offside: [number, number];          // **PHASE 2 ONLY** - Offside calls
+
+  // **PHASE 2 ONLY** - Advanced statistics
+  heatmaps: PlayerHeatmap[];          // **PHASE 2 ONLY** - Player position data
+  touchMap: BallTouchData[];          // **PHASE 2 ONLY** - Ball touch locations
+  pressureMap: PressureData[];        // **PHASE 2 ONLY** - Defensive pressure zones
+}
+```
+
+#### 3.2.3 Half-Time System Implementation
+
+The half-time system manages the transition between the first and second halves, ensuring proper team positioning and kick-off team alternation.
+
+```typescript
+interface HalfTimeManager
+{
+  detectHalfTimeReached(matchTime: MatchTime): boolean;
+  resetPlayersToFormation(teams: [Team, Team]): void;
+  switchKickoffTeam(currentKickoff: 'HOME' | 'AWAY', initialKickoff: 'HOME' | 'AWAY'): 'HOME' | 'AWAY';
+  transitionToSecondHalf(gameState: GameState): GameState;
+}
+
+class HalfTimeManager implements HalfTimeManager
+{
+  public detectHalfTimeReached(matchTime: MatchTime): boolean
+  {
+    const halfDuration = MATCH_DURATION / 2;
+    return matchTime.elapsed >= halfDuration &&
+           !matchTime.halfTimeTriggered &&
+           matchTime.period === 2;
+  }
+
+  public resetPlayersToFormation(teams: [Team, Team]): void
+  {
+    teams.forEach(team => {
+      team.players.forEach(player => {
+        // Reset to formation positions within own half
+        player.position = { ...player.basePosition };
+        player.targetPosition = { ...player.basePosition };
+        player.state = PlayerState.WAITING_KICKOFF;
+        player.hasBall = false;
+      });
+    });
+  }
+
+  public switchKickoffTeam(currentKickoff: 'HOME' | 'AWAY', initialKickoff: 'HOME' | 'AWAY'): 'HOME' | 'AWAY'
+  {
+    // Team that didn't kick off first half kicks off second half
+    return initialKickoff === 'HOME' ? 'AWAY' : 'HOME';
+  }
+
+  public transitionToSecondHalf(gameState: GameState): GameState
+  {
+    return {
+      ...gameState,
+      phase: MatchPhase.KICKOFF,
+      kickoffTeam: this.switchKickoffTeam(gameState.kickoffTeam, gameState.initialKickoffTeam),
+      time: {
+        ...gameState.time,
+        halfTimeTriggered: true
+      }
+    };
+  }
+}
+```
+
+**Half-Time Transition Flow**:
+1. **Detection**: Monitor elapsed time for half-time trigger (2.5 minutes)
+2. **Formation Reset**: All players return to base formation positions in own half
+3. **Ball Reset**: Ball returns to center circle, clears all possession
+4. **Team Switch**: Alternate kick-off team (opposite of first half)
+5. **Phase Transition**: PLAY → HALF_TIME → KICKOFF → PLAY
+6. **Event Cleanup**: Clear all scheduled AI events and actions
+
 ### 3.3 Advanced AI System Architecture
+
+#### 3.3.1 Multi-Layer AI Decision Framework
+Advanced AI system with sophisticated team controller and entity management:
+
+```typescript
+// Enhanced AI architecture with proper separation of concerns
+interface AIController
+{
+  teamId: string;
+  difficulty: AIDifficulty;
+  tacticalMemory: TacticalMemory;
+  currentStrategy: TeamStrategy;
+
+  // Core decision-making implementation
+  calculateTacticalSituation(gameState: GameState): TacticalSituation;
+  assignPlayerRoles(players: Player[], opponents: Player[]): RoleAssignment[];
+  updateFormationDynamics(ballPosition: Vector2, possession: TeamPossession): FormationUpdate;
+
+  // Greedy algorithm for efficient player assignment
+  optimizePlayerPositioning(availablePositions: Vector2[], players: Player[]): PositionAssignment[];
+}
+
+// Advanced tactical situation calculation
+interface TacticalSituation
+{
+  // Positional metrics
+  depth: number;              // How deep the team is positioned (0-1)
+  width: number;              // How wide the formation is spread (0-1)
+  focus: number;              // Concentration around ball area (0-1)
+
+  // Dynamic tactical factors implementation
+  offensiveBias: number;      // -1 (fully defensive) to 1 (fully attacking)
+  pressureLevel: number;      // Intensity of defensive pressure (0-1)
+  spaceControl: number;       // Area of pitch controlled (0-1)
+
+  // Context-aware adjustments
+  scoreInfluence: number;     // Tactical adjustment based on scoreline
+  timeInfluence: number;      // Urgency based on match time
+  fatigueInfluence: number;   // Player stamina impact on tactics
+}
+
+// Enhanced player state management implementation
+interface PlayerAIState
+{
+  // Possession states
+  hasPossession: boolean;
+  hasBestPossession: boolean;     // Closest to ball on team
+  hasUniquePossession: boolean;   // Only player who can reach ball
+
+  // Predictive calculations
+  timeNeededToGetToBall: number;  // Milliseconds to reach ball
+  ballAcquisitionProbability: number; // 0-1 chance of getting ball
+
+  // Tactical context
+  currentRole: DynamicRole;
+  assignedOpponent: Player | null; // Man-marking assignment
+  markingQuality: number;         // 0-1 effectiveness of marking
+
+  // Performance metrics
+  fatigueLevel: number;           // 0-1 current fatigue
+  performanceMultiplier: number;  // Context-based performance boost/penalty
+  averageVelocity: Vector2;       // Recent movement pattern
+  positionHistory: Vector2[];     // Last N positions for analysis
+}
 
 #### 3.3.1 Hierarchical AI Decision Framework
 ```typescript
@@ -153,27 +2418,27 @@ interface AIDecision
   riskAssessment: RiskProfile;
 }
 
-// Master AI Controller orchestrating all AI systems
-class MasterAIController
+// Unified AI System Implementation (consolidating MasterAIController functionality)
+class TeamAIController implements AIController
 {
   private spatialAnalysis: VoronoiPositioning;
   private ballProgression: BallProgressionEngine;
-  private tacticalInterpreter: TacticalInstructionSystem;
-  private opponentAI: OpponentAI;
-  
-  public processFrame(gameState: GameState): void;
-  public handleTacticalInstruction(instruction: TacticalCommand): void;
-  public updateFormationPositioning(formation: Formation): void;
-}
+  private tacticalEngine: TacticalEngine;
+  private greedyAssignment: GreedyAssignmentEngine;
 
-// AI Opponent System (Single-Player Mode)
-class OpponentAI
-{
-  private difficulty: AIDifficulty;
-  private tacticalStyle: TacticalStyle;
-  private reactionTime: number;
-  private adaptiveMemory: TacticalMemory;
-  
+  public teamId: string;
+  public difficulty: AIDifficulty;
+  public tacticalMemory: TacticalMemory;
+  public currentStrategy: TeamStrategy;
+
+  // Core AI processing
+  public processFrame(gameState: GameState): void;
+  public calculateTacticalSituation(gameState: GameState): TacticalSituation;
+  public assignPlayerRoles(players: Player[], opponents: Player[]): RoleAssignment[];
+  public updateFormationDynamics(ballPosition: Vector2, possession: TeamPossession): FormationUpdate;
+  public optimizePlayerPositioning(availablePositions: Vector2[], players: Player[]): PositionAssignment[];
+
+  // Single-player opponent behavior
   public makeTeamDecision(gameState: GameState): TacticalCommand;
   public respondToPlayerAction(playerCommand: VoiceCommand): void;
   public updateTacticalApproach(matchSituation: MatchSituation): void;
@@ -185,7 +2450,7 @@ enum AIDifficulty
   BEGINNER = 'beginner',        // Slower reactions, basic tactics, makes mistakes
   AMATEUR = 'amateur',          // Standard AI behaviour with minor errors
   PROFESSIONAL = 'professional', // Quick reactions, advanced tactics, rare mistakes
-  EXPERT = 'expert'             // Near-perfect reactions, complex strategies
+  WORLD_CLASS = 'world_class'   // Near-perfect reactions, complex strategies
 }
 ```
 
@@ -195,7 +2460,7 @@ class VoronoiPositioning
 {
   private pitchGrid: PitchControlGrid;    // 100x68 cell grid
   private playerInfluenceZones: Map<string, VoronoiCell>;
-  
+
   public calculatePitchControl(players: Player[], ball: Ball): PitchControlMap;
   public optimizePlayerPositioning(formation: Formation, gameState: GameState): PositionAdjustments;
   public evaluateSpacialAdvantage(team: Team, opponents: Team): SpacialMetrics;
@@ -234,7 +2499,7 @@ class SpatialCalculator
 {
   // Fortune's Algorithm implementation for real-time Voronoi diagrams
   public static calculateVoronoiDiagram(players: Player[]): VoronoiCell[];
-  
+
   // Weighted influence calculation
   public static calculatePlayerInfluence(player: Player, position: Vector2): number
   {
@@ -242,13 +2507,13 @@ class SpatialCalculator
     const arrivalTime = distance / player.currentSpeed;
     const attributeModifier = this.getAttributeInfluence(player);
     const roleModifier = this.getRoleInfluence(player, position);
-    
+
     return Math.exp(-arrivalTime * attributeModifier * roleModifier);
   }
-  
+
   // Pitch control probability at any location - optimised version
   public static calculateControlProbability(
-    location: Vector2, 
+    location: Vector2,
     teamAPlayers: Player[],    // Pre-filtered teams for performance
     teamBPlayers: Player[]
   ): ControlProbability
@@ -256,13 +2521,13 @@ class SpatialCalculator
     const teamAInfluence = this.calculateTeamInfluence(teamAPlayers, location);
     const teamBInfluence = this.calculateTeamInfluence(teamBPlayers, location);
     const totalInfluence = teamAInfluence + teamBInfluence;
-    
+
     // Avoid division by zero
-    if (totalInfluence === 0) 
+    if (totalInfluence === 0)
     {
       return { teamA: 0.5, teamB: 0.5, contested: true };
     }
-    
+
     return {
       teamA: teamAInfluence / totalInfluence,
       teamB: teamBInfluence / totalInfluence,
@@ -279,11 +2544,11 @@ class BallProgressionEngine
   private progressionPhases: Map<MatchPhase, ProgressionStrategy>;
   private riskAssessment: RiskEvaluator;
   private patternRecognition: PatternAnalyser;
-  
+
   public evaluateBallProgression(gameState: GameState): ProgressionDecision[];
   public selectOptimalPass(ballCarrier: Player, teammates: Player[], opponents: Player[]): PassDecision;
   public assessCounterAttackOpportunity(transitionState: TransitionState): CounterAttackPlan;
-  public calculateExpectedPossessionValue(currentPosition: Vector2): EPVCalculation;
+  public calculateExpectedPossessionValue(currentPosition: Vector2): EPVCalculation; // **PHASE 2 ONLY**
 }
 
 // Three phases of ball progression
@@ -309,7 +2574,7 @@ class PassDecisionTree
   public evaluatePassOptions(ballCarrier: Player, gameState: GameState): PassOption[]
   {
     const options: PassOption[] = [];
-    
+
     // Evaluate each potential pass recipient
     for (const teammate of this.getAvailableTeammates(ballCarrier, gameState))
     {
@@ -319,18 +2584,18 @@ class PassDecisionTree
         options.push(passOption);
       }
     }
-    
+
     // Sort by expected value (risk-adjusted reward)
     return options.sort((a, b) => b.expectedValue - a.expectedValue);
   }
-  
+
   private analysePass(passer: Player, receiver: Player, gameState: GameState): PassOption
   {
     const distance = Vector2.distance(passer.position, receiver.position);
     const defensivePressure = this.calculatePressure(receiver.position, gameState.opponents);
     const progressiveValue = this.calculateProgressiveValue(passer.position, receiver.position);
     const completionProbability = this.calculateCompletionProbability(passer, receiver, gameState);
-    
+
     return {
       receiverId: receiver.id,
       distance,
@@ -343,30 +2608,286 @@ class PassDecisionTree
   }
 }
 
-// Expected Possession Value (EPV) calculation
+// **PHASE 2 ONLY** - Expected Possession Value (EPV) calculation
 interface EPVCalculation
 {
-  currentEPV: number;           // -1 to 1, probability of next goal
-  progressionBenefit: number;   // EPV gain from advancing ball
-  riskPenalty: number;          // EPV loss potential from turnover
-  optimalAction: 'pass' | 'dribble' | 'shoot' | 'hold';
-  confidenceLevel: number;      // 0-1, certainty in calculation
+  currentEPV: number;           // -1 to 1, probability of next goal - **PHASE 2 ONLY**
+  progressionBenefit: number;   // EPV gain from advancing ball - **PHASE 2 ONLY**
+  riskPenalty: number;          // EPV loss potential from turnover - **PHASE 2 ONLY**
+  optimalAction: 'pass' | 'dribble' | 'shoot' | 'hold'; // **PHASE 2 ONLY**
+  confidenceLevel: number;      // 0-1, certainty in calculation - **PHASE 2 ONLY**
 }
 ```
 
-#### 3.3.4 Tactical Instruction Interpretation System
+#### 3.3.4 Advanced Tactical Engine
 ```typescript
-class TacticalInstructionSystem
+class TacticalEngine
 {
   private currentMentality: TacticalMentality;
-  private dutyDistribution: DutyDistribution;
-  private instructionTemplates: Map<TacticalCommand, InstructionTemplate>;
-  
-  public processTacticalCommand(command: TacticalCommand): TeamAdjustments;
-  public updatePlayerDuties(mentality: TacticalMentality): PlayerDutyMap;
-  public calculateFormationShift(instruction: TacticalCommand): FormationAdjustment;
-  public applyRealTimeAdjustments(players: Player[], instruction: TacticalCommand): void;
+  private formationManager: DynamicFormationManager;
+  private roleAssignmentEngine: HungarianAlgorithm;  // Optimal role assignment
+  private tacticalMemory: TacticalMemory;
+
+  // Core tactical processing implementation
+  public calculateTeamPositioning(gameState: GameState): TeamPositioning
+  {
+    const ballPosition = gameState.ball.position;
+    const possession = this.determinePossession(gameState);
+
+    // Calculate tactical factors
+    const depth = this.calculateFormationDepth(gameState.teams[0].players, ballPosition);
+    const width = this.calculateFormationWidth(gameState.teams[0].players, ballPosition);
+    const focus = this.calculateFocusAroundBall(gameState.teams[0].players, ballPosition);
+
+    // Apply dynamic tactical adjustments
+    return {
+      depth: this.applyContextualDepth(depth, gameState),
+      width: this.applyContextualWidth(width, gameState),
+      focus: this.applyContextualFocus(focus, gameState),
+      offensiveBias: this.calculateOffensiveBias(gameState),
+      pressureLevel: this.calculatePressureLevel(gameState)
+    };
+  }
+
+  // Greedy algorithm implementation for efficient player positioning
+  public optimizePlayerAssignments(
+    players: Player[],
+    availableRoles: TacticalRole[],
+    gameContext: GameContext
+  ): RoleAssignment[]
+  {
+    // Cost matrix calculation
+    const costMatrix: number[][] = [];
+
+    for (let i = 0; i < players.length; i++)
+    {
+      costMatrix[i] = [];
+      for (let j = 0; j < availableRoles.length; j++)
+      {
+        costMatrix[i][j] = this.calculateAssignmentCost(players[i], availableRoles[j], gameContext);
+      }
+    }
+
+    // Solve assignment problem using greedy algorithm for better performance
+    const assignments = this.greedyAssignment.solve(costMatrix);
+
+    return assignments.map((roleIndex, playerIndex) => ({
+      playerId: players[playerIndex].id,
+      assignedRole: availableRoles[roleIndex],
+      confidenceLevel: 1 - (costMatrix[playerIndex][roleIndex] / this.getMaxCost()),
+      transitionTime: this.calculateRoleTransitionTime(players[playerIndex], availableRoles[roleIndex])
+    }));
+  }
+
+  // Dynamic formation adjustment implementation
+  public adjustFormationDynamically(
+    baseFormation: Formation,
+    tacticalSituation: TacticalSituation,
+    gameContext: GameContext
+  ): DynamicFormation
+  {
+    const adjustments: PositionAdjustment[] = [];
+
+    // Apply depth adjustments based on tactical situation
+    const depthModifier = this.calculateDepthAdjustment(tacticalSituation, gameContext);
+
+    // Apply width adjustments
+    const widthModifier = this.calculateWidthAdjustment(tacticalSituation, gameContext);
+
+    // Apply focus adjustments (concentration around ball)
+    const focusModifier = this.calculateFocusAdjustment(tacticalSituation, gameContext);
+
+    // Generate position adjustments for each player
+    for (const position of baseFormation.positions)
+    {
+      adjustments.push({
+        originalPosition: position,
+        adjustedPosition: {
+          x: position.x + (depthModifier * position.x) + (focusModifier * this.getBallInfluence(position)),
+          y: position.y + (widthModifier * (position.y - 0.5))
+        },
+        adjustmentReason: this.getAdjustmentReason(tacticalSituation, position)
+      });
+    }
+
+    return {
+      baseFormation,
+      adjustments,
+      tacticalContext: tacticalSituation,
+      confidenceLevel: this.calculateFormationConfidence(adjustments)
+    };
+  }
+
+  // Man-marking system implementation
+  public assignManMarking(
+    defenders: Player[],
+    opponents: Player[],
+    gameState: GameState
+  ): MarkingAssignment[]
+  {
+    const threatAssessments = opponents.map(opponent => ({
+      player: opponent,
+      threatLevel: this.calculateThreatLevel(opponent, gameState),
+      markingRequirement: this.calculateMarkingRequirement(opponent, gameState)
+    }));
+
+    // Sort by threat level (most dangerous first)
+    threatAssessments.sort((a, b) => b.threatLevel - a.threatLevel);
+
+    const assignments: MarkingAssignment[] = [];
+    const availableDefenders = [...defenders];
+
+    // Assign defenders to most threatening opponents first
+    for (const threat of threatAssessments)
+    {
+      if (availableDefenders.length === 0) break;
+
+      // Find best defender for this threat
+      const bestDefender = this.findBestDefenderForThreat(availableDefenders, threat, gameState);
+
+      if (bestDefender)
+      {
+        assignments.push({
+          defenderId: bestDefender.id,
+          opponentId: threat.player.id,
+          markingType: threat.markingRequirement,
+          expectedEffectiveness: this.calculateMarkingEffectiveness(bestDefender, threat.player)
+        });
+
+        // Remove assigned defender from available pool
+        const defenderIndex = availableDefenders.findIndex(d => d.id === bestDefender.id);
+        availableDefenders.splice(defenderIndex, 1);
+      }
+    }
+
+    return assignments;
+  }
+
+  private calculateAssignmentCost(player: Player, role: TacticalRole, context: GameContext): number
+  {
+    let cost = 0;
+
+    // Attribute-role compatibility
+    cost += this.getAttributeRoleMismatch(player.attributes, role);
+
+    // Position-role distance cost
+    cost += this.getPositionRoleDistance(player.position, role.idealPosition);
+
+    // Fatigue penalty
+    cost += player.stamina < 0.7 ? (0.7 - player.stamina) * 50 : 0;
+
+    // Context-specific adjustments
+    cost += this.getContextualRoleCost(player, role, context);
+
+    return cost;
+  }
 }
+
+// Greedy Assignment Engine for performance-optimized role assignment
+class GreedyAssignmentEngine
+{
+  // Simple greedy algorithm - much faster than Hungarian algorithm
+  public solve(costMatrix: number[][]): number[]
+  {
+    const assignments: number[] = [];
+    const assignedRoles: Set<number> = new Set();
+    const numPlayers = costMatrix.length;
+    const numRoles = costMatrix[0]?.length || 0;
+
+    // For each player, find the best available role
+    for (let playerIndex = 0; playerIndex < numPlayers; playerIndex++)
+    {
+      let bestRoleIndex = -1;
+      let bestCost = Infinity;
+
+      // Find the lowest cost available role for this player
+      for (let roleIndex = 0; roleIndex < numRoles; roleIndex++)
+      {
+        if (!assignedRoles.has(roleIndex) && costMatrix[playerIndex][roleIndex] < bestCost)
+        {
+          bestCost = costMatrix[playerIndex][roleIndex];
+          bestRoleIndex = roleIndex;
+        }
+      }
+
+      // Assign the role
+      if (bestRoleIndex !== -1)
+      {
+        assignments[playerIndex] = bestRoleIndex;
+        assignedRoles.add(bestRoleIndex);
+      }
+      else
+      {
+        // Fallback: assign any available role
+        for (let roleIndex = 0; roleIndex < numRoles; roleIndex++)
+        {
+          if (!assignedRoles.has(roleIndex))
+          {
+            assignments[playerIndex] = roleIndex;
+            assignedRoles.add(roleIndex);
+            break;
+          }
+        }
+      }
+    }
+
+    return assignments;
+  }
+}
+
+// Enhanced tactical memory system
+interface TacticalMemory
+{
+  // Pattern recognition
+  opponentPatterns: OpponentPattern[];
+  successfulTactics: TacticalSuccess[];
+  failedApproaches: TacticalFailure[];
+
+  // Dynamic learning
+  adaptationHistory: TacticalAdaptation[];
+  performanceMetrics: PerformanceTracking[];
+
+  // Context-aware storage
+  situationalTactics: Map<MatchSituation, PreferredTactic>;
+  playerSpecificMemory: Map<string, PlayerTacticalData>;
+}
+
+// Role assignment results
+interface RoleAssignment
+{
+  playerId: string;
+  assignedRole: TacticalRole;
+  confidenceLevel: number;        // 0-1, how suitable this assignment is
+  transitionTime: number;         // Seconds to fully adapt to role
+  previousRole?: TacticalRole;    // For smooth transitions
+}
+
+interface MarkingAssignment
+{
+  defenderId: string;
+  opponentId: string;
+  markingType: 'tight' | 'loose' | 'zonal';
+  expectedEffectiveness: number;  // 0-1, predicted success rate
+  priority: number;               // 1-10, importance of this marking
+}
+
+// Dynamic formation system
+interface DynamicFormation
+{
+  baseFormation: Formation;
+  adjustments: PositionAdjustment[];
+  tacticalContext: TacticalSituation;
+  confidenceLevel: number;        // 0-1, how well formation suits situation
+}
+
+interface PositionAdjustment
+{
+  originalPosition: Vector2;
+  adjustedPosition: Vector2;
+  adjustmentReason: string;       // Why this adjustment was made
+  temporaryAdjustment: boolean;   // Whether adjustment reverts after situation
+}
+```
 
 // Tactical mentality affects entire team behaviour
 interface TacticalMentality
@@ -385,7 +2906,7 @@ interface DutyDistribution
   attackDuties: number;    // Number of players with primary attacking role
   supportDuties: number;   // Number of players with supporting role
   defendDuties: number;    // Number of players with defensive role
-  
+
   // Attack mode: More attack duties, fewer defend duties
   // Defend mode: More defend duties, fewer attack duties
   // Balance mode: Roughly equal distribution
@@ -397,7 +2918,7 @@ class InstructionProcessor
   public interpretAttackMode(players: Player[]): PlayerAdjustment[]
   {
     const adjustments: PlayerAdjustment[] = [];
-    
+
     for (const player of players)
     {
       const adjustment = {
@@ -413,10 +2934,10 @@ class InstructionProcessor
       };
       adjustments.push(adjustment);
     }
-    
+
     return adjustments;
   }
-  
+
   public interpretDefendMode(players: Player[]): PlayerAdjustment[]
   {
     return players.map(player => ({
@@ -431,7 +2952,7 @@ class InstructionProcessor
       dutyShift: this.assignDefensiveDuty(player)
     }));
   }
-  
+
   public interpretBalanceMode(players: Player[]): PlayerAdjustment[]
   {
     return players.map(player => ({
@@ -483,7 +3004,7 @@ class AdaptiveAISystem
   private playerPatternMemory: PatternMemory;
   private tacticalEffectivenessTracker: EffectivenessTracker;
   private counterTacticGenerator: CounterTacticEngine;
-  
+
   public learnFromMatch(matchData: MatchAnalysis): LearningUpdate;
   public adaptToOpponentStyle(opponentBehaviour: BehaviourPattern): TacticalCounter;
   public generateCounterStrategy(opponentTactics: TacticalAnalysis): CounterStrategy;
@@ -525,31 +3046,31 @@ class AIProcessingPipeline
       this.spatialAnalysis.updatePitchControl(gameState.players, gameState.ball);
       this.spatialAnalysis.updateFormationPositioning(gameState.teams);
     }
-    
+
     // 2. Ball Progression Decisions (30Hz - every frame)
     if (gameState.ballCarrier)
     {
       const progressionOptions = this.ballProgression.evaluateOptions(gameState);
       this.selectAndExecuteProgression(progressionOptions);
     }
-    
+
     // 3. Tactical Instruction Processing (immediate when received)
     if (this.hasPendingTacticalInstructions())
     {
       const instructions = this.getPendingInstructions();
       this.tacticalInterpreter.processInstructions(instructions, gameState.players);
     }
-    
+
     // 4. AI Opponent Decision Making (5Hz - every 6 frames)
     if (this.shouldUpdateOpponentAI() && this.isPlayingAgainstAI())
     {
       const opponentDecision = this.opponentAI.makeDecision(gameState);
       this.executeOpponentDecision(opponentDecision);
     }
-    
+
     // 5. Individual Player AI (30Hz - every frame)
     const playerDecisions = this.processPlayerAI(gameState.players, gameState);
-    
+
     return {
       playerAdjustments: this.spatialAnalysis.getPositionAdjustments(),
       ballProgressionDecision: progressionOptions?.[0] || null,
@@ -570,12 +3091,12 @@ interface AIPerformanceConfig
   ballProgressionFrequency: 30;      // Critical for gameplay - full frequency
   tacticalProcessingFrequency: 60;   // Immediate response required
   opponentAIFrequency: 5;            // Less critical - reduce frequency
-  
+
   // Spatial analysis optimisation
   voronoiGridResolution: [100, 68];  // Balance between accuracy and performance
   playerInfluenceRadius: 50;         // Metres - limit calculation scope
   contestedZoneThreshold: 0.1;       // Probability difference for contested zones
-  
+
   // Decision tree limits
   maxPassOptionsEvaluated: 8;        // Limit pass option calculations
   maxRiskAssessmentDepth: 3;         // Limit lookahead calculations
@@ -592,10 +3113,10 @@ class VoronoiPositioning
 {
   private pitchGrid: PitchControlGrid;
   private playerInfluenceZones: Map<string, VoronoiCell>;
-  
+
   public calculatePitchControl(players: Player[], ball: Ball): PitchControlMap;
   public optimizePlayerPositioning(formation: Formation, gameState: GameState): PositionAdjustments;
-  
+
   // Integrated spatial intelligence calculation
   public getSpatialIntelligence(player: Player): SpatialIntelligence
   {
@@ -608,14 +3129,14 @@ class VoronoiPositioning
   }
 }
 
-// Extended BallProgressionEngine with attribute integration  
+// Extended BallProgressionEngine with attribute integration
 class BallProgressionEngine
 {
   private progressionPhases: Map<MatchPhase, ProgressionStrategy>;
   private riskAssessment: RiskEvaluator;
-  
+
   public evaluateBallProgression(gameState: GameState): ProgressionDecision[];
-  
+
   // Integrated progression ability calculation
   public getProgressionAbility(player: Player): ProgressionAbility
   {
@@ -633,16 +3154,16 @@ class TacticalInstructionSystem
 {
   private currentMentality: TacticalMentality;
   private dutyDistribution: DutyDistribution;
-  
+
   public processTacticalCommand(command: TacticalCommand): TeamAdjustments;
-  
+
   // Integrated instruction responsiveness calculation
   public getInstructionResponsiveness(player: Player, instruction: TacticalCommand): ResponseProfile
   {
     const baseResponsiveness = (player.attributes.teamwork + player.attributes.workRate) / 2;
     const intelligenceModifier = (player.attributes.decisions + player.attributes.positioning) / 2;
     const captainBonus = player.isCaptain ? 1.2 : 1.0;
-    
+
     return {
       responseTime: this.calculateResponseTime(baseResponsiveness * captainBonus),
       adherenceQuality: intelligenceModifier / 10.0,
@@ -661,17 +3182,17 @@ interface AIQualityMetrics
   formationMaintenance: number;      // 0-1, how well formation is maintained
   spacingOptimisation: number;       // 0-1, effectiveness of player spacing
   defensiveShapeIntegrity: number;   // 0-1, defensive line coordination
-  
-  // Ball progression effectiveness  
+
+  // Ball progression effectiveness
   progressionEfficiency: number;     // 0-1, forward progress per possession
   passCompletionRate: number;        // 0-1, successful passes ratio
   riskAdjustedProgression: number;   // 0-1, progression accounting for risk
-  
+
   // Tactical instruction compliance
   instructionAdherence: number;      // 0-1, how well players follow instructions
   tacticalCoherence: number;         // 0-1, team-wide tactical coordination
   adaptationSpeed: number;           // Seconds to fully implement changes
-  
+
   // Overall AI performance
   gameRealism: number;               // 0-1, how realistic the gameplay feels
   challengeLevel: number;            // 0-1, appropriate difficulty for opponent AI
@@ -702,18 +3223,18 @@ interface AIMemoryFootprint
   voronoiGridMemory: number;         // ~27KB (100x68 grid of 32-bit values)
   pitchControlMemory: number;        // ~54KB (100x68 grid of 64-bit structs)
   playerInfluenceMemory: number;     // ~2KB (22 players × 96 bytes each)
-  
+
   // Ball progression
   passOptionMemory: number;          // ~1KB (max 8 options × 128 bytes each)
   decisionTreeMemory: number;        // ~4KB (decision nodes and evaluations)
-  
+
   // Tactical systems
   instructionMemory: number;         // ~512B (current instruction state)
   playerAdjustmentMemory: number;    // ~2KB (22 players × 96 bytes adjustments)
-  
+
   // AI opponent
   patternMemorySize: number;         // ~8KB (command patterns and learning data)
-  
+
   totalAIMemoryFootprint: number;    // ~99KB total (within 256MB budget)
 }
 ```
@@ -726,40 +3247,428 @@ This comprehensive AI architecture provides realistic football simulation throug
 4. **Adaptive Opposition**: AI that learns and counters player strategies
 5. **Performance Optimised**: Real-time calculations suitable for 30 FPS FireTV gameplay
 
-### 3.4 Physics and Movement System
+### 3.4 Optimized Formation and Positioning System
 
-#### 3.4.1 Ball Physics
+#### 3.4.1 Float32Array Grid System for ARM NEON Optimization
+
+**Performance Strategy**: Hybrid integer/float approach optimized for FireTV ARM Cortex-A55 NEON capabilities
+
 ```typescript
-class BallPhysics
-{
-  position: Vector2;
-  velocity: Vector2;
-  spin: number;
+// **PHASE 2 INTEGRATION** - Formation system that consumes FET export schema
+class FETFormationAdapter {
+  private formationCache: Map<string, FormationExport> = new Map();
+  private roleMapper: FETRoleMapper;
 
-  public update(deltaTime: number, weather: WeatherConditions): void;
-  public applyForce(force: Vector2, contactPoint: Vector2): void;
-  public checkCollisions(players: Player[], boundaries: Boundary[]): Collision[];
+  constructor() {
+    this.roleMapper = new FETRoleMapper();
+  }
+
+  // Load formation from FET export schema (see docs/FET-TDD.md)
+  public async loadFormation(formationId: string): Promise<FormationData> {
+    const formationExport = await this.loadFETFormation(formationId);
+    return this.adaptToGameManager(formationExport);
+  }
+
+  private adaptToGameManager(fetData: FormationExport): FormationData {
+    const gameData = fetData.formations[0];
+
+    return {
+      id: gameData.formationId,
+      name: gameData.name,
+      positions: this.mapFETPositionsToGame(gameData.phases),
+      roleMapping: this.roleMapper.mapFETRolesToGame(gameData)
+    };
+  }
+}
+
+// **PHASE 2** - Role mapping between FET and Game Manager systems
+class FETRoleMapper {
+  // Maps FET PlayerRole enum to Game Manager player roles
+  private readonly FET_TO_GAME_ROLE_MAP = {
+    // FET Roles (from FET-TDD.md) → Game Manager Roles
+    'GK': 'GOALKEEPER',
+    'CB_LEFT': 'CENTRE_BACK_LEFT',
+    'CB_RIGHT': 'CENTRE_BACK_RIGHT',
+    'CB_CENTER': 'CENTRE_BACK_CENTRE',
+    'LB': 'LEFT_BACK',
+    'RB': 'RIGHT_BACK',
+    'WB_LEFT': 'WING_BACK_LEFT',
+    'WB_RIGHT': 'WING_BACK_RIGHT',
+    'CDM': 'DEFENSIVE_MIDFIELDER',
+    'CM_LEFT': 'CENTRAL_MIDFIELDER_LEFT',
+    'CM_RIGHT': 'CENTRAL_MIDFIELDER_RIGHT',
+    'CM_CENTER': 'CENTRAL_MIDFIELDER_CENTRE',
+    'CAM': 'ATTACKING_MIDFIELDER',
+    'LM': 'LEFT_MIDFIELDER',
+    'RM': 'RIGHT_MIDFIELDER',
+    'LW': 'LEFT_WINGER',
+    'RW': 'RIGHT_WINGER',
+    'ST_LEFT': 'STRIKER_LEFT',
+    'ST_RIGHT': 'STRIKER_RIGHT',
+    'CF': 'CENTRE_FORWARD'
+  } as const;
+
+  // Maps FET GamePhase to Game Manager match phases
+  private readonly FET_TO_GAME_PHASE_MAP = {
+    'attack': 'ATTACKING',
+    'defend': 'DEFENDING',
+    'transition_attack': 'TRANSITION_TO_ATTACK',
+    'transition_defend': 'TRANSITION_TO_DEFEND',
+    'set_piece_for': 'SET_PIECE_FOR',
+    'set_piece_against': 'SET_PIECE_AGAINST'
+  } as const;
+
+  public mapFETRolesToGame(fetFormation: FormationData): RoleMapping[] {
+    // Convert FET role assignments to game manager format
+    return Object.entries(this.FET_TO_GAME_ROLE_MAP).map(([fetRole, gameRole]) => ({
+      fetRole,
+      gameRole,
+      mandatory: this.isMandatoryRole(fetRole),
+      alternatives: this.getAlternativeRoles(gameRole)
+    }));
+  }
+}
+
+// **POC ONLY** - Simplified formation grid (no FET integration yet)
+class POCFormationGrid {
+  private readonly GRID_WIDTH = 20;
+  private readonly GRID_HEIGHT = 15;
+  private readonly ZONE_COUNT = 300;
+
+  // Integer indices for exact grid calculations (cache-friendly)
+  private spatialIndex: Map<number, ZoneData> = new Map();
+
+  // Float32Array for SIMD-optimized bulk operations (ARM NEON potential)
+  private positionBuffer: Float32Array;           // 22 players * 2 coords (x,y interleaved)
+  private interpolationBuffer: Float32Array;      // Temporary calculation space
+  private targetPositions: Float32Array;          // Formation target positions
+  private weights: Float32Array;                  // Interpolation weights
+
+  constructor() {
+    // Pre-allocate SIMD-friendly buffers
+    this.positionBuffer = new Float32Array(44);        // 22 players * 2 coordinates
+    this.interpolationBuffer = new Float32Array(16);   // Working space for calculations
+    this.targetPositions = new Float32Array(44);       // Target formation positions
+    this.weights = new Float32Array(22);               // Per-player interpolation weights
+  }
+
+  // Integer operations for exact grid calculations (cache-friendly)
+  public getZoneIndex(x: number, y: number): number {
+    const gridX = Math.floor(x * this.GRID_WIDTH);
+    const gridY = Math.floor(y * this.GRID_HEIGHT);
+    return gridY * this.GRID_WIDTH + gridX;  // Single integer index (0-299)
+  }
+
+  // Bulk position updates using Float32Array (SIMD potential)
+  public updatePlayerPositions(
+    ballPosition: Float32Array,    // [x, y]
+    playerPositions: Float32Array, // [x1, y1, x2, y2, ...] current positions
+    targetPositions: Float32Array, // [x1, y1, x2, y2, ...] formation targets
+    deltaTime: number
+  ): void {
+    const lerpFactor = Math.min(deltaTime * 2.0, 1.0); // Smooth interpolation
+
+    // Pattern optimizable by V8's TurboFan JIT for ARM NEON generation
+    for (let i = 0; i < playerPositions.length; i += 2) {
+      const playerIndex = i >> 1; // Bit shift for divide by 2
+
+      // Calculate formation-based target with ball influence
+      const ballInfluence = this.calculateBallInfluence(
+        playerPositions[i],
+        playerPositions[i + 1],
+        ballPosition[0],
+        ballPosition[1]
+      );
+
+      const adjustedTargetX = targetPositions[i] + ballInfluence * 0.1;
+      const adjustedTargetY = targetPositions[i + 1] + ballInfluence * 0.05;
+
+      // SIMD-friendly linear interpolation
+      playerPositions[i] += (adjustedTargetX - playerPositions[i]) * lerpFactor;
+      playerPositions[i + 1] += (adjustedTargetY - playerPositions[i + 1]) * lerpFactor;
+    }
+  }
+
+  private calculateBallInfluence(playerX: number, playerY: number, ballX: number, ballY: number): number {
+    const dx = ballX - playerX;
+    const dy = ballY - playerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Exponential decay influence (closer players more affected by ball)
+    return Math.exp(-distance * 2.0);
+  }
+
+  // Bulk formation switching using pre-computed arrays
+  public switchFormation(
+    newFormationData: Float32Array, // Pre-computed formation positions
+    transitionTime: number = 2.0     // Seconds for formation change
+  ): void {
+    // Copy new formation to target positions buffer
+    this.targetPositions.set(newFormationData);
+
+    // Formation switching handled by updatePlayerPositions interpolation
+    // No complex individual calculations needed
+  }
 }
 ```
 
-#### 3.4.2 Player Movement and Sprite Animation
+**SIMD Optimization Benefits**:
+- **Integer Grid Indices**: Exact calculations, cache-friendly, no floating-point precision drift
+- **Float32Array Bulk Operations**: V8 TurboFan can generate ARM NEON instructions for predictable loops
+- **Memory Layout**: Interleaved x,y coordinates optimize cache usage and enable vectorization
+- **Performance**: 2-4x potential speedup for 22 player position updates on ARM devices
+
+#### 3.4.2 Formation Data Management
+
+```typescript
+interface FormationDefinition {
+  id: string;                       // "4-4-2-flat"
+  positions: Float32Array;          // Pre-computed normalized positions [x1,y1,x2,y2,...]
+  roles: PlayerRole[];              // Corresponding roles for each position
+  phases: {
+    attack: Float32Array;           // Attacking phase adjustments
+    defend: Float32Array;           // Defensive phase adjustments
+    transition: Float32Array;       // Neutral/transition positions
+  };
+}
+
+// POC placeholder formation manager
+// Phase 2: This will be replaced by a FormationAdapter that consumes FET export schema (see docs/FET-TDD.md)
+class FormationManager {
+  private formations: Map<string, FormationDefinition> = new Map();
+  private currentFormation: FormationDefinition;
+  private gridSystem: OptimizedFormationGrid; // POC-only grid; Phase 2 uses FET data
+
+  constructor() {
+    this.gridSystem = new OptimizedFormationGrid();
+    this.loadPredefinedFormations();
+  }
+
+  private loadPredefinedFormations(): void {
+    // Pre-defined formations for POC
+    const formation442 = this.createFormation442();
+    const formation433 = this.createFormation433();
+
+    this.formations.set("4-4-2", formation442);
+    this.formations.set("4-3-3", formation433);
+    this.currentFormation = formation442; // Default
+  }
+
+  private createFormation442(): FormationDefinition {
+    // Normalized positions for 4-4-2 formation (home team attacking right)
+    const positions = new Float32Array([
+      // Goalkeeper
+      0.05, 0.5,
+
+      // Defense (4)
+      0.25, 0.2,  // Left back
+      0.20, 0.35, // Center back left
+      0.20, 0.65, // Center back right
+      0.25, 0.8,  // Right back
+
+      // Midfield (4)
+      0.45, 0.15, // Left midfield
+      0.50, 0.35, // Center midfield left
+      0.50, 0.65, // Center midfield right
+      0.45, 0.85, // Right midfield
+
+      // Attack (2)
+      0.75, 0.4,  // Striker left
+      0.75, 0.6   // Striker right
+    ]);
+
+    return {
+      id: "4-4-2-flat",
+      positions,
+      roles: [
+        PlayerRole.GOALKEEPER,
+        PlayerRole.FULL_BACK, PlayerRole.CENTRE_BACK, PlayerRole.CENTRE_BACK, PlayerRole.FULL_BACK,
+        PlayerRole.WINGER, PlayerRole.CENTRAL_MIDFIELDER, PlayerRole.CENTRAL_MIDFIELDER, PlayerRole.WINGER,
+        PlayerRole.STRIKER, PlayerRole.STRIKER
+      ],
+      phases: {
+        attack: this.createAttackingAdjustments(positions),
+        defend: this.createDefensiveAdjustments(positions),
+        transition: positions.slice() // Copy of base positions
+      }
+    };
+  }
+
+  private createAttackingAdjustments(basePositions: Float32Array): Float32Array {
+    const adjusted = basePositions.slice();
+
+    // Push players forward in attacking phase
+    for (let i = 0; i < adjusted.length; i += 2) {
+      adjusted[i] += 0.1; // Move 10% further up pitch
+    }
+
+    return adjusted;
+  }
+
+  private createDefensiveAdjustments(basePositions: Float32Array): Float32Array {
+    const adjusted = basePositions.slice();
+
+    // Pull players back in defensive phase (except goalkeeper)
+    for (let i = 2; i < adjusted.length; i += 2) { // Skip goalkeeper (index 0,1)
+      adjusted[i] -= 0.08; // Move 8% back towards own goal
+    }
+
+    return adjusted;
+  }
+}
+```
+
+### 3.5 Physics and Movement System
+
+#### 3.4.1 Enhanced Ball Physics Implementation
+```typescript
+// **PHASE 2 ONLY** - Advanced 3D Ball Physics (not implemented in POC)
+class Phase2BallPhysics
+{
+  position: Vector3;          // Include Z-axis for height calculations - PHASE 2
+  velocity: Vector3;          // 3D velocity vector - PHASE 2
+  lastPosition: Vector3;      // For bounce calculations - PHASE 2
+  spin: number;               // Ball spin effects - PHASE 2
+  mass: number = 0.43;        // FIFA regulation ball mass (430g) - PHASE 2
+  dragCoefficient: number = 0.350; // Realistic drag coefficient - PHASE 2
+  gravity: number = 9.81;     // Earth gravity (m/s²) - PHASE 2
+  bounceEnergyLoss: number = 0.7; // Energy retained after bounce - PHASE 2
+  owner: Player | null;       // Current ball possessor
+
+  public update(deltaTime: number, weather: WeatherConditions): void;
+  public applyKick(force: Vector2, player: Player): void;
+  public checkGroundBounce(): boolean;
+  public calculateDrag(velocity: Vector3): Vector3;
+  public applyGravity(deltaTime: number): void;
+  public checkCollisions(players: Player[], boundaries: Boundary[]): Collision[];
+}
+
+// **PHASE 2 ONLY** - Realistic 3D physics constants (not used in POC)
+interface Phase2PhysicsConstants
+{
+  BALL_MASS: 0.43;              // kg (FIFA regulation) - PHASE 2
+  AIR_DENSITY: 1.225;           // kg/m³ at sea level - PHASE 2
+  DRAG_COEFFICIENT: 0.350;      // Sphere drag coefficient - PHASE 2
+  GRAVITY: 9.81;                // m/s² Earth gravity - PHASE 2
+  BOUNCE_DAMPING: 0.7;          // Energy loss per bounce - PHASE 2
+  ROLLING_FRICTION: 0.1;        // Ground friction coefficient - PHASE 2
+  SPIN_DECAY_RATE: 0.95;        // Spin reduction per frame - PHASE 2
+}
+
+// POC uses simplified 2D constants (see Section 3.6 POC 2D Physics Engine)
+```
+
+#### 3.4.2 Advanced Player Movement System
 ```typescript
 interface PlayerMovement
 {
   targetPosition: Vector2;
   currentPosition: Vector2;
-  facing: number;
-  speed: number;
+  destination: Vector2;         // Pathfinding destination
+  facing: number;               // Direction player is facing (radians)
+  speed: number;                // Current movement speed
+  maxSpeed: number;             // Player's top speed
+  acceleration: number;         // Speed increase rate
+  deceleration: number;         // Speed decrease rate
+  turningSpeed: number;         // How fast player can change direction
   spriteAnimation: SpriteAnimation;
+  movementState: MovementState;
+  lastMovementUpdate: number;   // For smooth interpolation
 }
 
 interface SpriteAnimation
 {
   currentFrame: number;
   frameCount: number;
-  frameRate: number; // FPS for animation
-  animationType: 'idle' | 'running' | 'kicking' | 'celebration';
+  frameRate: number;            // FPS for animation (8-12 typical)
+  animationType: AnimationType;
   spriteSheet: HTMLImageElement;
+  frameTime: number;            // Elapsed time for current frame
+  animationSpeed: number;       // Speed multiplier for animation
+  direction: number;            // 8-directional animation support
+}
+
+enum AnimationType
+{
+  IDLE = 'idle',
+  RUNNING = 'running',
+  SPRINTING = 'sprinting',
+  KICKING = 'kicking',
+  TACKLING = 'tackling',
+  HEADING = 'heading',
+  CELEBRATION = 'celebration',
+  INJURY = 'injury'
+}
+
+enum MovementState
+{
+  STATIONARY = 'stationary',
+  WALKING = 'walking',
+  JOGGING = 'jogging',
+  RUNNING = 'running',
+  SPRINTING = 'sprinting',
+  TURNING = 'turning',
+  STOPPING = 'stopping'
+}
+
+// Enhanced movement calculations implementation
+class PlayerMovementController
+{
+  public updatePosition(player: Player, deltaTime: number): void
+  {
+    const dx = player.targetPosition.x - player.position.x;
+    const dy = player.targetPosition.y - player.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Arrival threshold - player stops when close enough
+    if (distance < 5.0)
+    {
+      player.movementState = MovementState.STATIONARY;
+      return;
+    }
+
+    // Calculate movement direction
+    const moveDirection = { x: dx / distance, y: dy / distance };
+
+    // Apply acceleration/deceleration
+    const targetSpeed = this.calculateTargetSpeed(player, distance);
+    player.speed = this.interpolateSpeed(player.speed, targetSpeed, deltaTime);
+
+    // Update position
+    const moveDistance = player.speed * deltaTime;
+    player.position.x += moveDirection.x * moveDistance;
+    player.position.y += moveDirection.y * moveDistance;
+
+    // Update facing direction smoothly
+    this.updateFacingDirection(player, moveDirection, deltaTime);
+
+    // Update sprite animation based on movement
+    this.updateAnimationState(player);
+  }
+
+  private calculateTargetSpeed(player: Player, distanceToTarget: number): number
+  {
+    // Slow down when approaching target
+    const slowdownDistance = 50.0;
+    if (distanceToTarget < slowdownDistance)
+    {
+      return player.maxSpeed * (distanceToTarget / slowdownDistance);
+    }
+    return player.maxSpeed;
+  }
+
+  private interpolateSpeed(currentSpeed: number, targetSpeed: number, deltaTime: number): number
+  {
+    const acceleration = targetSpeed > currentSpeed ? 200.0 : 400.0; // Deceleration is faster
+    const speedChange = acceleration * deltaTime;
+
+    if (Math.abs(targetSpeed - currentSpeed) < speedChange)
+    {
+      return targetSpeed;
+    }
+
+    return currentSpeed + (targetSpeed > currentSpeed ? speedChange : -speedChange);
+  }
 }
 ```
 
@@ -784,10 +3693,10 @@ class Referee
 enum EventType
 {
   GOAL = 'goal',
-  FOUL = 'foul',
-  CARD = 'card',
-  SUBSTITUTION = 'substitution',
-  OFFSIDE = 'offside'
+  FOUL = 'foul',                       // **PHASE 2 ONLY**
+  CARD = 'card',                       // **PHASE 2 ONLY**
+  SUBSTITUTION = 'substitution',       // **PHASE 2 ONLY**
+  OFFSIDE = 'offside'                  // **PHASE 2 ONLY**
 }
 
 interface MatchEvent
@@ -980,8 +3889,10 @@ interface TransferMarket
 interface PerformanceConfig
 {
   targetFPS: 30;
-  maxMemoryUsage: 256 * 1024 * 1024; // 256MB (reduced due to sprites)
-  maxSpriteSheetSize: 1024; // 1024x1024 max per sheet
+  frameBudgetMs: 33; // ms total per frame (PRD specification)
+  maxMemoryUsageMB: 256; // MB JavaScript heap (PRD specification)
+  maxTextureMemoryMB: 128; // MB for all sprites and assets (PRD specification)
+  maxDrawCallsPerFrame: 500; // PRD specification: <500 draw calls per frame
   audioChannels: 8;
   canvasRenderer: '2d'; // Canvas 2D for sprite rendering
 }
@@ -1010,11 +3921,88 @@ interface DisplayConfig
 }
 ```
 
-## 8. Data Models
+## 8. Enhanced Data Models
 
 ### 8.1 Core Game Entities
 
-#### 8.1.1 Team Structure
+#### 8.1.1 Enhanced Player Model
+```typescript
+interface Player extends Entity  // Implementing Entity pattern
+{
+  // Basic identification
+  id: string;
+  name: string;
+  kitNumber: number;
+  team: 'HOME' | 'AWAY';
+
+  // Physical properties
+  position: Vector2;
+  destination: Vector2;         // Target position for movement
+  facing: number;               // Direction facing (radians)
+  bounds: Circle;               // Collision detection
+
+  // Movement characteristics (derived from attributes)
+  currentSpeed: number;         // Current movement speed
+  facing: number;               // Direction facing (radians)
+  turningSpeed: number;         // Direction change rate (derived from agility)
+
+  // Game state
+  playerType: 'OUTFIELD' | 'GOALKEEPER';
+  state: PlayerState;
+  hasBall: boolean;
+  stamina: number;              // 0-100, affects performance
+  confidence: number;           // 0-100, affects decision making
+
+  // Formation and tactics
+  basePosition: Vector2;        // Formation position
+  role: PlayerRole;
+  instructions: PlayerInstructions;
+
+  // Attributes (0.0-10.0 scale as per PRD)
+  attributes: PlayerAttributes;
+
+  // Animation and rendering
+  spriteAnimation: SpriteAnimation;
+  // PHASE 2 ONLY: height (for 3D/headers); not used in POC 2D engine
+  height?: number;
+
+  // Captain status
+  isCaptain: boolean;
+
+  // Entity interface methods
+  update(deltaTime: number): void;
+  render(renderer: Renderer): void;
+  getBounds(): Circle;
+  inPosition(): boolean;        // Whether player has reached destination
+}
+
+// **REMOVED** - Use canonical PlayerAttributes from section 3.2.1 (0.0-10.0 scale)
+
+}
+
+enum PlayerRole
+{
+  GOALKEEPER = 'goalkeeper',
+  CENTRE_BACK = 'centre_back',
+  FULL_BACK = 'full_back',
+  DEFENSIVE_MIDFIELDER = 'defensive_midfielder',
+  CENTRAL_MIDFIELDER = 'central_midfielder',
+  ATTACKING_MIDFIELDER = 'attacking_midfielder',
+  WINGER = 'winger',
+  STRIKER = 'striker'
+}
+
+interface PlayerInstructions
+{
+  mentality: 'very_defensive' | 'defensive' | 'balanced' | 'attacking' | 'very_attacking';
+  passingStyle: 'short' | 'mixed' | 'long';
+  crossingStyle: 'low' | 'mixed' | 'high';
+  tacklingStyle: 'easy' | 'normal' | 'hard';
+  markingAssignment: Player | null; // Specific player to mark
+}
+```
+
+#### 8.1.2 Team Structure
 ```typescript
 interface Team
 {
@@ -1096,37 +4084,501 @@ interface PerformanceMetrics
 
 ## 10. Testing Strategy
 
-### 10.1 Unit Testing
+### 10.1 POC Acceptance Tests (Priority 1 - Critical)
 
-#### 10.1.1 Game Logic Tests
+**These tests validate PRD POC acceptance criteria and must pass for POC success.**
+
+#### 10.1.1 Ball Physics and Boundaries (PRD Requirements)
 ```typescript
-describe('AIController', () =>
-{
-  test('should make appropriate decisions based on player attributes', () =>
-  {
-    const player = createPlayerWithAttributes({ decisions: 8.5, positioning: 7.0 });
-    const gameState = createGameState({ phase: 'defending' });
+describe('POC Ball Physics', () => {
+  test('should detect out-of-bounds within 16ms', async () => {
+    const ball = createBall({ position: { x: POC_CONFIG.FIELD_WIDTH + 1, y: 500 } });
+    const testClock = createTestClock();
+    const startTime = testClock.now();
+    const result = physics.checkBoundaries(ball);
+    const detectionTime = testClock.now() - startTime;
 
-    const decisions = aiController.evaluateOptions(player, gameState);
-    expect(decisions[0].action.type).toBe('DEFENSIVE_POSITIONING');
+    expect(result.out).toBe(true);
+    expect(detectionTime).toBeLessThan(16); // PRD requirement
+  });
+
+  test('should execute correct restart within 3 seconds', async () => {
+    const testCases = [
+      { ballExit: 'top', lastTouch: 'RED', expected: 'THROW_IN' },
+      { ballExit: 'right', lastTouch: 'RED', expected: 'CORNER_KICK' },
+      { ballExit: 'right', lastTouch: 'BLUE', expected: 'GOAL_KICK' }
+    ];
+
+    for (const testCase of testCases) {
+      // Use deterministic test clock instead of wall-clock
+      const testClock = createTestClock();
+      testClock.reset(0);
+      const restart = await gameEngine.processOutOfPlay(testCase, testClock);
+      const executionTimeMs = testClock.now();
+
+      expect(restart.type).toBe(testCase.expected);
+      expect(executionTimeMs).toBeLessThan(3000); // PRD: within 3 seconds
+    }
+  });
+  
+  test('should enforce FIFA Law 16 goal kick positioning rules', async () => {
+    const gameState = createGameState();
+    const goalKickController = new GoalKickController();
+    
+    // Set up scenario: opposing players in penalty area during goal kick
+    const opposingPlayers = gameState.teams[1].players.slice(0, 3);
+    opposingPlayers.forEach((player, i) => {
+      player.position = { 
+        x: 100 + i * 20, // Inside home team's penalty area
+        y: 400 + i * 50 
+      };
+    });
+    
+    const goalKickState = goalKickController.initiateGoalKick(gameState, 'HOME');
+    
+    // Should wait for positioning (FIFA Law 16 compliance)
+    expect(goalKickState.phase).toBe('awaiting_positioning');
+    expect(goalKickState.canTakeKick).toBe(false);
+    expect(goalKickState.playersExitingPenaltyArea.length).toBe(3);
+    
+    // Simulate players attempting to exit penalty area
+    opposingPlayers.forEach(player => {
+      player.targetPosition = { x: 300, y: player.position.y }; // Moving away
+      player.position = { x: player.position.x + 15, y: player.position.y }; // Gradual exit
+    });
+    
+    const updatedState = goalKickController.updateGoalKickState(goalKickState, gameState, 0.1);
+    
+    // Should now allow kick (players attempting to leave)
+    expect(updatedState.phase).toBe('ready_to_kick');
+    expect(updatedState.canTakeKick).toBe(true);
   });
 });
 ```
 
-### 10.2 Integration Testing
-
-#### 10.2.1 Voice Command Pipeline
+#### 10.1.2 Formation Adherence (PRD Requirements)
 ```typescript
-describe('Voice Command Integration', () =>
-{
-  test('should process voice command end-to-end', async () =>
-  {
-    const audioInput = createMockAudioStream('attack');
-    const command = await voiceProcessor.recogniseSpeech(audioInput);
-    const action = commandParser.parseCommand(command);
+describe('POC Formation Adherence', () => {
+  test('should maintain formation within ±10% tolerance', () => {
+    const gameState = createGameState();
+    const team = gameState.teams[0];
 
-    expect(action.type).toBe('TACTICAL_CHANGE');
-    expect(action.data.style).toBe('ATTACKING');
+    // Run simulation for 30 seconds
+    for (let t = 0; t < 30; t += 1/30) {
+      gameEngine.update(gameState, t * 1000);
+
+      team.players.forEach(player => {
+        const distance = calculateDistance(player.position, player.basePosition);
+        const fieldDiagonal = Math.sqrt(POC_CONFIG.FIELD_WIDTH**2 + POC_CONFIG.FIELD_HEIGHT**2);
+        const maxDeviation = fieldDiagonal * 0.1; // 10% tolerance
+
+        expect(distance).toBeLessThan(maxDeviation);
+      });
+    }
+  });
+
+  test('should respond within 100ms to ball movement', () => {
+    const gameState = createGameState();
+    const initialPositions = gameState.teams[0].players.map(p => ({ ...p.position }));
+
+    // Move ball significantly
+    gameState.ball.position = { x: 800, y: 300 };
+    gameEngine.update(gameState, 100); // 100ms update
+
+    let responsivePlayerCount = 0;
+    gameState.teams[0].players.forEach((player, i) => {
+      const movement = calculateDistance(player.position, initialPositions[i]);
+      if (movement > 5) responsivePlayerCount++;
+    });
+
+    expect(responsivePlayerCount).toBeGreaterThan(0);
+  });
+
+  test('should maintain possession variance <5%', () => {
+    const possessionResults = [];
+
+    // Run identical scenarios multiple times with fixed seed
+    for (let run = 0; run < 10; run++) {
+      const gameState = createGameState({ seed: 12345 });
+
+      for (let t = 0; t < 60; t += 1/30) { // 1 minute simulation
+        gameEngine.update(gameState, t * 1000);
+      }
+
+      possessionResults.push(gameState.stats.possession.RED);
+    }
+
+    const mean = possessionResults.reduce((a, b) => a + b) / possessionResults.length;
+    const variance = possessionResults.reduce((sum, val) => sum + (val - mean)**2, 0) / possessionResults.length;
+
+    expect(Math.sqrt(variance)).toBeLessThan(5); // <5% standard deviation
+  });
+});
+```
+
+#### 10.1.3 FireTV Performance (PRD Requirements)
+```typescript
+describe('POC FireTV Performance', () => {
+  test('should maintain 30+ FPS during gameplay', async () => {
+    const gameState = createGameState();
+    const frameTimes = [];
+
+    // Measure 1000 frames
+    // Drive updates with a deterministic test clock
+    const testClock = createTestClock();
+    for (let i = 0; i < 1000; i++) {
+      const frameStart = testClock.now();
+      gameEngine.update(gameState, frameStart);
+      testClock.advance(33); // simulate ~30 FPS frame time
+      const frameEnd = testClock.now();
+      frameTimes.push(frameEnd - frameStart);
+    }
+
+    const avgFrameTime = frameTimes.reduce((a, b) => a + b) / frameTimes.length;
+    expect(avgFrameTime).toBeLessThan(33); // PRD: 33ms budget
+  });
+
+  test('should stay within draw call budget', () => {
+    const renderer = new OptimizedCanvas2DRenderer();
+    const gameState = createGameState();
+
+    renderer.renderFrame(gameState);
+    expect(renderer.getDrawCallCount()).toBeLessThan(500); // PRD: <500 draws
+  });
+
+  test('should complete 5-minute matches without crashes', async () => {
+    const gameState = createGameState();
+    let frameCount = 0;
+
+    // 5 minutes at 30 FPS = 9000 frames
+    for (let i = 0; i < 9000; i++) {
+      expect(() => {
+        gameEngine.update(gameState, i * 33.33);
+        frameCount++;
+      }).not.toThrow();
+    }
+
+    expect(frameCount).toBe(9000);
+    expect(gameState.gameTime).toBeGreaterThanOrEqual(300); // 5 minutes
+  });
+});
+```
+
+### 10.2 Advanced Testing Strategy (Phase 2+)
+
+#### 10.2.1 AI System Tests
+```typescript
+describe('TacticalEngine', () =>
+{
+  describe('Hungarian Algorithm Role Assignment', () =>
+  {
+    test('should assign optimal roles based on player attributes and game context', () =>
+    {
+      const players = [
+        createPlayer({ attributes: { positioning: 9, tackling: 8, passing: 6 } }), // Defender
+        createPlayer({ attributes: { vision: 9, passing: 9, shooting: 7 } }),      // Midfielder
+        createPlayer({ attributes: { pace: 9, shooting: 8, dribbling: 8 } })       // Attacker
+      ];
+
+      const availableRoles = [
+        { type: 'CENTRE_BACK', idealPosition: { x: 0.2, y: 0.5 } },
+        { type: 'CENTRAL_MIDFIELDER', idealPosition: { x: 0.5, y: 0.5 } },
+        { type: 'STRIKER', idealPosition: { x: 0.8, y: 0.5 } }
+      ];
+
+      const gameContext = createGameContext({ matchTime: 45, score: [0, 0] });
+
+      const assignments = tacticalEngine.optimizePlayerAssignments(players, availableRoles, gameContext);
+
+      // Verify optimal assignment
+      expect(assignments[0].assignedRole.type).toBe('CENTRE_BACK');
+      expect(assignments[1].assignedRole.type).toBe('CENTRAL_MIDFIELDER');
+      expect(assignments[2].assignedRole.type).toBe('STRIKER');
+
+      // Check confidence levels
+      assignments.forEach(assignment => {
+        expect(assignment.confidenceLevel).toBeGreaterThan(0.7);
+      });
+    });
+  });
+
+  describe('Dynamic Formation Adjustment', () =>
+  {
+    test('should adjust formation depth based on tactical situation', () =>
+    {
+      const baseFormation = createFormation('4-4-2');
+      const tacticalSituation = {
+        depth: 0.3,           // Defensive positioning
+        width: 0.6,           // Moderate width
+        focus: 0.8,           // High focus around ball
+        offensiveBias: -0.4,  // Defensive bias
+        pressureLevel: 0.7    // High pressure
+      };
+
+      const gameContext = createGameContext({
+        matchTime: 85,        // Late in match
+        score: [1, 0],        // Leading by one
+        possession: 'AWAY'    // Opposition has ball
+      });
+
+      const dynamicFormation = tacticalEngine.adjustFormationDynamically(
+        baseFormation,
+        tacticalSituation,
+        gameContext
+      );
+
+      // Verify defensive adjustments
+      const defenderAdjustments = dynamicFormation.adjustments.filter(adj =>
+        adj.originalPosition.x < 0.4  // Defensive third
+      );
+
+      defenderAdjustments.forEach(adjustment => {
+        // Defenders should move deeper when defending a lead
+        expect(adjustment.adjustedPosition.x).toBeLessThan(adjustment.originalPosition.x);
+      });
+
+      expect(dynamicFormation.confidenceLevel).toBeGreaterThan(0.6);
+    });
+  });
+
+  describe('Man-Marking Assignment', () =>
+  {
+    test('should assign defenders to most threatening opponents', () =>
+    {
+      const defenders = [
+        createDefender({ attributes: { tackling: 8, positioning: 9, pace: 7 } }),
+        createDefender({ attributes: { tackling: 7, positioning: 8, pace: 8 } })
+      ];
+
+      const opponents = [
+        createOpponent({ attributes: { shooting: 9, pace: 8, dribbling: 7 }, position: { x: 0.7, y: 0.3 } }),
+        createOpponent({ attributes: { shooting: 6, pace: 6, passing: 8 }, position: { x: 0.6, y: 0.7 } })
+      ];
+
+      const gameState = createGameState({
+        ballPosition: { x: 0.8, y: 0.4 },
+        phase: 'IN_PLAY'
+      });
+
+      const assignments = tacticalEngine.assignManMarking(defenders, opponents, gameState);
+
+      // Most dangerous opponent should be marked by best available defender
+      const mostThreatening = opponents[0]; // Higher shooting + pace
+      const assignmentForThreat = assignments.find(a => a.opponentId === mostThreatening.id);
+
+      expect(assignmentForThreat).toBeDefined();
+      expect(assignmentForThreat!.markingType).toBe('tight'); // High threat = tight marking
+      expect(assignmentForThreat!.expectedEffectiveness).toBeGreaterThan(0.6);
+    });
+  });
+});
+
+describe('PlayerAI State Management', () =>
+{
+  test('should accurately calculate ball acquisition time', () =>
+  {
+    const player = createPlayer({
+      position: { x: 100, y: 100 },
+      attributes: { pace: 8, acceleration: 7 }
+    });
+
+    const ballPosition = { x: 200, y: 150 };
+    const ballVelocity = { x: 50, y: 25 };
+
+    const acquisitionTime = playerAI.calculateBallAcquisitionTime(player, ballPosition, ballVelocity);
+
+    // Should be realistic time based on distance and player speed
+    expect(acquisitionTime).toBeGreaterThan(1000); // At least 1 second
+    expect(acquisitionTime).toBeLessThan(5000);    // At most 5 seconds
+  });
+
+  test('should update possession states correctly', () =>
+  {
+    const team = createTeam([
+      createPlayer({ id: 'player1', position: { x: 100, y: 100 } }),
+      createPlayer({ id: 'player2', position: { x: 200, y: 100 } }),
+      createPlayer({ id: 'player3', position: { x: 300, y: 100 } })
+    ]);
+
+    const ballPosition = { x: 150, y: 100 };
+
+    playerAI.updatePossessionStates(team.players, ballPosition);
+
+    // Closest player should have best possession
+    const player2 = team.players.find(p => p.id === 'player2')!;
+    expect(player2.aiState.hasBestPossession).toBe(true);
+
+    // Others should not
+    const otherPlayers = team.players.filter(p => p.id !== 'player2');
+    otherPlayers.forEach(player => {
+      expect(player.aiState.hasBestPossession).toBe(false);
+    });
+  });
+});
+
+describe('Physics Integration Tests', () =>
+{
+  test('should handle ball bounce physics correctly', () =>
+  {
+    const ball = createBall({
+      position: { x: 100, y: 100, z: 50 },  // Ball in air
+      velocity: { x: 0, y: 0, z: -20 }      // Falling down
+    });
+
+    ballPhysics.update(ball, 0.016); // One frame at 60 FPS
+
+    if (ball.position.z <= 0) // Hit ground
+    {
+      // Should bounce with reduced energy
+      expect(ball.velocity.z).toBeGreaterThan(0);  // Bouncing up
+      expect(ball.velocity.z).toBeLessThan(14);     // Energy loss (70% retention)
+    }
+  });
+
+  test('should apply realistic drag to ball movement', () =>
+  {
+    const ball = createBall({
+      position: { x: 0, y: 0, z: 0 },
+      velocity: { x: 100, y: 0, z: 0 }  // Fast horizontal movement
+    });
+
+    const initialSpeed = Math.sqrt(
+      ball.velocity.x ** 2 + ball.velocity.y ** 2 + ball.velocity.z ** 2
+    );
+
+    // Update multiple frames
+    for (let i = 0; i < 60; i++) {
+      ballPhysics.update(ball, 0.016);
+    }
+
+    const finalSpeed = Math.sqrt(
+      ball.velocity.x ** 2 + ball.velocity.y ** 2 + ball.velocity.z ** 2
+    );
+
+    // Speed should decrease due to drag
+    expect(finalSpeed).toBeLessThan(initialSpeed);
+    expect(finalSpeed).toBeGreaterThan(initialSpeed * 0.5); // But not too much
+  });
+});
+```
+
+### 10.2 Advanced Integration Testing
+
+#### 10.2.1 Tactical System Integration
+```typescript
+describe('Full Tactical System Integration', () =>
+{
+  test('should process tactical command through complete pipeline', async () =>
+  {
+    const gameState = createGameState({
+      phase: 'IN_PLAY',
+      teams: [createTeam('HOME'), createTeam('AWAY')],
+      ballPosition: { x: 0.3, y: 0.5 }
+    });
+
+    // Voice command processing
+    const audioInput = createMockAudioStream('attack');
+    const voiceCommand = await voiceProcessor.recogniseSpeech(audioInput);
+    const tacticalCommand = commandParser.parseCommand(voiceCommand);
+
+    // AI processing
+    const tacticalSituation = tacticalEngine.calculateTeamPositioning(gameState);
+    const roleAssignments = tacticalEngine.optimizePlayerAssignments(
+      gameState.teams[0].players,
+      getTacticalRoles('ATTACKING'),
+      createGameContext(gameState)
+    );
+
+    // Formation adjustment
+    const adjustedFormation = tacticalEngine.adjustFormationDynamically(
+      gameState.teams[0].formation,
+      tacticalSituation,
+      createGameContext(gameState)
+    );
+
+    // Verify complete pipeline
+    expect(tacticalCommand.type).toBe('TACTICAL_CHANGE');
+    expect(tacticalCommand.data.mentality).toBe('ATTACKING');
+    expect(roleAssignments.length).toBe(11); // Full team
+    expect(adjustedFormation.tacticalContext.offensiveBias).toBeGreaterThan(0);
+
+    // Check that attacking players moved forward
+    const attackers = roleAssignments.filter(r => r.assignedRole.type.includes('STRIKER'));
+    const attackerPositions = adjustedFormation.adjustments
+      .filter(adj => attackers.some(a => a.assignedRole.idealPosition === adj.originalPosition));
+
+    attackerPositions.forEach(pos => {
+      expect(pos.adjustedPosition.x).toBeGreaterThan(pos.originalPosition.x);
+    });
+  });
+
+  test('should handle complex match situation with multiple systems', () =>
+  {
+    const gameState = createComplexGameState({
+      phase: 'IN_PLAY',
+      matchTime: 89,            // Late in match
+      score: [1, 2],            // Losing by one
+      ballPossession: 'HOME',   // Player has ball
+      ballPosition: { x: 0.7, y: 0.3 }, // Attacking third
+      weather: { type: 'heavy_rain', visibility: 0.7 },
+      playerStamina: [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.6, 0.5, 0.4, 0.3] // Varied fatigue
+    });
+
+    // Process AI decisions for desperate attacking
+    const aiDecisions = masterAI.processFrame(gameState, 0.016);
+
+    // Verify tactical adjustments for desperate situation
+    expect(aiDecisions.tacticalChanges.offensiveBias).toBeGreaterThan(0.8); // Very attacking
+    expect(aiDecisions.formationAdjustments).toBeDefined();
+
+    // Check that tired players are positioned strategically
+    const tiredPlayers = gameState.teams[0].players.filter(p => p.stamina < 0.5);
+    tiredPlayers.forEach(player => {
+      const decision = aiDecisions.individualPlayerActions.find(d => d.playerId === player.id);
+      expect(decision?.conservingEnergy).toBe(true); // Should conserve energy
+    });
+
+    // Weather should affect decision making
+    expect(aiDecisions.ballProgressionDecision?.preferredPlayStyle).toBe('direct_play'); // Less passing in rain
+  });
+});
+
+#### 10.2.2 Physics and AI Integration
+```typescript
+describe('Physics-AI Integration', () =>
+{
+  test('should coordinate ball physics with player AI decisions', () =>
+  {
+    const gameState = createGameState({
+      ball: {
+        position: { x: 100, y: 100, z: 5 },
+        velocity: { x: 50, y: 30, z: 0 },
+        spin: 0.2
+      }
+    });
+
+    // Multiple players should calculate acquisition times
+    const players = gameState.teams[0].players;
+
+    // Process one frame
+    ballPhysics.update(gameState.ball, 0.016);
+
+    players.forEach(player => {
+      playerAI.updateAIState(player, gameState);
+    });
+
+    // Find player with best ball acquisition
+    const bestPlayer = players.reduce((best, current) =>
+      current.aiState.ballAcquisitionProbability > best.aiState.ballAcquisitionProbability
+        ? current : best
+    );
+
+    // Best player should move toward predicted ball position
+    const ballPrediction = ballPhysics.predictPosition(gameState.ball, bestPlayer.aiState.timeNeededToGetToBall);
+    const targetDistance = Vector2.distance(bestPlayer.targetPosition, ballPrediction);
+
+    expect(targetDistance).toBeLessThan(50); // Should target predicted position
+    expect(bestPlayer.aiState.hasBestPossession).toBe(true);
   });
 });
 ```

@@ -8,29 +8,48 @@ import { useSessionCreation } from "../hooks/useSessionCreation"
 import { PhaseRouter } from "./PhaseRouter"
 
 export const App: React.FC = () => {
-    const [sessionId, setSessionId] = useState<string | undefined | null>(
-        undefined
-    )
+    console.log("App rendering...")
+    
+    // For POC development, bypass VGF completely
+    if (import.meta.env.DEV) {
+        console.log("DEV mode - rendering POC directly")
+        return <PhaseRouter />
+    }
+    
+    try {
+        const [sessionId, setSessionId] = useState<string | undefined | null>(
+            undefined
+        )
 
-    const transport = useSessionCreation({ sessionId, setSessionId })
+        console.log("About to call useSessionCreation...")
+        const transport = useSessionCreation({ sessionId, setSessionId })
 
-    if (!transport) return null
+        console.log("Transport:", transport)
+        if (!transport) {
+            console.log("No transport, returning null")
+            return <div style={{color: 'white', padding: '20px'}}>Loading transport...</div>
+        }
 
-    return (
-        <PlatformProvider
-            options={{
-                stage: import.meta.env.VITE_STAGE,
-                gameId: GameId,
-                appVersion: packageJson.version,
-                platformApiUrl: "https://platform-api-dev.volley-services.net/",
-                tracking: {
-                    segmentWriteKey: import.meta.env.VITE_SEGMENT_WRITE_KEY,
-                },
-            }}
-        >
-            <VGFProvider transport={transport}>
-                <PhaseRouter />
-            </VGFProvider>
-        </PlatformProvider>
-    )
+        console.log("Rendering with transport")
+        return (
+            <PlatformProvider
+                options={{
+                    stage: import.meta.env.VITE_STAGE,
+                    gameId: GameId,
+                    appVersion: packageJson.version,
+                    platformApiUrl: "https://platform-api-dev.volley-services.net/",
+                    tracking: {
+                        segmentWriteKey: import.meta.env.VITE_SEGMENT_WRITE_KEY,
+                    },
+                }}
+            >
+                <VGFProvider transport={transport}>
+                    <PhaseRouter />
+                </VGFProvider>
+            </PlatformProvider>
+        )
+    } catch (error) {
+        console.error("Error in App:", error)
+        return <div style={{color: 'white', padding: '20px'}}>App Error: {String(error)}</div>
+    }
 }

@@ -1,6 +1,5 @@
 import eslint from "@eslint/js"
 import eslintConfigPrettier from "eslint-config-prettier"
-import eslintPluginPrettierRecommended from "eslint-plugin-prettier/recommended"
 import eslintPluginSimpleImportSort from "eslint-plugin-simple-import-sort"
 import sortClassMembers from "eslint-plugin-sort-class-members"
 import eslintPluginUnusedImports from "eslint-plugin-unused-imports"
@@ -17,6 +16,8 @@ export const baseConfig = typescriptEslint.config(
     ...typescriptEslint.configs.recommendedTypeChecked,
     {
         rules: {
+            // Enforce Allman brace style per CLAUDE.md
+            "brace-style": ["error", "allman", { allowSingleLine: true }],
             "@typescript-eslint/consistent-type-imports": "error",
             "@typescript-eslint/consistent-type-exports": "error",
             "@typescript-eslint/explicit-function-return-type": "error",
@@ -43,7 +44,6 @@ export const baseConfig = typescriptEslint.config(
         },
     },
     /* Plugins */
-    eslintPluginPrettierRecommended,
     {
         plugins: {
             "simple-import-sort": eslintPluginSimpleImportSort,
