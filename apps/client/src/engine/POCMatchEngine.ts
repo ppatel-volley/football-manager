@@ -16,6 +16,7 @@ import { FORMATION_4_4_2, PlayerState, POC_CONFIG } from "../types/POCTypes"
 import { BasicAIController } from "./BasicAIController"
 import { BasicOpponentAI } from "./BasicOpponentAI"
 import { GameTimer } from "./GameTimer"
+import { SeededRNG } from "../utils/SeededRNG"
 
 export class POCMatchEngine {
     private basicAI: BasicAIController
@@ -24,14 +25,22 @@ export class POCMatchEngine {
 
     private gameTimer: GameTimer
 
-    private lastAIUpdate: number = 0
+    private lastAIUpdateGameTime: number = 0
+
+    private rng: SeededRNG
+    private aiUpdateIntervalSeconds: number
 
     private opponentAI: BasicOpponentAI
 
+    private pendingGoalKick: { team: 'RED' | 'BLUE'; takerId: string; position: Vector2 } | null = null
+
     constructor() {
         this.gameTimer = new GameTimer()
-        this.basicAI = new BasicAIController()
+        // Seeded RNG for deterministic POC; fixed seed for reproducibility
+        this.rng = new SeededRNG(123456789)
+        this.basicAI = new BasicAIController(this.rng)
         this.opponentAI = new BasicOpponentAI("BEGINNER")
+        this.aiUpdateIntervalSeconds = POC_CONFIG.AI_UPDATE_INTERVAL_SECONDS
 
         // Initialize with default game state
         this.gameState = this.createInitialGameState()
@@ -99,7 +108,7 @@ export class POCMatchEngine {
     public initializeMatch(): void {
         this.gameState = this.createInitialGameState()
         this.gameTimer.reset()
-        this.lastAIUpdate = 0
+        this.lastAIUpdateGameTime = 0
 
         console.log(
             "POC Match initialized with",
@@ -124,8 +133,11 @@ export class POCMatchEngine {
     public updateFrame(deltaTime: number): void {
         if (!this.gameState.isActive) return
 
-        // Update game timer
-        this.gameTimer.update(deltaTime)
+        // Fixed timestep per TDD: clamp delta to 33.33ms
+        const clampedDelta = Math.min(deltaTime, 1 / 30)
+
+        // Update game timer with clamped delta
+        this.gameTimer.update(clampedDelta)
         this.gameState.gameTime = this.gameTimer.getElapsedTime()
         this.gameState.half = this.gameTimer.getCurrentHalf()
 
@@ -142,28 +154,24 @@ export class POCMatchEngine {
             return
         }
 
-        // Update AI decisions (less frequently for performance)
-        const currentTime = Date.now()
-        if (
-            currentTime - this.lastAIUpdate >
-            POC_CONFIG.AI_UPDATE_INTERVAL_SECONDS * 1000
-        ) {
+        // Update AI decisions (less frequently for performance) using deterministic game time
+        if (this.gameState.gameTime - this.lastAIUpdateGameTime > this.aiUpdateIntervalSeconds) {
             this.processAIDecisions()
-            this.lastAIUpdate = currentTime
+            this.lastAIUpdateGameTime = this.gameState.gameTime
         }
 
         // Process scheduled events
         this.processScheduledEvents()
 
         // Update player positions and ball
-        this.updatePlayerMovement(deltaTime)
-        this.updateBallMovement(deltaTime)
+        this.updatePlayerMovement(clampedDelta)
+        this.updateBallMovement(clampedDelta)
 
         // Basic game logic
         this.checkForGoals()
         this.handleBallOutOfPlay()
         this.updateBallPossession()
-        this.updatePossessionStats(deltaTime)
+        this.updatePossessionStats(clampedDelta)
     }
 
     private calculateDistance(pos1: Vector2, pos2: Vector2): number {
@@ -234,16 +242,18 @@ export class POCMatchEngine {
     }
 
     private chooseAIAction(player: Player): "PASS" | "SHOOT" | "MOVE_FORWARD" {
-        const random = Math.random()
+        const random = this.rng.next()
         const goalX = player.team === "RED" ? POC_CONFIG.FIELD_WIDTH : 0
         const distanceToGoal = Math.abs(player.position.x - goalX)
 
         if (distanceToGoal < 200 && random < 0.4) {
             // Close to goal = more shooting
             return "SHOOT"
-        } else if (random < 0.6) {
+        }
+        else if (random < 0.6) {
             return "PASS"
-        } else {
+        }
+        else {
             return "MOVE_FORWARD"
         }
     }
@@ -395,6 +405,9 @@ export class POCMatchEngine {
             velocity: { x: 0, y: 0 },
             isMoving: false,
             possessor: null,
+            inGoalkeeperHands: false,
+            goalkeeperPossessor: null,
+            timeInHands: 0,
         }
 
         return {
@@ -492,6 +505,18 @@ export class POCMatchEngine {
             case "PASS":
                 this.findAndPass(player)
                 break
+            case "GK_DISTRIBUTE_SHORT":
+                this.goalkeeperDistribute(player, 'short')
+                break
+            case "GK_DISTRIBUTE_LONG":
+                this.goalkeeperDistribute(player, 'long')
+                break
+            case "PASS_LONG":
+                this.executeLongPass(player)
+                break
+            case "CROSS":
+                this.executeCross(player)
+                break
             case "SHOOT":
                 this.shootBall(player)
                 break
@@ -499,6 +524,70 @@ export class POCMatchEngine {
                 this.movePlayerTowards(player, "GOAL")
                 break
         }
+    }
+
+    private goalkeeperDistribute(player: Player, type: 'short' | 'long'): void {
+        if (player.playerType !== 'GOALKEEPER') return
+        // Reset hands state when distributing
+        this.gameState.ball.inGoalkeeperHands = false
+        this.gameState.ball.goalkeeperPossessor = null
+        this.gameState.ball.timeInHands = 0
+        this.clearBallPossession()
+
+        if (type === 'short') {
+            // Find nearby teammate for accurate throw/roll
+            const teammates = this.gameState.teams.find(t => t.color === player.team)?.players.filter(p => p.id !== player.id) || []
+            let target = teammates[0]
+            let best = target ? this.calculateDistance(player.position, target.position) : Infinity
+            for (const tm of teammates) {
+                const d = this.calculateDistance(player.position, tm.position)
+                if (d < best) { best = d; target = tm }
+            }
+            if (!target) return
+            const dir = this.normalizeVector({ x: target.position.x - player.position.x, y: target.position.y - player.position.y })
+            this.gameState.ball.velocity = { x: dir.x * POC_CONFIG.BALL_SPEED * 0.7, y: dir.y * POC_CONFIG.BALL_SPEED * 0.7 }
+        } else {
+            // Long punt toward midfield
+            const midfieldX = player.team === 'RED' ? POC_CONFIG.FIELD_WIDTH * 0.6 : POC_CONFIG.FIELD_WIDTH * 0.4
+            const target = { x: midfieldX, y: POC_CONFIG.FIELD_HEIGHT / 2 + this.rng.nextSigned() * 120 }
+            const dir = this.normalizeVector({ x: target.x - player.position.x, y: target.y - player.position.y })
+            this.gameState.ball.velocity = { x: dir.x * POC_CONFIG.BALL_SPEED * 1.2, y: dir.y * POC_CONFIG.BALL_SPEED * 1.2 }
+        }
+        this.gameState.ball.isMoving = true
+        this.gameState.lastTouchTeam = player.team
+        this.gameState.phase = 'PLAY'
+    }
+
+    private executeLongPass(player: Player): void {
+        const teammates = this.gameState.teams.find(t => t.color === player.team)?.players.filter(p => p.id !== player.id) || []
+        if (teammates.length === 0) return
+        const goalX = player.team === 'RED' ? POC_CONFIG.FIELD_WIDTH : 0
+        let target = teammates[0]
+        let best = Math.abs(target.position.x - goalX)
+        for (const tm of teammates) {
+            const distToGoal = Math.abs(tm.position.x - goalX)
+            if (distToGoal < best) { best = distToGoal; target = tm }
+        }
+        this.clearBallPossession()
+        const dir = this.normalizeVector({ x: target.position.x - player.position.x, y: target.position.y - player.position.y })
+        const power = 1.3
+        this.gameState.ball.velocity = { x: dir.x * POC_CONFIG.BALL_SPEED * power, y: dir.y * POC_CONFIG.BALL_SPEED * power }
+        this.gameState.ball.isMoving = true
+        this.gameState.lastTouchTeam = player.team
+        this.gameState.phase = 'PLAY'
+    }
+
+    private executeCross(player: Player): void {
+        const boxCenterX = player.team === 'RED' ? POC_CONFIG.FIELD_WIDTH - 90 : 90
+        const boxCenterY = this.gameState.restartPosition?.y ?? POC_CONFIG.FIELD_HEIGHT / 2
+        this.clearBallPossession()
+        const target = { x: boxCenterX, y: boxCenterY + this.rng.nextSigned() * 60 }
+        const dir = this.normalizeVector({ x: target.x - player.position.x, y: target.y - player.position.y })
+        const power = 1.1
+        this.gameState.ball.velocity = { x: dir.x * POC_CONFIG.BALL_SPEED * power, y: dir.y * POC_CONFIG.BALL_SPEED * power }
+        this.gameState.ball.isMoving = true
+        this.gameState.lastTouchTeam = player.team
+        this.gameState.phase = 'PLAY'
     }
 
     private findAndPass(player: Player): void {
@@ -595,17 +684,17 @@ export class POCMatchEngine {
         const clamp = (n: number) => Math.max(1, Math.min(10, Math.round(n)))
         if (isGoalkeeper) {
             return {
-                pace: clamp(4 + Math.random() * 3),
-                passing: clamp(4 + Math.random() * 3),
-                shooting: clamp(2 + Math.random() * 2),
-                positioning: clamp(7 + Math.random() * 3),
+                pace: clamp(4 + this.rng.nextInRange(0, 3)),
+                passing: clamp(4 + this.rng.nextInRange(0, 3)),
+                shooting: clamp(2 + this.rng.nextInRange(0, 2)),
+                positioning: clamp(7 + this.rng.nextInRange(0, 3)),
             }
         }
         return {
-            pace: clamp(5 + Math.random() * 5),
-            passing: clamp(4 + Math.random() * 6),
-            shooting: clamp(4 + Math.random() * 6),
-            positioning: clamp(4 + Math.random() * 6),
+            pace: clamp(5 + this.rng.nextInRange(0, 5)),
+            passing: clamp(4 + this.rng.nextInRange(0, 6)),
+            shooting: clamp(4 + this.rng.nextInRange(0, 6)),
+            positioning: clamp(4 + this.rng.nextInRange(0, 6)),
         }
     }
 
@@ -661,7 +750,8 @@ export class POCMatchEngine {
                     }
                 }
             }
-        } else if (outTop || outBottom) {
+        }
+        else if (outTop || outBottom) {
             // Throw-in to the opposite team of last touch, at nearest sideline
             const restartY = outTop ? 0 : POC_CONFIG.FIELD_HEIGHT
             const clampedX = Math.max(0, Math.min(POC_CONFIG.FIELD_WIDTH, x))
@@ -691,7 +781,7 @@ private movePlayerTowardsTarget(player: Player, deltaTime: number): void {
         }
     }
 
-    
+
     private performKickoff(): void {
         console.log(`${this.gameState.kickoffTeam} team performs kickoff`)
 
@@ -707,7 +797,7 @@ private movePlayerTowardsTarget(player: Player, deltaTime: number): void {
         // Small forward kick to satisfy rules, then pass to teammate
         this.gameState.ball.velocity = {
             x: direction * 80, // Forward kick (reduced speed for better control)
-            y: (Math.random() - 0.5) * 20, // Minimal side variation
+            y: this.rng.nextSigned() * 20, // Minimal side variation
         }
         this.gameState.ball.isMoving = true
         this.gameState.lastTouchTeam = this.gameState.kickoffTeam
@@ -749,7 +839,7 @@ private processAIDecisions(): void {
         }
     }
 
-    
+
 
     private processScheduledEvents(): void {
         const currentTime = this.gameState.gameTime
@@ -766,14 +856,60 @@ private processAIDecisions(): void {
         for (const event of eventsToExecute) {
             this.executeScheduledEvent(event)
         }
+
+        // Handle pending goal kick rule check (every frame)
+        if (this.pendingGoalKick) {
+            const { team, takerId, position } = this.pendingGoalKick
+            if (this.canTakeGoalKick(team)) {
+                // Schedule the actual long pass shortly after allowing
+                const scheduled: ScheduledEvent = {
+                    id: `goalkick_${Math.floor(this.gameState.gameTime * 1000)}`,
+                    playerId: takerId,
+                    action: "PASS_LONG",
+                    executeTime: this.gameState.gameTime + 0.3,
+                }
+                this.gameState.scheduledEvents.push(scheduled)
+                this.pendingGoalKick = null
+            }
+        }
+    }
+
+    private canTakeGoalKick(team: 'RED' | 'BLUE'): boolean {
+        // Determine penalty area rectangle for defending team
+        const depth = 135 // 18-yard box depth in px (from renderer constants)
+        const width = 320 // vertical span
+        const topY = (POC_CONFIG.FIELD_HEIGHT - width) / 2
+        const bottomY = topY + width
+        const isRed = team === 'RED'
+        const leftX = isRed ? 0 : POC_CONFIG.FIELD_WIDTH - depth
+        const rightX = isRed ? depth : POC_CONFIG.FIELD_WIDTH
+
+        const oppTeam = this.gameState.teams.find(t => t.color !== team)
+        if (!oppTeam) return true
+
+        const insideOpponents = oppTeam.players.filter(p =>
+            p.position.x >= leftX && p.position.x <= rightX &&
+            p.position.y >= topY && p.position.y <= bottomY
+        )
+
+        if (insideOpponents.length === 0) return true
+
+        // Quick goal kick allowed if all inside opponents are attempting to leave (target outside area)
+        const allAttemptingToLeave = insideOpponents.every(p => {
+            const tx = p.targetPosition.x
+            const ty = p.targetPosition.y
+            const outsideTarget = !(tx >= leftX && tx <= rightX && ty >= topY && ty <= bottomY)
+            return outsideTarget
+        })
+        return allAttemptingToLeave
     }
 private scheduleAIAction(player: Player): void {
         // Schedule an AI action using game time instead of setTimeout
-        const delay = 1 + Math.random() * 2 // 1-3 second delay
+        const delay = 1 + this.rng.nextInRange(0, 2) // 1-3 second delay (deterministic)
         const executeTime = this.gameState.gameTime + delay
 
         const event: ScheduledEvent = {
-            id: `ai_action_${Date.now()}_${player.id}`,
+            id: `ai_action_${Math.floor(this.gameState.gameTime * 1000)}_${player.id}`,
             playerId: player.id,
             action: this.chooseAIAction(player),
             executeTime,
@@ -785,11 +921,11 @@ private scheduleAIAction(player: Player): void {
         )
     }
 
-    
+
     private scheduleKickoffPass(kickoffPlayer: Player, delay: number): void {
         const executeTime = this.gameState.gameTime + delay
         const event: ScheduledEvent = {
-            id: `kickoff_pass_${Date.now()}`,
+            id: `kickoff_pass_${Math.floor(this.gameState.gameTime * 1000)}`,
             playerId: kickoffPlayer.id,
             action: "PASS",
             executeTime,
@@ -801,7 +937,7 @@ private scheduleAIAction(player: Player): void {
         )
     }
 
-    
+
     private updateBallMovement(deltaTime: number): void {
         // If ball has a possessor, keep it with the player
         if (this.gameState.ball.possessor) {
@@ -878,6 +1014,16 @@ private scheduleAIAction(player: Player): void {
             return
         }
 
+        // Goalkeeper hands: treat as special possession state
+        if (this.gameState.ball.inGoalkeeperHands && this.gameState.ball.goalkeeperPossessor) {
+            const gk = this.findPlayerById(this.gameState.ball.goalkeeperPossessor)
+            if (gk) {
+                this.gameState.ball.position = { x: gk.position.x, y: gk.position.y }
+                this.gameState.ball.isMoving = false
+                return
+            }
+        }
+
         let closestPlayer: Player | null = null
         let closestDistance = Infinity
 
@@ -931,10 +1077,10 @@ private updatePlayerMovement(deltaTime: number): void {
         }
     }
 
-    
-    
 
-    
+
+
+
 
     private handleShootCommand(): void {
         const ballCarrier = this.findBallCarrier()
@@ -955,8 +1101,8 @@ private updatePlayerMovement(deltaTime: number): void {
             const goalY = POC_CONFIG.FIELD_HEIGHT / 2
 
             player.targetPosition = {
-                x: goalX + (Math.random() - 0.5) * 100,
-                y: goalY + (Math.random() - 0.5) * 200,
+                x: goalX + this.rng.nextSigned() * 100,
+                y: goalY + this.rng.nextSigned() * 200,
             }
 
             console.log(`${player.name} moves towards goal`)
@@ -1022,17 +1168,90 @@ private updatePlayerMovement(deltaTime: number): void {
     }
 
     private positionForRestart(team: "RED" | "BLUE", position: Vector2): void {
-        // Move all players to base, then slightly bias toward restart area
+        const isCorner = this.gameState.phase === "CORNER_KICK"
+        const isThrowIn = this.gameState.phase === "THROW_IN"
+        const isGoalKick = this.gameState.phase === "GOAL_KICK"
+
+        const attackingTeam = this.gameState.teams.find((t) => t.color === team)
+        const defendingTeam = this.gameState.teams.find((t) => t.color !== team)
+        if (!attackingTeam || !defendingTeam) return
+
         for (const t of this.gameState.teams) {
             for (const p of t.players) {
                 p.targetPosition = { ...p.basePosition }
-                if (t.color === team) {
-                    // Attacking team gathers near position
-                    p.targetPosition.x = (p.basePosition.x + position.x) / 2
-                    p.targetPosition.y = (p.basePosition.y + position.y) / 2
-                }
                 p.state = PlayerState.MAINTAINING_POSITION
             }
+        }
+
+        const jitter = (mag: number) => this.rng.nextSigned() * mag
+
+        if (isCorner) {
+            const taker = this.findNearestPlayer(attackingTeam.players, position)
+            if (taker) taker.targetPosition = { x: position.x, y: position.y }
+
+        const boxX = position.x === 0 ? 35 : POC_CONFIG.FIELD_WIDTH - 35
+        const cornerTop = 0
+        const cornerBottom = POC_CONFIG.FIELD_HEIGHT
+        // If position.y is exactly edge (0 or FIELD_HEIGHT), choose the nearest penalty box center by comparing to midline
+        const boxCenterY = (position.y <= cornerTop + 1)
+            ? POC_CONFIG.FIELD_HEIGHT * 0.3
+            : (position.y >= cornerBottom - 1)
+                ? POC_CONFIG.FIELD_HEIGHT * 0.7
+                : (position.y < POC_CONFIG.FIELD_HEIGHT / 2 ? 120 : POC_CONFIG.FIELD_HEIGHT - 120)
+
+            const attackers = attackingTeam.players.filter((p) => p !== taker)
+            const inBox = attackers.slice(0, 3)
+            const edge = attackers.slice(3, 5)
+            const rest = attackers.slice(5)
+
+            inBox.forEach((p, i) => {
+                p.targetPosition = { x: boxX + jitter(10), y: boxCenterY + (i - 1) * 40 + jitter(10) }
+            })
+
+            const edgeX = position.x === 0 ? 80 : POC_CONFIG.FIELD_WIDTH - 80
+            edge.forEach((p, i) => {
+                p.targetPosition = { x: edgeX + jitter(10), y: boxCenterY + (i * 30 - 15) + jitter(10) }
+            })
+
+            rest.forEach((p, i) => {
+                p.targetPosition = { x: edgeX + (i % 2 === 0 ? 60 : -60) + jitter(10), y: boxCenterY + (i * 25 - 60) + jitter(10) }
+            })
+
+            const defendersSorted = defendingTeam.players.slice()
+            const nearPostY = boxCenterY - 35
+            const farPostY = boxCenterY + 35
+            if (defendersSorted[0]) defendersSorted[0].targetPosition = { x: boxX - (position.x === 0 ? 5 : -5), y: nearPostY }
+            if (defendersSorted[1]) defendersSorted[1].targetPosition = { x: boxX - (position.x === 0 ? 5 : -5), y: farPostY }
+        }
+        else if (isGoalKick) {
+            const gk = this.findGoalkeeper(attackingTeam.players)
+            if (gk) gk.targetPosition = { ...position }
+
+            const leftSide = team === 'RED' ? 1 : -1
+            const cbOffsetX = 40 * leftSide
+            const outfield = attackingTeam.players.filter(p => p !== gk)
+            outfield.forEach((p, idx) => {
+                const laneY = (idx + 1) * (POC_CONFIG.FIELD_HEIGHT / (outfield.length + 1))
+                const isDef = idx < 4
+                const isMid = idx >= 4 && idx < 8
+                const isAtt = idx >= 8
+                if (isDef) p.targetPosition = { x: position.x + cbOffsetX + jitter(10), y: laneY + jitter(8) }
+                else if (isMid) p.targetPosition = { x: position.x + cbOffsetX * 2 + jitter(10), y: laneY + jitter(8) }
+                else if (isAtt) p.targetPosition = { x: position.x + cbOffsetX * 3 + jitter(10), y: laneY + jitter(8) }
+            })
+
+            defendingTeam.players.forEach((p, idx) => {
+                const laneY = (idx + 1) * (POC_CONFIG.FIELD_HEIGHT / (defendingTeam.players.length + 1))
+                p.targetPosition = { x: POC_CONFIG.FIELD_WIDTH / 2 + jitter(20), y: laneY + jitter(8) }
+            })
+        }
+        else if (isThrowIn) {
+            const taker = this.findNearestPlayer(attackingTeam.players, position)
+            if (taker) taker.targetPosition = { x: position.x, y: position.y }
+            const options = attackingTeam.players.filter(p => p !== taker).slice(0, 3)
+            options.forEach((p, i) => {
+                p.targetPosition = { x: position.x + (team === 'RED' ? 40 : -40) + i * 20, y: position.y + (i - 1) * 35 }
+            })
         }
     }
 
@@ -1043,7 +1262,7 @@ private updatePlayerMovement(deltaTime: number): void {
         if (team === "RED") this.gameState.stats.corners.RED++
         else this.gameState.stats.corners.BLUE++
         this.positionForRestart(team, position)
-        this.takeSimpleRestart(team, position)
+        this.takeCornerRestart(team, position)
     }
 
     private queueGoalKick(team: "RED" | "BLUE"): void {
@@ -1055,7 +1274,7 @@ private updatePlayerMovement(deltaTime: number): void {
         if (team === "RED") this.gameState.stats.goalKicks.RED++
         else this.gameState.stats.goalKicks.BLUE++
         this.positionForRestart(team, { x, y })
-        this.takeSimpleRestart(team, { x, y })
+        this.takeGoalKickRestart(team, { x, y })
     }
 private resetBallToCenter(): void {
         this.gameState.ball.position = {
@@ -1067,7 +1286,7 @@ private resetBallToCenter(): void {
         this.gameState.ball.possessor = null
     }
 
-    
+
 
     private queueThrowIn(team: "RED" | "BLUE", position: Vector2): void {
         this.gameState.phase = "THROW_IN"
@@ -1076,7 +1295,7 @@ private resetBallToCenter(): void {
         if (team === "RED") this.gameState.stats.throwIns.RED++
         else this.gameState.stats.throwIns.BLUE++
         this.positionForRestart(team, position)
-        this.takeSimpleRestart(team, position)
+        this.takeThrowInRestart(team, position)
     }
 
     private shootBall(player: Player): void {
@@ -1088,9 +1307,9 @@ private resetBallToCenter(): void {
                 ? { x: POC_CONFIG.FIELD_WIDTH, y: POC_CONFIG.FIELD_HEIGHT / 2 }
                 : { x: 0, y: POC_CONFIG.FIELD_HEIGHT / 2 }
 
-        // Add some shooting accuracy variation (match goal width from renderer)
+            // Add some shooting accuracy variation (match goal width from renderer)
         const goalWidth = 145
-        const targetVariation = (Math.random() - 0.5) * goalWidth * 0.8
+            const targetVariation = this.rng.nextSigned() * goalWidth * 0.8
 
         const direction = this.normalizeVector({
             x: targetGoal.x - player.position.x,
@@ -1110,21 +1329,48 @@ private resetBallToCenter(): void {
         this.incrementShot(player.team)
     }
 
-    private takeSimpleRestart(team: "RED" | "BLUE", position: Vector2): void {
-        // Choose nearest teammate to take the restart
+    private takeCornerRestart(team: "RED" | "BLUE", position: Vector2): void {
         const takingTeam = this.gameState.teams.find((t) => t.color === team)
         if (!takingTeam) return
-        let taker: Player | null = null
-        let best = Infinity
-        for (const p of takingTeam.players) {
-            const d = this.calculateDistance(p.position, position)
-            if (d < best) {
-                best = d
-                taker = p
-            }
-        }
+        const taker = this.findNearestPlayer(takingTeam.players, position)
         if (!taker) return
-        // Place ball and taker
+        this.placeBallForRestart(position, taker, team)
+        const scheduled: ScheduledEvent = {
+            id: `corner_${Math.floor(this.gameState.gameTime * 1000)}`,
+            playerId: taker.id,
+            action: "CROSS",
+            executeTime: this.gameState.gameTime + 1.0,
+        }
+        this.gameState.scheduledEvents.push(scheduled)
+    }
+
+    private takeGoalKickRestart(team: "RED" | "BLUE", position: Vector2): void {
+        const takingTeam = this.gameState.teams.find((t) => t.color === team)
+        if (!takingTeam) return
+        const taker = this.findGoalkeeper(takingTeam.players) || this.findNearestPlayer(takingTeam.players, position)
+        if (!taker) return
+        this.placeBallForRestart(position, taker, team)
+        // Per TDD/PRD: Only take once opponents have attempted to exit the penalty area (or none remain)
+        // We queue a check every 0.2s until allowed, then schedule the long pass 0.3s later
+        this.pendingGoalKick = { team, takerId: taker.id, position: { ...position } }
+    }
+
+    private takeThrowInRestart(team: "RED" | "BLUE", position: Vector2): void {
+        const takingTeam = this.gameState.teams.find((t) => t.color === team)
+        if (!takingTeam) return
+        const taker = this.findNearestPlayer(takingTeam.players, position)
+        if (!taker) return
+        this.placeBallForRestart(position, taker, team)
+        const scheduled: ScheduledEvent = {
+            id: `throwin_${Math.floor(this.gameState.gameTime * 1000)}`,
+            playerId: taker.id,
+            action: "PASS",
+            executeTime: this.gameState.gameTime + 0.4,
+        }
+        this.gameState.scheduledEvents.push(scheduled)
+    }
+
+    private placeBallForRestart(position: Vector2, taker: Player, team: 'RED' | 'BLUE') {
         this.gameState.ball.position = { ...position }
         this.gameState.ball.velocity = { x: 0, y: 0 }
         this.gameState.ball.isMoving = false
@@ -1132,13 +1378,20 @@ private resetBallToCenter(): void {
         taker.hasBall = true
         this.gameState.ball.possessor = taker.id
         this.gameState.lastTouchTeam = team
-        // Quick pass forward to resume play
-        setTimeout(() => {
-            // Safety: ensure still in restart phase
-            if (!this.gameState.isActive) return
-            this.passToNearestTeammate(taker)
-            this.gameState.phase = "PLAY"
-        }, 400)
+    }
+
+    private findNearestPlayer(players: Player[], position: Vector2): Player | null {
+        let best: Player | null = null
+        let bestD = Infinity
+        for (const p of players) {
+            const d = this.calculateDistance(p.position, position)
+            if (d < bestD) { bestD = d; best = p }
+        }
+        return best
+    }
+
+    private findGoalkeeper(players: Player[]): Player | null {
+        return players.find(p => p.playerType === 'GOALKEEPER') || null
     }
 
     private updatePossessionStats(deltaTime: number): void {

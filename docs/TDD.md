@@ -1397,6 +1397,7 @@ enum MatchPhase
   OUT_OF_PLAY = 'out_of_play',         // Ball out of bounds
   THROW_IN = 'throw_in',               // Throw-in restart
   CORNER_KICK = 'corner_kick',         // Corner kick restart
+  GOAL_KICK = 'goal_kick',             // Goal kick restart (opposing players must exit penalty area)
   FREE_KICK = 'free_kick',             // **PHASE 2 ONLY** - Free kick restart
   PENALTY = 'penalty',                 // **PHASE 2 ONLY** - Penalty kick
   GOAL_SCORED = 'goal_scored',         // Goal celebration and reset
@@ -1449,6 +1450,798 @@ interface MatchTime
   accelerationFactor: number;         // 18x (5 real minutes = 90 football minutes)
   lastUpdate: number;                 // Last time update timestamp
 }
+
+### 3.6.5 Goal Kick Implementation (POC)
+
+**FIFA Law 16 Compliance**: Implementation follows FIFA Laws of the Game for goal kick procedures.
+
+#### 3.6.5.1 Goal Kick State Machine
+```typescript
+enum GoalKickPhase {
+  AWAITING_POSITIONING = 'awaiting_positioning',  // Waiting for players to exit penalty area
+  READY_TO_KICK = 'ready_to_kick',               // All players correctly positioned
+  BALL_IN_PLAY = 'ball_in_play'                  // Goal kick taken, ball is active
+}
+
+interface GoalKickState {
+  phase: GoalKickPhase;
+  kickingTeam: 'HOME' | 'AWAY';
+  ballPosition: Vector2;                         // Within goal area (6-yard box)
+  playersExitingPenaltyArea: Player[];           // Opposing players still exiting
+  canTakeKick: boolean;                          // Referee allows kick
+  timeInPhase: number;                           // Seconds in current phase
+}
+
+class GoalKickController {
+  private penaltyAreaBounds: FieldZone;
+  private goalAreaBounds: FieldZone;
+  
+  constructor() {
+    // Define penalty area (18-yard box) and goal area (6-yard box) bounds
+    this.penaltyAreaBounds = this.calculatePenaltyAreaBounds();
+    this.goalAreaBounds = this.calculateGoalAreaBounds();
+  }
+  
+  public initiateGoalKick(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): GoalKickState {
+    const ballPosition = this.placeBallInGoalArea(kickingTeam);
+    const opposingPlayers = this.getOpposingPlayers(gameState, kickingTeam);
+    const playersInPenaltyArea = opposingPlayers.filter(player => 
+      this.isPlayerInPenaltyArea(player.position, kickingTeam)
+    );
+    
+    return {
+      phase: playersInPenaltyArea.length > 0 ? GoalKickPhase.AWAITING_POSITIONING : GoalKickPhase.READY_TO_KICK,
+      kickingTeam,
+      ballPosition,
+      playersExitingPenaltyArea: playersInPenaltyArea,
+      canTakeKick: playersInPenaltyArea.length === 0,
+      timeInPhase: 0
+    };
+  }
+  
+  public updateGoalKickState(goalKickState: GoalKickState, gameState: GameState, deltaTime: number): GoalKickState {
+    goalKickState.timeInPhase += deltaTime;
+    
+    switch (goalKickState.phase) {
+      case GoalKickPhase.AWAITING_POSITIONING:
+        return this.updateAwaitingPositioning(goalKickState, gameState);
+        
+      case GoalKickPhase.READY_TO_KICK:
+        return this.updateReadyToKick(goalKickState, gameState);
+        
+      case GoalKickPhase.BALL_IN_PLAY:
+        // Goal kick completed, transition back to normal play
+        gameState.phase = MatchPhase.IN_PLAY;
+        break;
+    }
+    
+    return goalKickState;
+  }
+  
+  private updateAwaitingPositioning(goalKickState: GoalKickState, gameState: GameState): GoalKickState {
+    const opposingPlayers = this.getOpposingPlayers(gameState, goalKickState.kickingTeam);
+    const playersStillInPenaltyArea = opposingPlayers.filter(player => 
+      this.isPlayerInPenaltyArea(player.position, goalKickState.kickingTeam)
+    );
+    
+    // Check if all players are attempting to leave (moving away from penalty area center)
+    const playersAttemptingToLeave = playersStillInPenaltyArea.filter(player => 
+      this.isPlayerAttemptingToExit(player, goalKickState.kickingTeam)
+    );
+    
+    goalKickState.playersExitingPenaltyArea = playersStillInPenaltyArea;
+    
+    // Allow quick goal kick if players are actively leaving penalty area
+    const allowQuickKick = playersStillInPenaltyArea.length === 0 || 
+                          (playersAttemptingToLeave.length === playersStillInPenaltyArea.length);
+    
+    if (allowQuickKick) {
+      goalKickState.phase = GoalKickPhase.READY_TO_KICK;
+      goalKickState.canTakeKick = true;
+      goalKickState.timeInPhase = 0;
+    }
+    
+    return goalKickState;
+  }
+  
+  private updateReadyToKick(goalKickState: GoalKickState, gameState: GameState): GoalKickState {
+    // AI automatically takes goal kick after brief delay
+    if (goalKickState.timeInPhase > 2.0) { // 2 second delay for realism
+      this.executeGoalKick(goalKickState, gameState);
+      goalKickState.phase = GoalKickPhase.BALL_IN_PLAY;
+    }
+    
+    return goalKickState;
+  }
+  
+  private executeGoalKick(goalKickState: GoalKickState, gameState: GameState): void {
+    const goalkeeper = this.findGoalkeeper(gameState, goalKickState.kickingTeam);
+    
+    if (goalkeeper) {
+      // Move goalkeeper to ball position
+      goalkeeper.position = { ...goalKickState.ballPosition };
+      
+      // Execute kick - ball becomes in play
+      const kickDirection = this.calculateKickDirection(gameState, goalKickState.kickingTeam);
+      const kickPower = 0.8; // Moderate power for POC
+      
+      gameState.ball.position = { ...goalKickState.ballPosition };
+      gameState.ball.velocity = {
+        x: kickDirection.x * kickPower,
+        y: kickDirection.y * kickPower
+      };
+      
+      gameState.ball.isMoving = true;
+      gameState.ball.possessor = null; // Ball is free
+      gameState.lastTouch = goalkeeper;
+    }
+  }
+  
+  private isPlayerInPenaltyArea(playerPosition: Vector2, defendingTeam: 'HOME' | 'AWAY'): boolean {
+    const penaltyArea = this.getPenaltyAreaForTeam(defendingTeam);
+    
+    return playerPosition.x >= penaltyArea.left && 
+           playerPosition.x <= penaltyArea.right && 
+           playerPosition.y >= penaltyArea.top && 
+           playerPosition.y <= penaltyArea.bottom;
+  }
+  
+  private isPlayerAttemptingToExit(player: Player, defendingTeam: 'HOME' | 'AWAY'): boolean {
+    const penaltyAreaCenter = this.getPenaltyAreaCenter(defendingTeam);
+    const distanceToCenterNow = this.calculateDistance(player.position, penaltyAreaCenter);
+    const distanceToCenterTarget = this.calculateDistance(player.targetPosition, penaltyAreaCenter);
+    
+    // Player is attempting to exit if moving away from penalty area center
+    return distanceToCenterTarget > distanceToCenterNow;
+  }
+  
+  private placeBallInGoalArea(kickingTeam: 'HOME' | 'AWAY'): Vector2 {
+    const goalArea = this.getGoalAreaForTeam(kickingTeam);
+    
+    // Place ball in center of goal area for POC simplicity
+    return {
+      x: (goalArea.left + goalArea.right) / 2,
+      y: (goalArea.top + goalArea.bottom) / 2
+    };
+  }
+  
+  private calculateKickDirection(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): Vector2 {
+    // Simple POC implementation - kick toward center field
+    const fieldCenter = { x: POC_CONFIG.FIELD_WIDTH / 2, y: POC_CONFIG.FIELD_HEIGHT / 2 };
+    const ballPos = gameState.ball.position;
+    
+    const direction = {
+      x: fieldCenter.x - ballPos.x,
+      y: fieldCenter.y - ballPos.y
+    };
+    
+    const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+    
+    return {
+      x: direction.x / magnitude,
+      y: direction.y / magnitude
+    };
+  }
+}
+```
+
+#### 3.6.5.2 AI Behavior During Goal Kicks
+```typescript
+class GoalKickAIBehavior {
+  public updatePlayerDuringGoalKick(player: Player, goalKickState: GoalKickState, gameState: GameState): void {
+    const isKickingTeam = player.team === goalKickState.kickingTeam;
+    
+    if (isKickingTeam) {
+      this.handleKickingTeamPlayer(player, goalKickState, gameState);
+    } else {
+      this.handleOpposingTeamPlayer(player, goalKickState, gameState);
+    }
+  }
+  
+  private handleOpposingTeamPlayer(player: Player, goalKickState: GoalKickState, gameState: GameState): void {
+    const isInPenaltyArea = this.isPlayerInPenaltyArea(player.position, goalKickState.kickingTeam);
+    
+    if (isInPenaltyArea) {
+      // Must attempt to leave penalty area
+      const exitDirection = this.calculateExitDirection(player.position, goalKickState.kickingTeam);
+      player.targetPosition = {
+        x: player.position.x + exitDirection.x * 50, // Move 50 pixels toward exit
+        y: player.position.y + exitDirection.y * 50
+      };
+      
+      player.state = PlayerState.MAINTAINING_POSITION; // Don't interfere with other AI
+    } else {
+      // Position outside penalty area, prepare for when ball comes into play
+      player.targetPosition = this.calculateReadyPosition(player, goalKickState);
+      player.state = PlayerState.MAINTAINING_POSITION;
+    }
+  }
+  
+  private handleKickingTeamPlayer(player: Player, goalKickState: GoalKickState, gameState: GameState): void {
+    if (player.playerType === 'GOALKEEPER') {
+      // Goalkeeper moves to ball to take the kick
+      player.targetPosition = { ...goalKickState.ballPosition };
+    } else {
+      // Other players position for receiving the goal kick
+      player.targetPosition = this.calculateReceivingPosition(player, goalKickState);
+    }
+    
+    player.state = PlayerState.MAINTAINING_POSITION;
+  }
+}
+```
+
+### 3.6.6 Goalkeeper Ball Handling System (POC)
+
+**FIFA Law 12 Compliance**: Goalkeeper can handle ball within penalty area, 6-second rule when ball is in hands.
+
+#### 3.6.6.1 Goalkeeper Ball States
+```typescript
+enum GoalkeeperBallState {
+  NO_POSSESSION = 'no_possession',         // Goalkeeper doesn't have ball
+  AT_FEET = 'at_feet',                    // Ball on ground, can dribble
+  IN_HANDS = 'in_hands',                  // Ball caught/picked up, 6-second rule
+  DISTRIBUTING = 'distributing'           // In process of releasing ball
+}
+
+interface GoalkeeperPossession {
+  state: GoalkeeperBallState;
+  timeInHands: number;                    // Seconds ball has been in hands
+  distributionMethod: 'drop_kick' | 'throw' | 'roll' | 'punt' | null;
+  targetPlayer: Player | null;            // Intended recipient for distribution
+  maxHandsTime: number;                   // 6 seconds (FIFA Law 12)
+}
+
+class GoalkeeperController {
+  private possession: GoalkeeperPossession;
+  private penaltyAreaBounds: FieldZone;
+  
+  constructor() {
+    this.possession = {
+      state: GoalkeeperBallState.NO_POSSESSION,
+      timeInHands: 0,
+      distributionMethod: null,
+      targetPlayer: null,
+      maxHandsTime: 6.0
+    };
+    
+    this.penaltyAreaBounds = this.calculatePenaltyAreaBounds();
+  }
+  
+  public updateGoalkeeperPossession(goalkeeper: Player, gameState: GameState, deltaTime: number): void {
+    if (!this.isGoalkeeperInPenaltyArea(goalkeeper)) {
+      // Outside penalty area - no special handling allowed
+      this.possession.state = GoalkeeperBallState.NO_POSSESSION;
+      return;
+    }
+    
+    switch (this.possession.state) {
+      case GoalkeeperBallState.NO_POSSESSION:
+        this.checkForBallAcquisition(goalkeeper, gameState);
+        break;
+        
+      case GoalkeeperBallState.AT_FEET:
+        this.updateAtFeetState(goalkeeper, gameState, deltaTime);
+        break;
+        
+      case GoalkeeperBallState.IN_HANDS:
+        this.updateInHandsState(goalkeeper, gameState, deltaTime);
+        break;
+        
+      case GoalkeeperBallState.DISTRIBUTING:
+        this.updateDistributingState(goalkeeper, gameState, deltaTime);
+        break;
+    }
+  }
+  
+  private updateInHandsState(goalkeeper: Player, gameState: GameState, deltaTime: number): void {
+    this.possession.timeInHands += deltaTime;
+    
+    // Trigger opposing team retreat when goalkeeper has ball in hands
+    this.triggerOpposingTeamRetreat(gameState, goalkeeper.team);
+    
+    // Must distribute within 6 seconds (FIFA Law 12)
+    if (this.possession.timeInHands >= this.possession.maxHandsTime) {
+      this.forcedDistribution(goalkeeper, gameState);
+      return;
+    }
+    
+    // AI decision: choose distribution method
+    if (this.possession.timeInHands > 2.0) { // Hold for 2 seconds to assess options
+      const distributionDecision = this.chooseDistributionMethod(goalkeeper, gameState);
+      this.executeDistribution(goalkeeper, gameState, distributionDecision);
+    }
+  }
+  
+  private chooseDistributionMethod(goalkeeper: Player, gameState: GameState): DistributionDecision {
+    const teammates = this.getTeammates(goalkeeper, gameState);
+    const opposingPlayers = this.getOpposingPlayers(goalkeeper, gameState);
+    
+    // Assess tactical situation
+    const nearbyTeammates = teammates.filter(player => 
+      this.calculateDistance(goalkeeper.position, player.position) < 200
+    );
+    
+    const opposingPressure = opposingPlayers.filter(player =>
+      this.calculateDistance(goalkeeper.position, player.position) < 300
+    ).length;
+    
+    if (opposingPressure > 2 || nearbyTeammates.length === 0) {
+      // High pressure or no nearby options - go long
+      return {
+        method: 'drop_kick',
+        target: this.findLongDistributionTarget(teammates),
+        power: 0.9, // High power for distance
+        reason: 'escape_pressure'
+      };
+    } else {
+      // Safe to distribute short
+      return {
+        method: Math.random() > 0.5 ? 'throw' : 'roll',
+        target: this.findShortDistributionTarget(nearbyTeammates),
+        power: 0.4, // Moderate power for accuracy
+        reason: 'maintain_possession'
+      };
+    }
+  }
+  
+  private executeDistribution(goalkeeper: Player, gameState: GameState, decision: DistributionDecision): void {
+    this.possession.state = GoalkeeperBallState.DISTRIBUTING;
+    this.possession.distributionMethod = decision.method;
+    this.possession.targetPlayer = decision.target;
+    
+    const direction = this.calculateDistributionDirection(goalkeeper.position, decision.target.position);
+    
+    switch (decision.method) {
+      case 'drop_kick':
+        this.executeDropKick(gameState, direction, decision.power);
+        break;
+        
+      case 'throw':
+        this.executeThrow(gameState, direction, decision.power);
+        break;
+        
+      case 'roll':
+        this.executeRoll(gameState, direction, decision.power);
+        break;
+        
+      case 'punt':
+        this.executePunt(gameState, direction, decision.power);
+        break;
+    }
+  }
+  
+  private executeDropKick(gameState: GameState, direction: Vector2, power: number): void {
+    // Drop kick: ball is dropped and kicked for long distribution
+    const velocity = {
+      x: direction.x * power * 800, // High speed for distance
+      y: direction.y * power * 800
+    };
+    
+    gameState.ball.velocity = velocity;
+    gameState.ball.isMoving = true;
+    gameState.ball.possessor = null;
+    
+    // Reset goalkeeper possession
+    this.resetPossession();
+  }
+  
+  private executeThrow(gameState: GameState, direction: Vector2, power: number): void {
+    // Hand throw: accurate short distribution
+    const velocity = {
+      x: direction.x * power * 400, // Moderate speed for accuracy
+      y: direction.y * power * 400
+    };
+    
+    gameState.ball.velocity = velocity;
+    gameState.ball.isMoving = true;
+    gameState.ball.possessor = null;
+    
+    this.resetPossession();
+  }
+  
+  private executeRoll(gameState: GameState, direction: Vector2, power: number): void {
+    // Ground roll: very short, accurate distribution
+    const velocity = {
+      x: direction.x * power * 200, // Low speed, stays on ground
+      y: direction.y * power * 200
+    };
+    
+    gameState.ball.velocity = velocity;
+    gameState.ball.isMoving = true;
+    gameState.ball.possessor = null;
+    
+    this.resetPossession();
+  }
+  
+  private triggerOpposingTeamRetreat(gameState: GameState, goalkeepingTeam: 'HOME' | 'AWAY'): void {
+    const opposingTeam = goalkeepingTeam === 'HOME' ? 'AWAY' : 'HOME';
+    const opposingPlayers = gameState.teams.find(team => team.name === opposingTeam)?.players || [];
+    
+    // Opposing players retreat toward own half to defend counter-attack
+    opposingPlayers.forEach(player => {
+      if (player.playerType !== 'GOALKEEPER') {
+        const ownHalfX = opposingTeam === 'HOME' ? 
+          POC_CONFIG.FIELD_WIDTH * 0.25 : 
+          POC_CONFIG.FIELD_WIDTH * 0.75;
+        
+        // Move toward own half, maintaining some width
+        player.targetPosition = {
+          x: ownHalfX,
+          y: player.basePosition.y + (Math.random() - 0.5) * 100
+        };
+        
+        player.state = PlayerState.DEFENDING; // Switch to defensive mindset
+      }
+    });
+  }
+  
+  private resetPossession(): void {
+    this.possession = {
+      state: GoalkeeperBallState.NO_POSSESSION,
+      timeInHands: 0,
+      distributionMethod: null,
+      targetPlayer: null,
+      maxHandsTime: 6.0
+    };
+  }
+}
+
+interface DistributionDecision {
+  method: 'drop_kick' | 'throw' | 'roll' | 'punt';
+  target: Player;
+  power: number; // 0.0-1.0
+  reason: 'escape_pressure' | 'maintain_possession' | 'counter_attack';
+}
+```
+
+#### 3.6.6.2 Enhanced Ball Class for Goalkeeper Handling
+```typescript
+// Extension to existing Ball class
+interface Ball {
+  // ... existing properties
+  inGoalkeeperHands: boolean;              // Ball is held by goalkeeper
+  goalkeeperPossessor: Player | null;      // Which goalkeeper has it
+  timeInHands: number;                     // Seconds in goalkeeper's hands
+  
+  // New methods for goalkeeper handling
+  pickUpByGoalkeeper(goalkeeper: Player): void;
+  dropFromHands(): void;
+  isWithinGoalkeeperReach(goalkeeper: Player): boolean;
+}
+
+class EnhancedBall extends Ball {
+  public pickUpByGoalkeeper(goalkeeper: Player): void {
+    if (this.isWithinGoalkeeperReach(goalkeeper)) {
+      this.inGoalkeeperHands = true;
+      this.goalkeeperPossessor = goalkeeper;
+      this.possessor = goalkeeper.id;
+      this.velocity = { x: 0, y: 0 };
+      this.isMoving = false;
+      this.timeInHands = 0;
+    }
+  }
+  
+  public dropFromHands(): void {
+    this.inGoalkeeperHands = false;
+    this.goalkeeperPossessor = null;
+    this.timeInHands = 0;
+    // Ball remains at goalkeeper's feet until kicked
+  }
+  
+  public isWithinGoalkeeperReach(goalkeeper: Player): boolean {
+    const distance = this.calculateDistance(this.position, goalkeeper.position);
+    return distance < 15; // 15 pixels reach for POC
+  }
+}
+```
+
+#### 3.6.6.3 Tactical AI Response to Goalkeeper Possession
+```typescript
+class TacticalAIResponse {
+  public respondToGoalkeeperPossession(gameState: GameState, goalkeepingTeam: 'HOME' | 'AWAY'): void {
+    const opposingTeam = goalkeepingTeam === 'HOME' ? 'AWAY' : 'HOME';
+    const opposingPlayers = this.getTeamPlayers(gameState, opposingTeam);
+    
+    // Immediate tactical response: retreat and prepare for counter-attack defense
+    opposingPlayers.forEach(player => {
+      if (player.playerType !== 'GOALKEEPER') {
+        this.setRetreatBehavior(player, opposingTeam);
+      }
+    });
+    
+    // Adjust formation to defensive shape
+    this.adjustFormationForDefense(gameState, opposingTeam);
+  }
+  
+  private setRetreatBehavior(player: Player, team: 'HOME' | 'AWAY'): void {
+    const ownHalfCenterX = team === 'HOME' ? 
+      POC_CONFIG.FIELD_WIDTH * 0.25 : 
+      POC_CONFIG.FIELD_WIDTH * 0.75;
+    
+    // Players retreat but maintain some attacking potential
+    const retreatIntensity = player.attributes?.positioning || 0.5; // Use positioning attribute
+    
+    player.targetPosition = {
+      x: player.basePosition.x + (ownHalfCenterX - player.basePosition.x) * retreatIntensity * 0.6,
+      y: player.basePosition.y
+    };
+    
+    player.state = PlayerState.DEFENDING;
+  }
+}
+```
+
+#### 3.6.6.4 FIFA Law 12 Enhanced Goalkeeper System
+
+```typescript
+class FIFALaw12GoalkeeperController extends GoalkeeperController {
+  private passBackViolations: PassBackViolation[] = [];
+  private sweepingBehaviour: SweeperKeeperBehaviour;
+  
+  constructor() {
+    super();
+    this.sweepingBehaviour = new SweeperKeeperBehaviour();
+  }
+  
+  public checkPassBackRule(ball: Ball, lastTouchPlayer: Player, goalkeeper: Player): boolean {
+    // FIFA Law 12: Goalkeeper cannot handle ball deliberately passed by teammate's foot
+    if (!lastTouchPlayer || lastTouchPlayer.team !== goalkeeper.team) {
+      return true; // Legal - not from teammate
+    }
+    
+    if (!this.wasDeliberateFootPass(lastTouchPlayer, ball)) {
+      return true; // Legal - deflection, header, or chest pass
+    }
+    
+    // Violation detected
+    this.recordPassBackViolation(goalkeeper, lastTouchPlayer);
+    return false;
+  }
+  
+  public canOutfieldPlayerChallenge(goalkeeper: Player, challengingPlayer: Player, ball: Ball): boolean {
+    // FIFA Law 12: Outfield players cannot tackle/dispossess goalkeeper when ball is in hands
+    if (challengingPlayer.playerType === 'GOALKEEPER') {
+      return true; // Goalkeeper vs goalkeeper is allowed
+    }
+    
+    if (ball.inGoalkeeperHands && ball.goalkeeperPossessor === goalkeeper.id) {
+      return false; // Cannot challenge when ball is in keeper's hands
+    }
+    
+    // Can challenge when ball is at goalkeeper's feet
+    const distanceToKeeper = this.calculateDistance(ball.position, goalkeeper.position);
+    const ballAtFeet = distanceToKeeper < 15 && !ball.inGoalkeeperHands;
+    
+    return ballAtFeet;
+  }
+  
+  private wasDeliberateFootPass(player: Player, ball: Ball): boolean {
+    // Simple POC logic: check if player was in passing state and used foot
+    const wasInPassingAction = player.state === PlayerState.ATTACKING || 
+                              player.state === PlayerState.MAINTAINING_POSITION;
+    const ballSpeed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2);
+    
+    // Deliberate passes typically have controlled speed
+    return wasInPassingAction && ballSpeed > 50 && ballSpeed < 200;
+  }
+  
+  private recordPassBackViolation(goalkeeper: Player, passer: Player): void {
+    const violation: PassBackViolation = {
+      timestamp: Date.now(),
+      goalkeeper: goalkeeper.id,
+      passer: passer.id,
+      penaltyAwarded: 'indirect_free_kick'
+    };
+    
+    this.passBackViolations.push(violation);
+    // Award indirect free kick to opposing team at the spot of the handling
+  }
+  
+  // Enhanced 6-second rule with progressive urgency
+  private enforceEnhanced6SecondRule(goalkeeper: Player, gameState: GameState, deltaTime: number): void {
+    if (this.possession.state !== GoalkeeperBallState.IN_HANDS) return;
+    
+    this.possession.timeInHands += deltaTime;
+    
+    // Progressive urgency system
+    if (this.possession.timeInHands > 4.0) {
+      // Warning phase - goalkeeper becomes more urgent
+      this.increaseDistributionUrgency(goalkeeper);
+    }
+    
+    if (this.possession.timeInHands > 5.5) {
+      // Critical phase - must distribute immediately
+      this.forcedUrgentDistribution(goalkeeper, gameState);
+    }
+    
+    if (this.possession.timeInHands >= 6.0) {
+      // Violation - indirect free kick
+      this.awardIndirectFreeKick(gameState, goalkeeper);
+    }
+  }
+  
+  private increaseDistributionUrgency(goalkeeper: Player): void {
+    // Reduce decision time and prefer quicker distribution methods
+    goalkeeper.speed *= 1.2; // Slight speed increase to show urgency
+  }
+}
+
+// Sweeper-keeper behaviour for modern goalkeeper role
+class SweeperKeeperBehaviour {
+  private rushOutThreshold: number = 300; // Distance threshold for rushing out
+  private maxRushDistance: number = 200;  // Maximum distance from goal
+  
+  public shouldRushOut(goalkeeper: Player, gameState: GameState): boolean {
+    const ball = gameState.ball;
+    const opponentWithBall = this.getOpponentBallCarrier(gameState, goalkeeper.team);
+    
+    if (!opponentWithBall) return false;
+    
+    // Calculate threat level
+    const distanceToGoal = this.calculateDistance(
+      opponentWithBall.position, 
+      this.getGoalPosition(goalkeeper.team)
+    );
+    
+    const opponentSpeed = this.calculatePlayerSpeed(opponentWithBall);
+    const timeToGoal = distanceToGoal / Math.max(opponentSpeed, 1);
+    
+    // Rush out criteria
+    const isInRushZone = distanceToGoal < this.rushOutThreshold;
+    const canReachFirst = this.canGoalkeeperReachFirst(goalkeeper, opponentWithBall, ball);
+    const lowRisk = timeToGoal > 1.5; // Enough time to reach and clear
+    
+    return isInRushZone && canReachFirst && lowRisk;
+  }
+  
+  public executeSweepingAction(goalkeeper: Player, gameState: GameState): void {
+    const ball = gameState.ball;
+    const interceptPoint = this.calculateOptimalInterceptPoint(goalkeeper, ball);
+    
+    // Move outside penalty area if necessary for sweep
+    const clampedInterceptPoint = this.clampToSafeRushDistance(
+      goalkeeper, 
+      interceptPoint, 
+      this.maxRushDistance
+    );
+    
+    goalkeeper.targetPosition = clampedInterceptPoint;
+    goalkeeper.state = PlayerState.SWEEPING;
+    goalkeeper.speed *= 1.4; // Increased speed for sweeping action
+  }
+  
+  private calculateOptimalInterceptPoint(goalkeeper: Player, ball: Ball): Vector2 {
+    // Predict ball trajectory and find optimal intercept point
+    const ballVelocity = ball.velocity;
+    const ballPosition = ball.position;
+    
+    // Simple linear prediction (POC level)
+    const timeSteps = 10;
+    let bestInterceptPoint = ballPosition;
+    let minTimeToIntercept = Infinity;
+    
+    for (let t = 1; t <= timeSteps; t++) {
+      const futureTime = t * 0.1; // 0.1 second steps
+      const futureBallPos = {
+        x: ballPosition.x + ballVelocity.x * futureTime,
+        y: ballPosition.y + ballVelocity.y * futureTime
+      };
+      
+      const keeperTravelTime = this.calculateDistance(goalkeeper.position, futureBallPos) / 
+                              (goalkeeper.speed || 100);
+      
+      if (keeperTravelTime < futureTime && futureTime < minTimeToIntercept) {
+        minTimeToIntercept = futureTime;
+        bestInterceptPoint = futureBallPos;
+      }
+    }
+    
+    return bestInterceptPoint;
+  }
+}
+
+// Enhanced goalkeeper communication and defensive organisation
+class GoalkeeperLeadershipController {
+  public organiseDefensiveLine(goalkeeper: Player, gameState: GameState): void {
+    const teammates = this.getTeamPlayers(gameState, goalkeeper.team)
+      .filter(p => p.playerType === 'OUTFIELD');
+    
+    const ballPosition = gameState.ball.position;
+    const threatLevel = this.assessThreatLevel(gameState, goalkeeper.team);
+    
+    // Adjust defensive line based on ball position and threat
+    const optimalDefenseLineX = this.calculateOptimalDefenseLinePosition(
+      goalkeeper, 
+      ballPosition, 
+      threatLevel
+    );
+    
+    teammates.forEach(player => {
+      if (this.isDefensivePlayer(player)) {
+        this.adjustPlayerToDefensiveLine(player, optimalDefenseLineX);
+      }
+    });
+  }
+  
+  private calculateOptimalDefenseLinePosition(
+    goalkeeper: Player, 
+    ballPosition: Vector2, 
+    threatLevel: number
+  ): number {
+    const goalX = this.getGoalPosition(goalkeeper.team).x;
+    const baseLine = goalX + (goalkeeper.team === 'HOME' ? 100 : -100);
+    
+    // Adjust line based on ball position and threat
+    const ballAdjustment = (ballPosition.x - goalX) * 0.3 * threatLevel;
+    
+    return baseLine + ballAdjustment;
+  }
+  
+  public coordinateSetPieceDefense(goalkeeper: Player, gameState: GameState): void {
+    // Command defensive positioning for set pieces
+    if (gameState.phase === 'CORNER_KICK' || gameState.phase === 'GOAL_KICK') {
+      this.setCornerDefensePositions(goalkeeper, gameState);
+    }
+  }
+}
+
+interface PassBackViolation {
+  timestamp: number;
+  goalkeeper: string;
+  passer: string;
+  penaltyAwarded: 'indirect_free_kick';
+}
+
+// Goalkeeper protection and collision rules
+class GoalkeeperPhysicalProtection {
+  public canPlayerApproachGoalkeeper(
+    player: Player, 
+    goalkeeper: Player, 
+    ball: Ball, 
+    gameState: GameState
+  ): boolean {
+    // Players can always approach, but cannot make physical challenges when ball is in hands
+    return true;
+  }
+  
+  public canPlayerMakePhysicalChallenge(
+    challengingPlayer: Player, 
+    goalkeeper: Player, 
+    ball: Ball
+  ): boolean {
+    // FIFA Law 12: Cannot tackle/dispossess when ball is in goalkeeper's hands
+    if (ball.inGoalkeeperHands && ball.goalkeeperPossessor === goalkeeper.id) {
+      return false;
+    }
+    
+    // Can challenge when ball is at goalkeeper's feet (within reach distance)
+    const distanceToKeeper = this.calculateDistance(ball.position, goalkeeper.position);
+    const ballAtFeet = distanceToKeeper < 15; // POC: 15 pixel reach distance
+    
+    return ballAtFeet && !ball.inGoalkeeperHands;
+  }
+  
+  public handleIllegalGoalkeeperChallenge(
+    challengingPlayer: Player,
+    goalkeeper: Player, 
+    gameState: GameState
+  ): void {
+    // Award indirect free kick for challenging goalkeeper with ball in hands
+    // This would be a development-time safety check
+    console.warn(`Illegal challenge: ${challengingPlayer.id} attempted to tackle goalkeeper with ball in hands`);
+    
+    // In full implementation, this would award an indirect free kick
+    // For POC, we just prevent the action from occurring
+  }
+  
+  private calculateDistance(pos1: Vector2, pos2: Vector2): number {
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+}
+```
 
 interface WeatherConditions
 {
@@ -3326,6 +4119,39 @@ describe('POC Ball Physics', () => {
       expect(restart.type).toBe(testCase.expected);
       expect(executionTimeMs).toBeLessThan(3000); // PRD: within 3 seconds
     }
+  });
+  
+  test('should enforce FIFA Law 16 goal kick positioning rules', async () => {
+    const gameState = createGameState();
+    const goalKickController = new GoalKickController();
+    
+    // Set up scenario: opposing players in penalty area during goal kick
+    const opposingPlayers = gameState.teams[1].players.slice(0, 3);
+    opposingPlayers.forEach((player, i) => {
+      player.position = { 
+        x: 100 + i * 20, // Inside home team's penalty area
+        y: 400 + i * 50 
+      };
+    });
+    
+    const goalKickState = goalKickController.initiateGoalKick(gameState, 'HOME');
+    
+    // Should wait for positioning (FIFA Law 16 compliance)
+    expect(goalKickState.phase).toBe('awaiting_positioning');
+    expect(goalKickState.canTakeKick).toBe(false);
+    expect(goalKickState.playersExitingPenaltyArea.length).toBe(3);
+    
+    // Simulate players attempting to exit penalty area
+    opposingPlayers.forEach(player => {
+      player.targetPosition = { x: 300, y: player.position.y }; // Moving away
+      player.position = { x: player.position.x + 15, y: player.position.y }; // Gradual exit
+    });
+    
+    const updatedState = goalKickController.updateGoalKickState(goalKickState, gameState, 0.1);
+    
+    // Should now allow kick (players attempting to leave)
+    expect(updatedState.phase).toBe('ready_to_kick');
+    expect(updatedState.canTakeKick).toBe(true);
   });
 });
 ```

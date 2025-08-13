@@ -23,6 +23,8 @@ export const useUserId = (): string | undefined => {
                 setUserId(newUserId)
             } catch (error) {
                 console.error("Error setting user ID", error)
+            } finally {
+                setUserId(newUserId)
             }
         }
     }, [])

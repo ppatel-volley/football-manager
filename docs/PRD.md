@@ -58,6 +58,45 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Adaptive/Learning AI**: Advanced AI behaviour deferred
 - **Multiplayer**: Real-time multiplayer functionality deferred
 
+#### 3.0.3 Goal Kick Implementation
+
+**Rule Implementation**: When a goal kick occurs, the referee only allows the game to commence once all opposing players have attempted to exit the penalty area, as per FIFA Laws of the Game.
+
+**POC Behaviour**:
+- Ball is placed within the defending team's goal area (6-yard box)
+- All opposing players must move outside the penalty area before the kick can be taken
+- If any opposing player remains in the penalty area, they must attempt to leave
+- Ball becomes in play once kicked and clearly moves
+- Quick goal kicks allowed if opposing players are actively leaving the penalty area
+
+#### 3.0.4 Goalkeeper Ball Handling
+
+**Goalkeeper Possession Types**:
+- **At Feet**: Goalkeeper controls ball on ground, can dribble within penalty area
+- **In Hands**: Goalkeeper catches/picks up ball, has 6 seconds to release (FIFA Law 12)
+
+**Goalkeeper Distribution Methods**:
+- **Drop Kick**: Goalkeeper drops ball and kicks it long (typically 40-60 yards)
+- **Throw**: Short distribution by hand to nearby teammate (typically 10-20 yards)
+- **Roll**: Ground distribution to feet of nearby teammate
+- **Punt**: Direct kick from hands for maximum distance
+
+**FIFA Law 12 Restrictions**:
+- **Pass-back Rule**: Goalkeeper cannot handle ball directly from deliberate pass by teammate's foot
+- **6-Second Rule**: Goalkeeper must release ball within 6 seconds when held in hands
+- **Handling Area**: Goalkeeper may only handle ball within own penalty area
+- **Protection Rule**: Outfield players cannot tackle or dispossess goalkeeper when ball is in hands (only when ball is at feet)
+
+**Modern Goalkeeper Roles**:
+- **Sweeper-Keeper**: Modern goalkeepers act as auxiliary defenders, rushing out to intercept through balls
+- **Distribution Specialist**: Quick, accurate distribution initiates counter-attacks and maintains possession
+- **Command Area**: Goalkeeper commands penalty area, directing defensive positioning
+
+**Tactical Impact**:
+- **Opposing Team Response**: When goalkeeper gains possession (especially in hands), opposing players retreat toward own half to defend potential counter-attack
+- **Distribution Speed**: Quick distribution (throw/roll) maintains attacking momentum, long distribution (drop kick/punt) creates counter-attack opportunities
+- **Defensive Leadership**: Goalkeeper organises defensive line and communicates tactical adjustments
+
 ### 3.1 Formation System (Phase 2)
 
 **Future Implementation**: A developer-only Formation Editor Tool will be delivered in Phase 2 to enable sophisticated tactical AI positioning. See `docs/FET-TDD.md` for complete technical specifications.

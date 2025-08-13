@@ -1,12 +1,26 @@
 import type { Player, GameState, Vector2 } from "../types/POCTypes"
 import { PlayerState, POC_CONFIG } from "../types/POCTypes"
+import { SeededRNG } from "../utils/SeededRNG"
 
 export class BasicAIController
 {
+    private rng: SeededRNG
+
+    constructor(rng: SeededRNG) {
+        this.rng = rng
+    }
+
     public updatePlayerBehaviour(player: Player, gameState: GameState): void
     {
+        // Freeze AI during set pieces and when GK has ball in hands (POC)
+        if (gameState.phase === 'CORNER_KICK' || gameState.phase === 'GOAL_KICK' || gameState.phase === 'THROW_IN' || gameState.ball.inGoalkeeperHands)
+        {
+            player.state = PlayerState.MAINTAINING_POSITION
+            return
+        }
+
         // Handle restarts and kickoff phases first
-        if ((gameState.phase === 'KICKOFF' || gameState.phase === 'THROW_IN' || gameState.phase === 'CORNER_KICK' || gameState.phase === 'GOAL_KICK')
+        if ((gameState.phase === 'KICKOFF')
             && player.state === PlayerState.WAITING_KICKOFF)
         {
             // During kickoff, position players to be available for pass
@@ -39,7 +53,7 @@ export class BasicAIController
         // Apply collision avoidance to prevent player crowding
         this.avoidPlayerCollisions(player, gameState)
 
-        // Goalkeeper special behavior
+        // Goalkeeper special behaviour
         if (player.playerType === 'GOALKEEPER')
         {
             this.defendGoal(player, gameState)
@@ -52,6 +66,11 @@ export class BasicAIController
 
         // If player has the ball, they should not be seeking it
         if (player.hasBall) return false
+
+        // FIFA Law 12: Cannot challenge goalkeeper when ball is in their hands
+        if (gameState.ball.inGoalkeeperHands) {
+            return false // Cannot seek ball held by goalkeeper
+        }
 
         const distanceToBall = this.calculateDistance(player.position, gameState.ball.position)
         const noBallPossessor = !gameState.ball.possessor
@@ -149,17 +168,19 @@ export class BasicAIController
             if (distanceToGoal < 250) {
                 // Close to goal - move directly toward goal
                 player.targetPosition = {
-                    x: opponentGoalX + (Math.random() - 0.5) * 40,
-                    y: opponentGoalY + (Math.random() - 0.5) * 60
+                    x: opponentGoalX + this.rng.nextSigned() * 40,
+                    y: opponentGoalY + this.rng.nextSigned() * 60
                 }
-            } else {
+            }
+            else {
                 // Further from goal - move toward goal area more aggressively
                 player.targetPosition = {
                     x: player.position.x + (opponentGoalX - player.position.x) * 0.8,
                     y: player.position.y + (opponentGoalY - player.position.y) * 0.6
                 }
             }
-        } else {
+        }
+        else {
             // Player without ball - support attack from base position
             const ballY = gameState.ball.position.y
             player.targetPosition = {
@@ -167,9 +188,9 @@ export class BasicAIController
                 y: player.basePosition.y + (ballY - player.basePosition.y) * 0.4
             }
 
-            // Add some variation
-            player.targetPosition.x += (Math.random() - 0.5) * 80
-            player.targetPosition.y += (Math.random() - 0.5) * 80
+            // Add some variation (deterministic)
+            player.targetPosition.x += this.rng.nextSigned() * 80
+            player.targetPosition.y += this.rng.nextSigned() * 80
         }
 
         // Clamp to field boundaries
@@ -252,10 +273,10 @@ export class BasicAIController
 
             // Position slightly forward and to the side for easy pass
             const direction = player.team === 'RED' ? 1 : -1
-            const sideOffset = (Math.random() - 0.5) * 200
+            const sideOffset = this.rng.nextSigned() * 200
 
             player.targetPosition = {
-                x: centerX + direction * (60 + Math.random() * 40), // 60-100 pixels forward
+                x: centerX + direction * (60 + this.rng.nextInRange(0, 40)), // 60-100 pixels forward
                 y: centerY + sideOffset
             }
         }
@@ -309,15 +330,15 @@ export class BasicAIController
             // Player is ahead - make run towards goal
             const goalDirection = opponentGoalX > ballPos.x ? 1 : -1
             player.targetPosition = {
-                x: ballPos.x + goalDirection * (80 + Math.random() * 60),
-                y: ballPos.y + (Math.random() - 0.5) * 120
+                x: ballPos.x + goalDirection * (80 + this.rng.nextInRange(0, 60)),
+                y: ballPos.y + this.rng.nextSigned() * 120
             }
         }
         else
         {
             // Player is behind - support by coming closer at angle
-            const supportAngle = Math.random() * Math.PI - Math.PI / 2 // -90 to +90 degrees
-            const supportDistance = 60 + Math.random() * 40
+            const supportAngle = this.rng.nextInRange(-Math.PI / 2, Math.PI / 2)
+            const supportDistance = 60 + this.rng.nextInRange(0, 40)
 
             player.targetPosition = {
                 x: ballPos.x + Math.cos(supportAngle) * supportDistance,
@@ -365,5 +386,26 @@ export class BasicAIController
         const dx = pos2.x - pos1.x
         const dy = pos2.y - pos1.y
         return Math.sqrt(dx * dx + dy * dy)
+    }
+
+    private canChallengeGoalkeeper(player: Player, gameState: GameState): boolean
+    {
+        // FIFA Law 12: Outfield players cannot challenge goalkeeper when ball is in hands
+        const ball = gameState.ball
+        
+        if (!ball.inGoalkeeperHands) {
+            return true // Can challenge when ball is at goalkeeper's feet
+        }
+        
+        // Find the goalkeeper who has the ball
+        const goalkeeper = gameState.teams.flatMap(team => team.players)
+            .find(p => p.playerType === 'GOALKEEPER' && ball.goalkeeperPossessor === p.id)
+        
+        if (!goalkeeper) {
+            return true // No goalkeeper has ball in hands
+        }
+        
+        // Cannot challenge different team's goalkeeper when ball is in hands
+        return player.team === goalkeeper.team
     }
 }
