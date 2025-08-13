@@ -26,7 +26,6 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 ### 2.2 Platform
 - Web-based application using VGF (Voice Gaming Framework)
 - Primary target: FireTV and web-supporting TV devices
-- Secondary support: Desktop, tablet, mobile browsers
 - Real-time multiplayer via Socket.IO
 
 ### 2.3 Success Metrics
@@ -35,28 +34,83 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - Voice command recognition accuracy > 90%
 - Multiplayer match-making success rate > 95%
 
-## 3. Functional Requirements
+## 3. POC Scope and Functional Requirements
 
-### 3.1 Core Gameplay Loop
+### 3.0 POC Scope Definition
+
+#### 3.0.1 In-Scope for POC
+- **Ball Physics**: Ball in/out detection on all four boundaries
+- **Basic Restarts**: Throw-ins, corner kicks, goal kicks based on last touch and line crossed
+- **Goals**: Ball completely crossing goal line with proper detection
+- **Half-time**: Automatic transition with team switching and formation reset
+- **Minimal Stats**: Possession percentage, shots taken, corners awarded
+- **Simple 2D Physics**: Canvas 2D with basic friction, no Z-axis or height simulation
+- **Minimal HUD**: Essential match information only (score, time, basic stats)
+- **AI vs AI**: Autonomous team behaviour for evaluation purposes
+
+#### 3.0.2 Out-of-Scope for POC
+- **Voice Commands**: Deferred to Phase 2
+- **Offside Detection**: Complex rule implementation deferred
+- **Foul System**: Cards, free kicks, penalties deferred
+- **Substitution System**: Player changes during match deferred
+- **Replay System**: Match playback functionality deferred
+- **Commentary/Audio**: Sound effects and match commentary deferred
+- **Adaptive/Learning AI**: Advanced AI behaviour deferred
+- **Multiplayer**: Real-time multiplayer functionality deferred
+
+### 3.1 Formation System (Phase 2)
+
+**Future Implementation**: A developer-only Formation Editor Tool will be delivered in Phase 2 to enable sophisticated tactical AI positioning. See `docs/FET-TDD.md` for complete technical specifications.
+
+**POC Approach**: Use pre-defined formation templates (4-4-2, 4-3-3) with basic positioning rules.
+
+### 3.2 POC Acceptance Criteria
+
+#### 3.2.1 Ball Physics and Boundaries
+- **Out-of-bounds Detection**: Accurate detection within 16ms of ball crossing any boundary
+- **Restart Execution**: Correct restart type (throw-in, corner, goal kick) selected and executed within 3 seconds
+- **Goal Detection**: Goals registered immediately when ball completely crosses goal line
+
+#### 3.2.2 Match Flow
+- **Half-time Transition**: Automatic progression from first to second half within 5 seconds
+- **Formation Reset**: All players return to kick-off positions within 2 seconds of half-time
+- **Match Completion**: Full 5-minute matches complete without crashes or game-breaking bugs
+
+#### 3.2.3 AI Performance
+- **Formation Adherence**: Players maintain formation shape within ±10% tolerance of target positions
+- **Position Updates**: Player position changes respond within 100ms of ball movement
+- **Possession Stability**: Possession percentage variance <5% across multiple identical scenario runs
+
+#### 3.2.4 Technical Performance
+- **Frame Rate**: Consistent 30+ FPS on FireTV Stick 4K Max during active gameplay
+- **Memory Stability**: No memory leaks over 10+ consecutive matches
+- **Restart Responsiveness**: UI updates within 200ms of out-of-play events
+
+#### 3.2.5 Statistics Accuracy
+- **Possession Tracking**: Accurate possession time calculation with <2% variance from ground truth
+- **Event Counting**: Shots and corners counted correctly (100% accuracy in controlled tests)
+- **Display Updates**: Statistics display updates within 500ms of events
+
+### 3.3 Core Gameplay Loop
 
 #### 3.1.1 Match Setup
 - **Game Mode Selection**: Choose between single-player (vs AI) or multiplayer (vs human)
 - **Team Selection**: Choose from user's current team or opponents in league
 - **Formation Selection**: Choose tactical formation (4-4-2, 4-3-3, 3-5-2, etc.)
 - **Match Type**: League matches, friendly matches, cup competitions, or practice matches
-- **AI Difficulty** (Single-player): Beginner, Amateur, Professional, or Expert AI opponents
-- **Team Generation**: New users receive auto-generated team with National League quality players
+- **AI Difficulty** (Single-player): Beginner, Amateur, Professional, or World Class AI opponents
+- **Team Generation**: New users receive auto-generated team with English National League quality players
 
 #### 3.1.2 Live Match Experience
-- **Real-time Duration**: 5 minutes real-time representing 90 minutes game time (18x acceleration)
-- **Two Halves**: 2.25 minutes each with automatic half-time transition
-- **Stoppage Time**: Added automatically based on match events
+- **Real-time Duration**: 5 minutes real-time representing 90 minutes game time (18x acceleration).
+- **Two Halves**: 45 minute halves - there is a brief pause between them which is tunable. 45 minutes of game time represents 2.25 minutes of real time
+- **Stoppage Time**: Simple fixed addition (30 seconds per half for POC)
 - **Top-down View**: Bird's eye view of football pitch with player positioning
 
 #### 3.1.3 Match Outcome
 - **Scoring System**: Team with most goals wins
 - **Statistics**: Match stats including possession, shots, fouls, cards
-- **Replay System**: Key moments playback functionality
+- **Match Highlights**: Basic goal and key moment recording (future phase)
 
 ### 3.2 Team Management System
 
@@ -115,34 +169,48 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - One on Ones (close-range saves)
 - Distribution (ball delivery)
 
-### 3.3 Voice Command System
+**Player abilities**
 
-#### 3.3.1 Tactical Commands
-- **"Defend"**: Team adopts defensive posture, players retreat to own half, prioritise defensive actions
-- **"Balance"**: Balanced approach between attack and defence
-- **"Attack"**: Aggressive forward play, more players commit to attacks
+**Passing Abilities**:
+- **Short Passing**: Building up play through close-range distribution. Requires precision over power, quick decision-making, and accurate placement to feet or into space ahead of teammate
+- **Long Passing**: Switching play across the field or finding teammates in distant positions. Requires power, accuracy, and vision to spot distant targets. Technical execution involves 30-degree approach angle and maintaining focus on ball throughout contact
+- **Wall Pass (Give-and-Go)**: Breaking through defensive lines using quick combination play. Requires precise timing, immediate movement after passing, and understanding of teammate's runs
+- **Through Pass**: Creating direct goal-scoring opportunities by exploiting defensive gaps. Ball played into space between or behind defenders. Requires exceptional vision, timing, and understanding of offside positioning
+- **Cross-field Pass**: Long-range passes to switch the point of attack, typically used by defenders and central midfielders to change the tempo and direction of play
 
-#### 3.3.2 Positional Commands
-- **"Watch the left/right!"**: Increase defensive focus on specified flank
-- **"Push up the pitch!"**: Advance defensive line and team shape
-- **"Drop back!"**: Retreat team shape towards own goal
+**Dribbling Abilities**:
+- **Basic Step-Over**: Throw foot over ball to feint direction, then push ball with outside of other foot. Effective in 1v1 encounters for creating initial space
+- **Simple Cut (Inside/Outside)**: Sharp directional change using inside or outside of foot. High success rate for creating space against pressing defenders
+- **Body Feint**: Drop shoulder and lean to suggest direction before going opposite way. Effective in wing play and creating shooting angles
+- **Nutmeg**: Push ball through opponent's legs and accelerate past them. High psychological impact but requires perfect timing
+- **Cruyff Turn**: Fake pass/shot, drag ball behind standing leg with inside of foot, turn 180°. Excellent for escaping pressure and changing play direction
+- **Stop and Go**: Sudden deceleration followed by explosive acceleration. Highly effective for breaking defensive lines
+- **Marseille Turn/Roulette**: Drag ball back with sole, spin 360° whilst shielding, emerge with ball. Very high difficulty technique for central midfield pressure situations
+- **Elastico/Flip Flap**: Touch ball outside with outside of foot, immediately snap inside with same foot. Extremely high difficulty technique for creating unpredictable wing play
 
-#### 3.3.3 Action Commands
-- **"Shoot!"**: Current ball possessor attempts shot on goal
-- **"Close him down!"**: Nearest player pressures ball carrier
-- **"Get it up the pitch!"**: Long ball towards opponent's half
-- **"Cross it!"**: Wide players deliver cross into penalty area
-- **"Pass it short!"**: Encourage short passing build-up play
-- **"Hold the ball!"**: Maintain possession without advancing
+**Header Abilities**:
+- **Standing Header**: Ground-based execution with minimal vertical movement, relies on timing and head positioning. Used for quick redirections and close-range situations
+- **Jumping Header**: Most common type requiring elevation and timing, combines vertical leap with precise head contact. Essential for competing in aerial duels
+- **Diving Header**: Dynamic technique requiring full body commitment, used when ball is at lower height. High risk but potentially high reward execution
+- **Defensive Headers**: Clearing danger from defensive zones and breaking up opponent attacks. Requires power for long clearances
+- **Attacking Headers**: Converting crosses and corner kicks into goal-scoring opportunities. Requires accuracy and positioning
+- **Flick Headers**: Subtle redirections to teammates, changing ball trajectory for tactical advantage
 
-#### 3.3.4 Set Piece Commands
-- **"Free kick!"**: Specific instructions for free kick situations
-- **"Corner!"**: Corner kick tactical variations
-- **"Penalty!"**: Designated penalty taker selection
+**Tackling Abilities**:
+- **Standing Tackle**: Defender remains on feet throughout challenge, using either foot to dispossess opponent. Low risk technique allowing quick recovery and continued pressure
+- **Sliding Tackle**: Most spectacular form involving sliding along ground with leg extended to hit ball away. High success rate when executed properly but significant risk if mistimed
+- **Block Tackle**: Uses body positioning to obstruct ball movement, placing body between opponent and ball. Lower risk technique that maintains defensive positioning
+- **Interception**: Reading play to cut out passes before they reach intended target. Requires anticipation and positioning rather than direct challenge
+- **Shoulder Charge**: Legal physical challenge using shoulder-to-shoulder contact to dispossess opponent while both players are competing for ball
+- **Recovery Tackle**: Last-ditch defensive action to prevent goal-scoring opportunity, often involving desperate lunges or blocks
 
-#### 3.3.5 Substitution Commands
-- **"Sub [position]"**: Make positional substitution
-- **"Change formation"**: Switch to different tactical setup
+### 3.3 Voice Command System (Out of Scope for POC)
+
+**Future Implementation**: Voice commands will be the primary interface for tactical control in the full game. Commands will include tactical adjustments ("Defend", "Attack"), positional instructions ("Push up", "Drop back"), and action commands ("Shoot", "Cross").
+
+**POC Approach**: AI teams will operate autonomously without voice input. Basic tactical behaviours will be pre-programmed to demonstrate the foundation for voice-controlled gameplay.
+
+*Note: Voice command specification and implementation details will be documented in Phase 2 planning.*
 
 ### 3.4 AI Behaviour System
 
@@ -159,7 +227,7 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Transition Play**: Swift changes between attacking and defending phases
 
 #### 3.4.3 AI Opponent System (Single-Player Mode)
-- **Difficulty Levels**: Beginner, Amateur, Professional, Expert
+- **Difficulty Levels**: Beginner, Amateur, Professional, World Class
 - **Tactical Awareness**: AI responds to player's tactical changes
 - **Adaptive Behaviour**: AI learns from player patterns during match
 - **Realistic Decision Making**: AI makes mistakes based on difficulty level
@@ -188,26 +256,31 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 ### 3.6 Match Rules Implementation
 
-#### 3.6.1 Core Rules (Based on Laws of the Game)
-- **Offside Rule**: Players cannot be in offside position when receiving ball in opponent's half
-- **Foul System**: Contact-based and technical infractions
+#### 3.6.1 POC Minimal Ruleset
+**Core Rules**:
 - **Ball In/Out**: Complete ball crossing boundary lines
 - **Goal Scoring**: Ball completely crossing goal line
+- **Basic Restarts**: Throw-ins, corner kicks, goal kicks only
 
-#### 3.6.2 Restart Procedures
-- **Goal Kicks**: When ball last touched by attacking team crosses goal line
-- **Corner Kicks**: When ball last touched by defending team crosses goal line
-- **Throw-ins**: When ball crosses touchline
-- **Free Kicks**: Direct and indirect based on foul type
-- **Penalty Kicks**: For direct free kick fouls in penalty area
+**Deferred for POC**:
+- Offside detection and enforcement
+- Foul system and disciplinary actions
+- Free kicks and penalties
+- Advanced restart procedures
 
-#### 3.6.3 Half-Time Procedures
-- **Automatic Transition**: When first half reaches 2.5 minutes (halfway point), game automatically transitions to second half
-- **Formation Reset**: All players return to their designated formation positions in their own half
-- **Kick-off Team Switch**: The team that did not kick off in the first half kicks off the second half
-- **Team Positioning**: All players must be in their own half before second half kick-off, maintaining proper formation structure
-- **Ball Reset**: Ball returns to center circle for second half kick-off
-- **Game Phase**: Seamless transition from PLAY phase → HALF_TIME phase → KICKOFF phase for second half
+**POC Focus**: Ensure smooth gameplay flow without complex rule interruptions that would hinder AI evaluation
+
+#### 3.6.2 Half-Time Procedures
+- **Automatic Transition**: Brief pause at 45 minutes, automatic progression to second half
+- **Team Switch**: Team that didn't kick off first half kicks off second half  
+- **Formation Reset**: Players return to kick-off positions
+- **Simple UI**: Minimal "Half Time" notification (brief, non-blocking)
+
+#### 3.6.3 POC Simplifications
+- **No Stoppage Time Calculation**: Fixed 30-second addition per half
+- **No Advantage Rule**: Immediate whistle for all infractions (when implemented)
+- **Simplified Offside**: Deferred to Phase 2
+- **No Disciplinary System**: No cards or player ejections in POC
 
 ## 4. Technical Requirements
 
@@ -224,16 +297,23 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Latency Management**: Sub-100ms command response time
 
 ### 4.3 Physics and Animation System
-- **Ball Physics**: Realistic ball movement and trajectories
-- **Player Movement**: Smooth positional transitions and running animations
-- **Collision Detection**: Player-to-player and player-to-ball interactions
-- **Pitch Boundaries**: Accurate boundary detection for out-of-play situations
+**POC Target**: 2D Canvas physics with no Z-axis simulation
+- **Ball Physics**: Simple 2D movement with basic friction, no height or spin simulation
+- **Player Movement**: 2D position interpolation with basic collision avoidance
+- **Collision Detection**: Circular collision detection for player-to-player and player-to-ball interactions
+- **Pitch Boundaries**: 2D boundary checking for ball out-of-play detection
+
+**Explicit Non-Goals**: 3D physics, ball height/elevation, realistic spin effects, complex trajectory simulation
 
 ### 4.4 Performance Requirements
-- **Frame Rate**: Minimum 30 FPS during match play
-- **Memory Usage**: Maximum 256MB RAM consumption
-- **Network Bandwidth**: Optimised for 1 Mbps connections
-- **Device Compatibility**: Support for devices with 2GB+ RAM
+**FireTV Stick 4K Max Constraints**:
+- **Frame Budget**: 33ms total per frame (simulation + rendering)
+- **Canvas Operations**: <500 draw calls per frame
+- **Texture Memory**: <128MB for all sprites and assets
+- **JavaScript Heap**: <256MB peak usage during gameplay
+- **Frame Rate**: Consistent 30+ FPS during active match simulation
+
+**Performance Monitoring**: Built-in frame time measurement with developer overlay toggle
 
 ## 5. User Experience Requirements
 
@@ -242,12 +322,16 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Visual Feedback**: Clear indication of voice command recognition
 - **Formation Display**: Real-time tactical formation visualisation
 - **Match Statistics**: Live updating performance metrics
+- **Game Phase Notification**: Brief notifications (≤2 seconds duration, 70% opacity) for kick-off, half-time, and final score with developer toggle to disable for AI evaluation
 
-### 5.2 Accessibility Features
+### 5.2 Accessibility Features (Phase 2)
+**Future Implementation**:
 - **Voice-First Design**: Complete game control via voice commands
 - **Visual Indicators**: Clear visual feedback for voice command status
 - **Text Alternatives**: Optional text display of recognised commands
 - **Audio Cues**: Sound feedback for successful command execution
+
+**POC Approach**: Focus on visual clarity and TV-optimised display
 
 ### 5.3 Onboarding Experience
 - **Tutorial Mode**: Interactive voice command training
@@ -334,16 +418,22 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Return Rate**: 60%+ users return within 7 days
 
 ### 8.2 Technical Performance Metrics
-- **Voice Recognition Accuracy**: 90%+ correct command interpretation
-- **Response Latency**: Sub-100ms command to action execution
-- **Server Uptime**: 99.5% availability during peak hours
-- **Bug Report Rate**: <1% of matches experience game-breaking issues
+**POC-Focused Metrics**:
+- **Frame Rate**: Consistent 30+ FPS during match simulation
+- **AI Responsiveness**: Player position updates within 100ms of ball movement
+- **Match Stability**: Matches complete without crashes or game-breaking bugs
+
+**Deferred**: Voice recognition metrics (out of scope), server uptime targets
 
 ### 8.3 Gameplay Quality Metrics
-- **Match Balance**: 40-60% win rate distribution across skill levels
-- **Tactical Effectiveness**: Clear impact of tactical voice commands on match outcomes
-- **Player Satisfaction**: 4.0+ average rating from user feedback
-- **Feature Utilisation**: 80%+ of players use advanced voice commands
+**POC Success Criteria**:
+- **AI Formation Adherence**: Players maintain formation shape within acceptable tolerance
+- **Ball Physics Consistency**: Ball movement appears natural and predictable
+- **Match Flow**: Full 5-minute matches complete with proper half-time and end-game states
+- **Visual Clarity**: Player actions (pass, shot, tackle) are clearly distinguishable
+- **Possession Tracking**: Match statistics (possession, shots) track accurately
+
+**Key POC Question**: Does the AI behaviour and visual presentation demonstrate a viable foundation for the full game?
 
 ## 9. Questions Requiring Clarification
 
@@ -419,19 +509,20 @@ These questions will help refine the PRD and ensure all stakeholder requirements
 
 ## 11. Implementation Phases
 
-### Phase 1: Core Match Engine (Months 1-3)
-- Basic match engine with simplified AI
-- Essential voice commands (attack, defend, balance)
-- Single match functionality
-- TV-optimised UI/UX for FireTV devices
+### Phase 1: POC Match Engine (Months 1-3)
+- Basic match engine with AI-controlled teams
+- Single match functionality (human vs AI or AI vs AI)
+- Top-down 2D visual presentation
+- Minimal UI optimised for TV viewing
 - Team and player generation system
+- Basic statistics tracking (possession, shots, goals)
 
-### Phase 2: Multiplayer & Enhanced Features (Months 4-6)
-- Real-time multiplayer implementation
-- Advanced voice commands and tactical options
-- Full referee and rules system
-- Enhanced graphics and animations
-- Captain designation system
+### Phase 2: Voice Commands & Rules (Months 4-6)
+- Voice command system implementation
+- Tactical instruction processing
+- Expanded ruleset (offside, fouls, cards)
+- Enhanced AI behaviour and formations
+- Replay/highlight system
 
 ### Phase 3: League System Integration (Months 7-10)
 - **28-team league structure**
