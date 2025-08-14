@@ -2,12 +2,14 @@ import type { ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
 
 import { cellKey } from "../lib/cellKey"
+import { validateEditorDoc, validateFormationData } from "../lib/formationSchema"
 import { computeGhostRoles, ensureInitialStagedCell } from "../lib/ghost"
 import type { EditorDoc } from "../types/EditorDoc"
 import type { FormationData } from "../types/Formation"
 import type { PlayerRole, Posture,Vector2 } from "../types/Formation"
 import { ControlsPanel } from "./ControlsPanel"
 import { EditorCanvas } from "./EditorCanvas"
+import { ErrorBoundary } from "./ErrorBoundary"
 import { usePaintHandlers } from "./hooks/usePaintHandlers"
 
 export const App = (): ReactNode =>
@@ -215,7 +217,22 @@ export const App = (): ReactNode =>
     {
         const file = e.target.files?.[0]
         if (!file) return
-        void file.text().then((t) => setDoc(JSON.parse(t) as EditorDoc)).catch(() => {})
+        void file.text().then((t) =>
+        {
+            try
+            {
+                const parsed = JSON.parse(t) as unknown
+                if (validateEditorDoc(parsed))
+                {
+                    setDoc(parsed as EditorDoc)
+                }
+                else
+                {
+                    console.warn("Invalid project file; ignoring")
+                }
+            }
+            catch { /* ignore */ }
+        }).catch(() => {})
     }
 
     const exportFormation = (): void =>
@@ -254,19 +271,22 @@ export const App = (): ReactNode =>
                         }
                         return { ATTACK: {}, BALANCE: (mapping as Record<string, Record<PlayerRole, Vector2>>) ?? {}, DEFEND: {} }
                     })()
-                    setDoc((d) => ({
-                        ...d,
-                        ...maybeDoc,
+                    const candidate: EditorDoc = ({
+                        ...doc,
+                        ...(maybeDoc as EditorDoc),
                         posture,
                         mapping: normalizedMapping,
                         ball: { x: 0.5, y: 0.5 },
-                    } as EditorDoc))
+                    } as EditorDoc)
+                    if (validateEditorDoc(candidate)) setDoc(candidate)
                     return
                 }
                 if (maybeFormation && maybeFormation.formationId && maybeFormation.roles)
                 {
-                    const roles = clampOwnHalf(maybeFormation.roles)
-                    setDoc((d) => ({ ...d, formation: { ...(maybeFormation as FormationData), roles }, ball: { x: 0.5, y: 0.5 } }))
+                    const validated = validateFormationData(maybeFormation)
+                    if (!validated) return
+                    const roles = clampOwnHalf(validated.roles)
+                    setDoc((d) => ({ ...d, formation: { ...validated, roles }, ball: { x: 0.5, y: 0.5 } }))
                     return
                 }
                 // Fallback: ignore
@@ -488,21 +508,23 @@ export const App = (): ReactNode =>
                 hasPendingAtBall={Object.keys(pending).includes(cellKey(doc.grid, doc.ball!))}
             />
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                <EditorCanvas
-                    doc={doc}
-                    canvasSize={canvasSize}
-                    grid={grid}
-                    cellSize={cellSize}
-                    pending={pending}
-                    ghostRoles={ghostRoles}
-                    paintHandlers={paintHandlers}
-                    snap={snap}
-                    showGhostOpposition={showGhostOpposition}
-                    showMirrorLegend={showMirrorLegend}
-                    setDoc={setDoc}
-                    setPending={setPending}
-                    setIsBallDragging={setIsBallDragging}
-                />
+                <ErrorBoundary>
+                    <EditorCanvas
+                        doc={doc}
+                        canvasSize={canvasSize}
+                        grid={grid}
+                        cellSize={cellSize}
+                        pending={pending}
+                        ghostRoles={ghostRoles}
+                        paintHandlers={paintHandlers}
+                        snap={snap}
+                        showGhostOpposition={showGhostOpposition}
+                        showMirrorLegend={showMirrorLegend}
+                        setDoc={setDoc}
+                        setPending={setPending}
+                        setIsBallDragging={setIsBallDragging}
+                    />
+                </ErrorBoundary>
             </div>
         </div>
     )

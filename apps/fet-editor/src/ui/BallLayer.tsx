@@ -17,6 +17,7 @@ interface BallLayerProps
 export const BallLayer = ({ size, grid: _grid, value, onChange, onDragStart, onDragEnd }: BallLayerProps): ReactNode =>
 {
     const ref = useRef<HTMLDivElement>(null)
+    const dragAbortRef = useRef<AbortController | null>(null)
 
     const toPx = (v: Vector2): { x: number; y: number } => ({ x: v.x * size.w, y: v.y * size.h })
     const toNorm = (p: Vector2): { x: number; y: number } => ({ x: Math.min(1, Math.max(0, p.x / size.w)), y: Math.min(1, Math.max(0, p.y / size.h)) })
@@ -32,6 +33,11 @@ export const BallLayer = ({ size, grid: _grid, value, onChange, onDragStart, onD
         const my = e.clientY - rect.top
         const localOffset = { x: mx - pos.x, y: my - pos.y }
 
+        // Cleanup any previous listeners if a drag was mid-flight
+        if (dragAbortRef.current) dragAbortRef.current.abort()
+        const ctrl = new AbortController()
+        dragAbortRef.current = ctrl
+
         const onMove = (me: MouseEvent): void =>
         {
             const r = container.getBoundingClientRect()
@@ -43,13 +49,13 @@ export const BallLayer = ({ size, grid: _grid, value, onChange, onDragStart, onD
         }
         const onUp = (): void =>
         {
-            window.removeEventListener("mousemove", onMove)
-            window.removeEventListener("mouseup", onUp)
+            ctrl.abort()
             if (onDragEnd) onDragEnd()
+            dragAbortRef.current = null
         }
         if (onDragStart) onDragStart()
-        window.addEventListener("mousemove", onMove)
-        window.addEventListener("mouseup", onUp)
+        window.addEventListener("mousemove", onMove, { signal: ctrl.signal })
+        window.addEventListener("mouseup", onUp, { signal: ctrl.signal })
     }
 
     // Draw marker
@@ -59,6 +65,11 @@ export const BallLayer = ({ size, grid: _grid, value, onChange, onDragStart, onD
         if (!el) return
         el.style.left = `${pos.x - 5}px`
         el.style.top = `${pos.y - 5}px`
+        return () =>
+        {
+            if (dragAbortRef.current) dragAbortRef.current.abort()
+            dragAbortRef.current = null
+        }
     }, [pos.x, pos.y])
 
     return (

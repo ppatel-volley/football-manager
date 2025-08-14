@@ -18,7 +18,10 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
 {
     const ref = useRef<HTMLCanvasElement>(null)
     const stateRef = useRef<{ mode: 'none' | 'copy' | 'clear'; source: { c: number; r: number } | null; last?: string }>({ mode: 'none', source: null })
+    const bgRef = useRef<OffscreenCanvas | null>(null)
+    const bgSizeRef = useRef<{ w: number; h: number } | null>(null)
 
+    // Draw with an offscreen cached background to avoid full redraw work on every render
     useEffect(() =>
     {
         const canvas = ref.current
@@ -26,38 +29,51 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
         const ctx = canvas.getContext("2d")
         if (!ctx) return
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        // Pitch background
-        ctx.fillStyle = "#2d8f2d"
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-        // Pitch lines (All dimensions proportional to canvas size)
-        drawPitch(ctx, canvas.width, canvas.height)
-
-        // Grid overlay
-        ctx.strokeStyle = "#2f7f2f"
-        ctx.lineWidth = 1
-
-        for (let c = 0; c <= cols; c++)
+        // 1) Build background only when size changes: pitch + grid
+        const w = canvas.width
+        const h = canvas.height
+        const sizeChanged = !bgSizeRef.current || bgSizeRef.current.w !== w || bgSizeRef.current.h !== h
+        if (!bgRef.current || sizeChanged)
         {
-            const x = c * cell.w
-            ctx.beginPath()
-            ctx.moveTo(x, 0)
-            ctx.lineTo(x, rows * cell.h)
-            ctx.stroke()
+            const bg = new OffscreenCanvas(w, h)
+            const bgctx = bg.getContext("2d")
+            if (!bgctx) return
+            bgctx.clearRect(0, 0, w, h)
+            bgctx.fillStyle = "#2d8f2d"
+            bgctx.fillRect(0, 0, w, h)
+            drawPitch(bgctx as unknown as CanvasRenderingContext2D, w, h)
+            bgctx.strokeStyle = "#2f7f2f"
+            bgctx.lineWidth = 1
+            for (let c = 0; c <= cols; c++)
+            {
+                const x = c * cell.w
+                bgctx.beginPath()
+                bgctx.moveTo(x, 0)
+                bgctx.lineTo(x, rows * cell.h)
+                bgctx.stroke()
+            }
+            for (let r = 0; r <= rows; r++)
+            {
+                const y = r * cell.h
+                bgctx.beginPath()
+                bgctx.moveTo(0, y)
+                bgctx.lineTo(cols * cell.w, y)
+                bgctx.stroke()
+            }
+            bgRef.current = bg
+            bgSizeRef.current = { w, h }
         }
 
-        for (let r = 0; r <= rows; r++)
+        // 2) Blit background, then dynamic overlays
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        if (bgRef.current)
         {
-            const y = r * cell.h
-            ctx.beginPath()
-            ctx.moveTo(0, y)
-            ctx.lineTo(cols * cell.w, y)
-            ctx.stroke()
+            ctx.drawImage(bgRef.current as unknown as HTMLCanvasElement, 0, 0)
         }
 
         if (coloredCells && coloredCells.length > 0)
         {
+            // Render explicit colored cells
             for (const cc of coloredCells)
             {
                 ctx.fillStyle = cc.color
@@ -66,10 +82,10 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
         }
         else
         {
+            // Unified fallback: same styling for mapped and pending
+            ctx.fillStyle = "rgba(140, 200, 255, 0.18)"
             if (mappedCells && mappedCells.length > 0)
             {
-                // Very light blue for set cells (fallback)
-                ctx.fillStyle = "rgba(140, 200, 255, 0.18)"
                 for (const mc of mappedCells)
                 {
                     ctx.fillRect(mc.c * cell.w, mc.r * cell.h, cell.w, cell.h)
@@ -77,8 +93,6 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
             }
             if (pendingCells && pendingCells.length > 0)
             {
-                // Same as set for fallback
-                ctx.fillStyle = "rgba(140, 200, 255, 0.18)"
                 for (const pc of pendingCells)
                 {
                     ctx.fillRect(pc.c * cell.w, pc.r * cell.h, cell.w, cell.h)
@@ -108,19 +122,21 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
             const num = String(c + 1)
             ctx.fillText(num, c * cell.w + 4, 12)
         }
-    // Intentionally depend on scalar props; coloredCells etc. are drawn via passed values
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cols, rows, cell.h, cell.w, highlightCell?.c, highlightCell?.r])
+    }, [cols, rows, cell.h, cell.w, highlightCell, mappedCells, pendingCells, coloredCells])
 
     const getCellFromEvent = (e: React.MouseEvent<HTMLCanvasElement>): { c: number; r: number } | null =>
     {
         const canvas = ref.current
         if (!canvas) return null
         const rect = canvas.getBoundingClientRect()
+        if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return null
         const mx = e.clientX - rect.left
         const my = e.clientY - rect.top
+        if (!Number.isFinite(mx) || !Number.isFinite(my)) return null
+        if (cell.w <= 0 || cell.h <= 0) return null
         const c = Math.max(0, Math.min(cols - 1, Math.floor(mx / cell.w)))
         const r = Math.max(0, Math.min(rows - 1, Math.floor(my / cell.h)))
+        if (!Number.isFinite(c) || !Number.isFinite(r)) return null
         return { c, r }
     }
 
