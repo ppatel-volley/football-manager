@@ -18,6 +18,7 @@ interface UsePaintHandlersArgs
     cell: { w: number; h: number };
     isDisabled?: boolean;
     hasMappingAt: (key: string) => boolean;
+    getDefaultSource?: () => Point | null;
     copyFromTo: (target: Point, source: Point) => void;
     clearAt: (target: Point) => void;
 }
@@ -33,7 +34,7 @@ export interface Handlers
     onContextMenu: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
-export function usePaintHandlers({ grid, cell, isDisabled, hasMappingAt, copyFromTo, clearAt }: UsePaintHandlersArgs): Handlers
+export function usePaintHandlers({ grid, cell, isDisabled, hasMappingAt, getDefaultSource, copyFromTo, clearAt }: UsePaintHandlersArgs): Handlers
 {
     const containerRef = useRef<HTMLDivElement>(null);
     const [mode, setMode] = useState<"none" | "copy" | "clear">("none");
@@ -58,7 +59,8 @@ export function usePaintHandlers({ grid, cell, isDisabled, hasMappingAt, copyFro
         const pt = getPointFromMouse(e);
         if (!pt) return;
         const key = `${pt.c}_${pt.r}`;
-        if (e.button === 0)
+        const isRightClick = e.button === 2 || e.ctrlKey;
+        if (!isRightClick && e.button === 0)
         {
             if (hasMappingAt(key))
             {
@@ -66,8 +68,18 @@ export function usePaintHandlers({ grid, cell, isDisabled, hasMappingAt, copyFro
                 sourceRef.current = pt;
                 lastKeyRef.current = null;
             }
+            else if (getDefaultSource)
+            {
+                const fallback = getDefaultSource();
+                if (fallback)
+                {
+                    setMode("copy");
+                    sourceRef.current = fallback;
+                    lastKeyRef.current = null;
+                }
+            }
         }
-        else if (e.button === 2)
+        else if (isRightClick)
         {
             e.preventDefault();
             setMode("clear");
@@ -75,7 +87,7 @@ export function usePaintHandlers({ grid, cell, isDisabled, hasMappingAt, copyFro
             clearAt(pt);
             lastKeyRef.current = key;
         }
-    }, [getPointFromMouse, hasMappingAt, clearAt, isDisabled]);
+    }, [getPointFromMouse, hasMappingAt, clearAt, getDefaultSource, isDisabled]);
 
     const onMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) =>
     {
@@ -106,7 +118,15 @@ export function usePaintHandlers({ grid, cell, isDisabled, hasMappingAt, copyFro
     const onContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) =>
     {
         e.preventDefault();
-    }, []);
+        if (isDisabled) return;
+        const pt = getPointFromMouse(e);
+        if (!pt) return;
+        const key = `${pt.c}_${pt.r}`;
+        setMode("clear");
+        sourceRef.current = null;
+        clearAt(pt);
+        lastKeyRef.current = key;
+    }, [getPointFromMouse, clearAt, isDisabled]);
 
     return { containerRef, mode, setMode, onMouseDown, onMouseMove, onMouseUp, onContextMenu };
 }

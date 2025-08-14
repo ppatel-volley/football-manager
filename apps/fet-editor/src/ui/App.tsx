@@ -417,6 +417,20 @@ export const App = (): ReactNode =>
         cell: cellSize,
         isDisabled: isBallDragging,
         hasMappingAt: (key) => Boolean((doc.mapping[doc.posture] ?? {})[key] || pending[key]),
+        getDefaultSource: () =>
+        {
+            // Use the current ball cell as a default source if it has a mapping or pending set
+            if (!doc.ball) return null
+            const key = cellKey(doc.grid, doc.ball)
+            if ((doc.mapping[doc.posture] ?? {})[key] || pending[key])
+            {
+                const [cStr, rStr] = key.split("_")
+                const c = Number.parseInt(cStr ?? "0", 10)
+                const r = Number.parseInt(rStr ?? "0", 10)
+                return { c, r }
+            }
+            return null
+        },
         copyFromTo: (target, source) =>
         {
             const keySource = `${source.c}_${source.r}`
