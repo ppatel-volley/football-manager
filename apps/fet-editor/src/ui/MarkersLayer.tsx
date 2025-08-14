@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
+
 import type { PlayerRole, Vector2 } from "../types/Formation"
 
 interface MarkersLayerProps
@@ -9,21 +10,25 @@ interface MarkersLayerProps
     snapToGrid: boolean
     roles: Record<PlayerRole, Vector2>
     onChange: (roles: Record<PlayerRole, Vector2>) => void
+    onDragStart?: () => void
+    onDragEnd?: () => void
+    ghost?: boolean
 }
 
 const roleOrder: PlayerRole[] = ["GK", "LB", "CB_L", "CB_R", "RB", "CM_L", "CM_R", "LW", "RW", "ST_L", "ST_R"]
 
-export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange }: MarkersLayerProps): ReactNode =>
+export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragStart, onDragEnd, ghost }: MarkersLayerProps): ReactNode =>
 {
     const [drag, setDrag] = useState<{ role: PlayerRole; offset: Vector2 } | null>(null)
 
-    const px = (v: Vector2) => ({ x: v.x * size.w, y: v.y * size.h })
-    const norm = (p: Vector2) => ({ x: Math.min(1, Math.max(0, p.x / size.w)), y: Math.min(1, Math.max(0, p.y / size.h)) })
+    const px = (v: Vector2): { x: number; y: number } => ({ x: v.x * size.w, y: v.y * size.h })
+    const norm = (p: Vector2): { x: number; y: number } => ({ x: Math.min(1, Math.max(0, p.x / size.w)), y: Math.min(1, Math.max(0, p.y / size.h)) })
 
     const items = useMemo(() => roleOrder.map((r) => ({ role: r, p: roles[r] })), [roles])
 
-    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) =>
+    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void =>
     {
+        if (ghost) return
         const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
         const mx = e.clientX - rect.left
         const my = e.clientY - rect.top
@@ -34,14 +39,17 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange }: Marker
             const dy = my - y
             if (dx * dx + dy * dy <= 18 * 18)
             {
+                e.stopPropagation()
                 setDrag({ role, offset: { x: dx, y: dy } })
+                if (onDragStart) onDragStart()
                 return
             }
         }
     }
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) =>
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>): void =>
     {
+        if (ghost) return
         if (!drag) return
         const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
         const mx = e.clientX - rect.left
@@ -54,8 +62,9 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange }: Marker
         onChange(updatedRoles)
     }
 
-    const handleMouseUp = () =>
+    const handleMouseUp = (): void =>
     {
+        if (ghost) return
         if (drag && snapToGrid)
         {
             const updated = { ...roles }
@@ -69,6 +78,7 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange }: Marker
             }
         }
         setDrag(null)
+        if (onDragEnd) onDragEnd()
     }
 
     return (
@@ -83,20 +93,20 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange }: Marker
             {
                 const pos = px(p)
                 return (
-                    <div key={role} style={{ position: "absolute", left: pos.x - 9, top: pos.y - 9 }}>
+                    <div key={role} style={{ position: "absolute", left: pos.x - 9, top: pos.y - 9, pointerEvents: ghost ? "none" : "auto" }}>
                         <div
                             style={{
                                 width: 18,
                                 height: 18,
                                 borderRadius: 9,
-                                background: "#111",
-                                border: "2px solid #fff",
+                                background: ghost ? "rgba(255,255,255,0.12)" : "#111",
+                                border: ghost ? "2px dashed #aaa" : "2px solid #fff",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontSize: 10,
                                 userSelect: "none",
-                                cursor: "grab",
+                                cursor: ghost ? "default" : "grab",
                             }}
                             title={role}
                         >

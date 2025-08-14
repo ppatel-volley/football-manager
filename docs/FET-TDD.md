@@ -1,9 +1,9 @@
 # Formation Editor Tool (FET) - Technical Design Document
 
-**Project**: Super Soccer Manager: Pro Edition  
-**Document Version**: 1.0  
-**Date**: 13 August 2025  
-**Target Phase**: Phase 2 Implementation  
+**Project**: Super Soccer Manager: Pro Edition
+**Document Version**: 1.0
+**Date**: 13 August 2025
+**Target Phase**: Phase 2 Implementation
 
 ## 1. Executive Summary
 
@@ -19,7 +19,7 @@ graph TB
     B --> C[Data Export System]
     C --> D[Formation Runtime Engine]
     D --> E[AI Controller Integration]
-    
+
     F[Formation Templates] --> A
     G[Grid System] --> A
     H[Formation Data Store] --> C
@@ -64,7 +64,7 @@ interface PhaseData {
       players: {
         [playerRole: string]: {   // "CB_LEFT", "CDM", "RW" etc.
           x: number;             // 0.0-1.0 normalised
-          y: number;             // 0.0-1.0 normalised  
+          y: number;             // 0.0-1.0 normalised
           priority: number;      // 1-10 positioning importance
           flexibility: number;   // 0.0-1.0 deviation allowed
           contextualModifiers: ContextualModifier[];
@@ -89,7 +89,7 @@ interface ModifierCondition {
 
 enum GamePhase {
   ATTACK = "attack",
-  DEFEND = "defend", 
+  DEFEND = "defend",
   TRANSITION_ATTACK = "transition_attack",
   TRANSITION_DEFEND = "transition_defend",
   SET_PIECE_FOR = "set_piece_for",
@@ -126,25 +126,25 @@ class OptimizedGridSystem {
   private readonly GRID_WIDTH = 20;
   private readonly GRID_HEIGHT = 15;
   private readonly ZONE_COUNT = 300;
-  
+
   // Hybrid approach: Integer indices + Float32Array positions
   private spatialIndex: Map<number, ZoneData> = new Map();  // Integer keys for exact lookup
   private positionBuffer: Float32Array;                      // SIMD-friendly position storage
   private interpolationBuffer: Float32Array;                 // Working space for bulk operations
-  
+
   constructor() {
     // Pre-allocate SIMD-optimized buffers for 22 players
     this.positionBuffer = new Float32Array(44);        // x,y interleaved (22 * 2)
     this.interpolationBuffer = new Float32Array(16);   // Temporary calculation space
   }
-  
+
   // Integer operations for exact grid calculations (cache-friendly)
   public getZoneIndex(x: number, y: number): number {
     const gridX = Math.floor(x * this.GRID_WIDTH);
     const gridY = Math.floor(y * this.GRID_HEIGHT);
     return gridY * this.GRID_WIDTH + gridX;  // Single integer index (0-299)
   }
-  
+
   // Legacy string-based API for compatibility
   public getZoneId(x: number, y: number): string {
     const index = this.getZoneIndex(x, y);
@@ -152,52 +152,52 @@ class OptimizedGridSystem {
     const gridY = Math.floor(index / this.GRID_WIDTH);
     return `x${gridX}_y${gridY}`;
   }
-  
+
   // Optimized zone center calculation using integer index
   public getZoneCenter(zoneIndex: number): Float32Array {
     const gridX = zoneIndex % this.GRID_WIDTH;
     const gridY = Math.floor(zoneIndex / this.GRID_WIDTH);
-    
+
     // Use Float32Array for potential SIMD operations
     const center = new Float32Array(2);
     center[0] = (gridX + 0.5) / this.GRID_WIDTH;
     center[1] = (gridY + 0.5) / this.GRID_HEIGHT;
     return center;
   }
-  
+
   // Legacy API for compatibility
   public getZoneCenterLegacy(zoneId: string): { x: number; y: number } {
     const [, xStr, yStr] = zoneId.match(/x(\d+)_y(\d+)/) || [];
     const gridX = parseInt(xStr);
     const gridY = parseInt(yStr);
-    
+
     return {
       x: (gridX + 0.5) / this.GRID_WIDTH,
       y: (gridY + 0.5) / this.GRID_HEIGHT
     };
   }
-  
+
   // Optimized nearby zone calculation using integer arithmetic
   public getNearbyZoneIndices(zoneIndex: number, radius: number = 1): number[] {
     const nearby: number[] = [];
     const centerX = zoneIndex % this.GRID_WIDTH;
     const centerY = Math.floor(zoneIndex / this.GRID_WIDTH);
-    
+
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         const newX = centerX + dx;
         const newY = centerY + dy;
-        
-        if (newX >= 0 && newX < this.GRID_WIDTH && 
+
+        if (newX >= 0 && newX < this.GRID_WIDTH &&
             newY >= 0 && newY < this.GRID_HEIGHT) {
           nearby.push(newY * this.GRID_WIDTH + newX);
         }
       }
     }
-    
+
     return nearby;
   }
-  
+
   // Bulk position interpolation using Float32Array (SIMD potential)
   public bulkInterpolatePositions(
     ballPosition: Float32Array,  // [x, y]
@@ -208,11 +208,11 @@ class OptimizedGridSystem {
     // Pattern optimizable by V8's TurboFan JIT for NEON generation
     const ballX = ballPosition[0];
     const ballY = ballPosition[1];
-    
+
     for (let i = 0; i < targetPositions.length; i += 2) {
       const weight = weights[i >> 1];  // Bit shift for divide by 2
       const invWeight = 1.0 - weight;
-      
+
       outputPositions[i] = targetPositions[i] * weight + ballX * invWeight;
       outputPositions[i + 1] = targetPositions[i + 1] * weight + ballY * invWeight;
     }
@@ -224,7 +224,7 @@ class OptimizedGridSystem {
 
 **Numeric Strategy Rationale:**
 - **Integer Grid Indices**: Exact calculations, cache-friendly, no floating-point precision issues
-- **Float32Array Positions**: SIMD potential on ARM NEON, memory-efficient for bulk operations  
+- **Float32Array Positions**: SIMD potential on ARM NEON, memory-efficient for bulk operations
 - **Hybrid Approach**: Combines precision (integers) with performance (SIMD floats)
 
 ```typescript
@@ -232,7 +232,7 @@ class SIMDPositionInterpolator {
   private formationData: FormationData;
   private gridSystem: OptimizedGridSystem;
   private interpolationCache: LRUCache<string, Vector2>;
-  
+
   public getInterpolatedPosition(
     playerRole: string,
     ballPosition: Vector2,
@@ -240,14 +240,14 @@ class SIMDPositionInterpolator {
     context: GameContext
   ): Vector2 {
     const cacheKey = this.getCacheKey(playerRole, ballPosition, gamePhase);
-    
+
     if (this.interpolationCache.has(cacheKey)) {
       return this.interpolationCache.get(cacheKey)!;
     }
-    
+
     const ballZoneIndex = this.gridSystem.getZoneIndex(ballPosition.x, ballPosition.y);
     const phaseData = this.formationData.phases[gamePhase];
-    
+
     // Get direct position if available (convert index back to string for data access)
     const ballZoneId = this.gridSystem.getZoneId(ballPosition.x, ballPosition.y);
     const directPosition = phaseData.positions[ballZoneId]?.players[playerRole];
@@ -256,47 +256,47 @@ class SIMDPositionInterpolator {
       this.interpolationCache.set(cacheKey, result);
       return result;
     }
-    
+
     // Interpolate from nearby zones using optimized integer indices
     const nearbyIndices = this.gridSystem.getNearbyZoneIndices(ballZoneIndex, 2);
-    const nearbyZones = nearbyIndices.map(idx => 
+    const nearbyZones = nearbyIndices.map(idx =>
       this.gridSystem.getZoneId(0, 0) // Convert indices back to IDs for compatibility
     ).filter(Boolean);
     const weightedPositions: Array<{ position: Vector2; weight: number }> = [];
-    
+
     for (const zoneId of nearbyZones) {
       const zoneData = phaseData.positions[zoneId];
       const playerPosition = zoneData?.players[playerRole];
-      
+
       if (playerPosition) {
         const distance = this.getZoneDistance(ballZoneId, zoneId);
         const weight = 1 / (1 + distance);
-        
+
         weightedPositions.push({
           position: { x: playerPosition.x, y: playerPosition.y },
           weight
         });
       }
     }
-    
+
     const interpolated = this.calculateWeightedAverage(weightedPositions);
     const result = this.applyContextualModifiers(interpolated, context);
-    
+
     this.interpolationCache.set(cacheKey, result);
     return result;
   }
-  
+
   private calculateWeightedAverage(
     positions: Array<{ position: Vector2; weight: number }>
   ): Vector2 {
     if (positions.length === 0) {
       return { x: 0.5, y: 0.5 }; // Default center position
     }
-    
+
     const totalWeight = positions.reduce((sum, p) => sum + p.weight, 0);
     const weightedX = positions.reduce((sum, p) => sum + p.position.x * p.weight, 0);
     const weightedY = positions.reduce((sum, p) => sum + p.position.y * p.weight, 0);
-    
+
     return {
       x: weightedX / totalWeight,
       y: weightedY / totalWeight
@@ -304,6 +304,22 @@ class SIMDPositionInterpolator {
   }
 }
 ```
+
+### 4.3 Opposition Mirroring Model (Ghost Opposition)
+
+The editor supports visualising an opposition team using a deterministic mirroring model that reflects both ball position and formation mappings to the other half, preserving tactical intent.
+
+- Mirroring axis: halfway line (horizontal, Y-axis). Positions are mirrored as: `y' = 1 - y`, `x' = x`.
+- Cell mirroring: for a grid with `rows`, a cell `(c, r)` maps to `(c, rows - 1 - r)`.
+- Mapping source: when the ball is in cell `(c, r)`, the opposition (ghost) displays the user's mapping for the mirrored cell `(c, rows - 1 - r)`, then mirrors those positions across the halfway line.
+- Priority: staged mapping for the mirrored cell → committed mapping for the mirrored cell → active posture base → base roles.
+
+Rationale: This ensures cells configured in your defensive third become the opposition's defensive-third reference, maintaining tactical symmetry when visualising both sides.
+
+ Ghost Opposition UI rules:
+- Ghost markers render with dashed outlines and reduced opacity.
+- Ghost markers are non-interactive in Ghost mode (view-only); primary team remains editable and appears above ghosts.
+- Ghost markers update live with ball movement and when user edits their team's roles or cell mappings.
 
 ## 5. Runtime Integration
 
@@ -314,54 +330,54 @@ class FormationEngine {
   private formationData: Map<string, FormationData> = new Map();
   private positionInterpolator: PositionInterpolator;
   private performanceMonitor: PerformanceMonitor;
-  
+
   constructor(formations: FormationData[]) {
     formations.forEach(formation => {
       this.formationData.set(formation.formationId, formation);
     });
-    
+
     this.positionInterpolator = new PositionInterpolator();
     this.performanceMonitor = new PerformanceMonitor();
   }
-  
+
   public getOptimalPosition(
     player: Player,
     gameState: GameState,
     tacticalCommand?: TacticalCommand
   ): Vector2 {
     const startTime = performance.now();
-    
+
     try {
       const formation = this.getActiveFormation(player.team);
       const gamePhase = this.determineGamePhase(gameState, player.team);
       const context = this.buildGameContext(gameState, tacticalCommand);
-      
+
       const position = this.positionInterpolator.getInterpolatedPosition(
         player.playerType,
         gameState.ball.position,
         gamePhase,
         context
       );
-      
+
       return this.applyFlexibilityAndConstraints(player, position, gameState);
-      
+
     } finally {
       const executionTime = performance.now() - startTime;
       this.performanceMonitor.recordPositionCalculation(executionTime);
     }
   }
-  
+
   private determineGamePhase(gameState: GameState, team: Team): GamePhase {
     const possession = gameState.possession;
     const ballPosition = gameState.ball.position;
-    
+
     if (possession === team.id) {
       return ballPosition.y > 0.6 ? GamePhase.ATTACK : GamePhase.TRANSITION_ATTACK;
     } else {
       return ballPosition.y < 0.4 ? GamePhase.DEFEND : GamePhase.TRANSITION_DEFEND;
     }
   }
-  
+
   private applyFlexibilityAndConstraints(
     player: Player,
     targetPosition: Vector2,
@@ -370,16 +386,16 @@ class FormationEngine {
     // Apply player-specific flexibility
     const flexibility = this.getPlayerFlexibility(player);
     const noise = this.generatePositionalNoise(flexibility);
-    
+
     let adjustedPosition = {
       x: targetPosition.x + noise.x,
       y: targetPosition.y + noise.y
     };
-    
+
     // Apply constraints (pitch boundaries, collision avoidance)
     adjustedPosition = this.applyPitchBoundaries(adjustedPosition);
     adjustedPosition = this.applyCollisionAvoidance(adjustedPosition, gameState);
-    
+
     return adjustedPosition;
   }
 }
@@ -391,13 +407,13 @@ class FormationEngine {
 class FormationAwareAIController extends BasicAIController {
   private formationEngine: FormationEngine;
   private movementSmoothing: MovementSmoother;
-  
+
   constructor(formationData: FormationData[]) {
     super();
     this.formationEngine = new FormationEngine(formationData);
     this.movementSmoothing = new MovementSmoother();
   }
-  
+
   public updatePlayerBehaviour(player: Player, gameState: GameState): void {
     // Get formation-based target position
     const formationTarget = this.formationEngine.getOptimalPosition(
@@ -405,48 +421,48 @@ class FormationAwareAIController extends BasicAIController {
       gameState,
       gameState.tacticalCommand
     );
-    
+
     // Apply immediate tactical overrides
     const tacticalTarget = this.applyTacticalOverrides(
       formationTarget,
       player,
       gameState
     );
-    
+
     // Smooth movement to prevent jittery positioning
     player.targetPosition = this.movementSmoothing.smoothPosition(
       player.position,
       tacticalTarget,
       player.attributes.agility
     );
-    
+
     // Execute base AI behaviour with formation context
     super.updatePlayerBehaviour(player, gameState);
   }
-  
+
   private applyTacticalOverrides(
     formationPosition: Vector2,
     player: Player,
     gameState: GameState
   ): Vector2 {
     // Override formation position for immediate tactical needs
-    
+
     // 1. Ball carrier support
     if (this.shouldSupportBallCarrier(player, gameState)) {
       return this.calculateSupportPosition(player, gameState);
     }
-    
+
     // 2. Defensive pressing
     if (this.shouldPress(player, gameState)) {
       return this.calculatePressPosition(player, gameState);
     }
-    
+
     // 3. Marking assignment
     const markingTarget = this.getMarkingTarget(player, gameState);
     if (markingTarget) {
       return this.calculateMarkingPosition(player, markingTarget);
     }
-    
+
     // Default to formation position
     return formationPosition;
   }
@@ -476,7 +492,7 @@ interface ExportMetadata {
 
 **Storage Location**: `assets/formations/` directory in repository
 **File Format**: Compressed JSON with `.formation` extension
-**Versioning Policy**: 
+**Versioning Policy**:
 - Major version changes require TDD updates
 - Minor versions maintain backward compatibility
 - Runtime validates format version on load
@@ -487,195 +503,10 @@ interface ExportMetadata {
 3. Add migration path for existing formations
 4. Update compatibility documentation
 
-### 6.2 Role Binding System
+### 6.4 File Types
 
-```typescript
-enum PlayerRole {
-  // Defensive roles
-  GK = "GK",
-  CB_LEFT = "CB_L",
-  CB_RIGHT = "CB_R", 
-  CB_CENTER = "CB_C",
-  LB = "LB",
-  RB = "RB",
-  WB_LEFT = "WB_L",
-  WB_RIGHT = "WB_R",
-  
-  // Midfield roles  
-  CDM = "CDM",
-  CM_LEFT = "CM_L",
-  CM_RIGHT = "CM_R",
-  CM_CENTER = "CM_C",
-  CAM = "CAM",
-  LM = "LM",
-  RM = "RM",
-  
-  // Attacking roles
-  LW = "LW",
-  RW = "RW",
-  ST_LEFT = "ST_L",
-  ST_RIGHT = "ST_R",
-  CF = "CF"
-}
-
-interface RoleMapping {
-  formation: string;            // "4-4-2-flat"
-  positions: {
-    [role in PlayerRole]?: {
-      mandatory: boolean;       // Required for formation validity
-      alternatives: PlayerRole[]; // Fallback roles if player unavailable
-      zoneRestrictions?: string[]; // Zones this role cannot occupy
-    }
-  };
-}
-```
-
-**Substitution Behavior**:
-- Role assignments persist across substitutions
-- New player inherits role-specific positioning
-- Formation adjusts if role incompatibility detected
-- Captain role transfers to highest-rated player
-
-### 6.3 Game Phase Mapping
-
-| Match Engine State | Ball Position Y | Possession | FET Game Phase |
-|-------------------|-----------------|------------|----------------|
-| KICKOFF | 0.5 | Any | NEUTRAL |
-| ACTIVE_PLAY | <0.3 | Own Team | DEFEND |
-| ACTIVE_PLAY | 0.3-0.7 | Own Team | TRANSITION_ATTACK |
-| ACTIVE_PLAY | >0.7 | Own Team | ATTACK |
-| ACTIVE_PLAY | <0.3 | Opposition | ATTACK |
-| ACTIVE_PLAY | 0.3-0.7 | Opposition | TRANSITION_DEFEND |
-| ACTIVE_PLAY | >0.7 | Opposition | DEFEND |
-| CORNER_FOR | Any | Own Team | SET_PIECE_FOR |
-| CORNER_AGAINST | Any | Opposition | SET_PIECE_AGAINST |
-| THROW_IN | Any | Any | Last active phase (maintain) |
-| GOAL_KICK_FOR | Any | Own Team | DEFEND |
-| GOAL_KICK_AGAINST | Any | Opposition | ATTACK |
-
-**Deterministic Mapping**: Phase determination must be reproducible given identical game state inputs.
-
-**SIMD Optimization Notes:**
-- **Integer Grid Operations**: Cache-friendly, exact arithmetic, no precision drift
-- **Float32Array Bulk Ops**: SIMD potential on ARM NEON via V8 TurboFan optimization
-- **Memory Layout**: Interleaved x,y coordinates for vectorization
-- **Fallback Strategy**: Pure JavaScript implementation if SIMD optimization fails
-
-```typescript
-// Example SIMD-friendly position update loop
-for (let i = 0; i < this.positionBuffer.length; i += 2) {
-  const playerIndex = i >> 1;
-  const targetX = targetPositions[i];
-  const targetY = targetPositions[i + 1];
-  const lerpFactor = 0.1;
-  
-  // Pattern recognizable by V8 for NEON vectorization
-  this.positionBuffer[i] += (targetX - this.positionBuffer[i]) * lerpFactor;
-  this.positionBuffer[i + 1] += (targetY - this.positionBuffer[i + 1]) * lerpFactor;
-}
-```
-
-## 7. Performance Specifications
-
-### 7.1 FireTV Device Benchmarks
-
-**Target Device**: FireTV Stick 4K Max (2021)
-- **SoC**: Quad-core ARM Cortex-A55 @1.8GHz
-- **GPU**: ARM Mali-G52 MC1
-- **RAM**: 2GB DDR4
-- **Storage**: 8GB internal
-
-**Benchmark Methodology**:
-1. 10-minute continuous gameplay test
-2. Formation switches every 30 seconds
-3. 22 players active simultaneously
-4. Measure: CPU %, memory usage, frame drops
-5. Pass criteria: <70% CPU, <512MB total memory, <2% frame drops
-
-**Fallback Strategy**:
-- **Grid Density Reduction**: 20x15 → 15x10 (150 zones)
-- **Phase Simplification**: 6 phases → 3 phases (ATTACK/NEUTRAL/DEFEND)
-- **Cache Reduction**: 100 entries → 50 entries
-- **Update Frequency**: 60fps → 30fps position updates
-
-### 7.2 Memory Targets
-
-| Component | Target Memory Usage | Maximum | Fallback |
-|-----------|-------------------|---------|----------|
-| Single Formation | <50KB | 75KB | Reduce grid density |
-| Formation Cache | <500KB | 1MB | LRU eviction |
-| Interpolation Cache | <100KB | 200KB | Reduce cache size |
-| Grid System | <25KB | 50KB | Coarser grid |
-| **FET Total** | **<675KB** | **1.3MB** | **Enable fallbacks** |
-| **Global Budget** | **FET + AI + Sprites + Audio < 1.5GB** | **2GB** | **Graceful degradation** |
-
-### 7.4 Performance Benchmarks
-
-| Operation | Target Time | Maximum | Fallback Action |
-|-----------|-------------|---------|-----------------|
-| Position Calculation | <1ms | 2ms | Reduce interpolation |
-| Formation Switch | <5ms | 10ms | Pre-cache transitions |
-| Cache Lookup | <0.1ms | 0.5ms | Reduce cache size |
-| Grid Zone Calculation | <0.05ms | 0.1ms | Use lookup table |
-| **22 Player Update** | **<22ms** | **44ms** | **Reduce update rate** |
-
-**Measurement Protocol**:
-- Continuous 5-minute test on target FireTV device
-- Performance counters logged every 100ms
-- Automatic fallback triggers when >80% of maximum exceeded
-- Manual override available for development testing
-
-### 7.5 Interpolation Stability
-
-**Hysteresis Thresholds**:
-- Ball must move >0.05 normalized units to trigger zone change
-- Position updates cached for minimum 200ms to prevent oscillation
-- Dead zones of ±0.02 units around zone boundaries
-
-**Smoothing Parameters**:
-```typescript
-interface SmoothingConfig {
-  positionLerpFactor: number;    // 0.1 (10% new, 90% old)
-  velocityDamping: number;       // 0.8 damping coefficient
-  maxPositionDelta: number;      // 0.1 max change per frame
-  stabilityThreshold: number;    // 0.01 considered "stable"
-}
-```
-
-**Cache Invalidation**:
-- Position cache expires after 5 seconds of no ball movement
-- Zone transitions trigger immediate recalculation
-- Formation changes clear all interpolation caches
-
-### 7.6 Quality Metrics
-
-```typescript
-interface PerformanceMetrics {
-  positionCalculationsPerSecond: number;
-  cacheHitRatio: number;
-  memoryUsageKB: number;
-  averageCalculationTime: number;
-  formationCoveragePercentage: number;
-}
-
-class PerformanceMonitor {
-  private metrics: PerformanceMetrics;
-  
-  public recordPositionCalculation(executionTime: number): void {
-    this.updateAverageCalculationTime(executionTime);
-    this.checkPerformanceThresholds();
-  }
-  
-  public getFormationCoverageAnalysis(formation: FormationData): CoverageAnalysis {
-    return {
-      pitchCoverage: this.calculatePitchCoverage(formation),
-      defensiveCoverage: this.calculateDefensiveCoverage(formation),
-      attackingOptions: this.calculateAttackingOptions(formation),
-      balanceScore: this.calculateFormationBalance(formation)
-    };
-  }
-}
-```
+- Formation File (`.formation.json`): Minimal, engine-ready formation definition (`FormationData`).
+- Project File (`.project.json`): Editor working state containing grid, posture, ball, and per-cell mappings (`EditorDoc`). Used for iterative authoring; not required at runtime.
 
 ## 7. User Interface Specifications
 
@@ -690,13 +521,26 @@ interface FETUserInterface {
     ValidationPanel: PanelComponent;     // Error display
     PreviewControls: ControlComponent;   // Animation preview
     ExportPanel: PanelComponent;         // Data export options
+    GhostOppositionToggle: ToggleComponent; // Enables mirrored opposition view
+    ProjectAutosave: ServiceComponent;   // Periodic autosave to local storage
   };
-  
+
   interactions: {
     dragAndDrop: DragDropHandler;
     keyboardShortcuts: KeyboardHandler;
     multiSelection: SelectionHandler;
     undoRedo: HistoryHandler;
+    ghostView: {
+      toggle: () => void;               // Enable/disable ghost view
+      behavior: "view-only";            // Ghost is visible but not editable
+      updateModel: "mirror-halfway";    // Mirrors ball cell and positions across halfway line
+    }
+    project: {
+      save: () => void;                 // Manual save
+      load: () => void;                 // Load from file
+      autosaveIntervalMs: number;       // e.g. 5000ms
+      storageKey: string;               // namespaced key for local storage
+    }
   };
 }
 ```
@@ -748,7 +592,7 @@ interface ValidationError {
 ### 9.1 Phase 2A: Core Editor (Months 4-5)
 - Basic drag-and-drop formation editor
 - Grid system implementation
-- Position validation engine  
+- Position validation engine
 - Formation template system
 - Export/import functionality
 
@@ -819,21 +663,21 @@ interface FormationPlugin {
 
 class FormationPluginManager {
   private plugins: Map<string, FormationPlugin> = new Map();
-  
+
   public registerPlugin(plugin: FormationPlugin): void {
     this.plugins.set(plugin.name, plugin);
   }
-  
+
   public processFormation(
     data: FormationData,
     context: GameContext
   ): FormationData {
     let processedData = data;
-    
+
     for (const plugin of this.plugins.values()) {
       processedData = plugin.process(processedData, context);
     }
-    
+
     return processedData;
   }
 }

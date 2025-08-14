@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
+
 import type { GridSize } from "../types/EditorDoc"
 import type { Vector2 } from "../types/Formation"
 
@@ -13,16 +14,16 @@ interface BallLayerProps
     onDragEnd?: () => void
 }
 
-export const BallLayer = ({ size, grid, value, onChange, onDragStart, onDragEnd }: BallLayerProps): ReactNode =>
+export const BallLayer = ({ size, grid: _grid, value, onChange, onDragStart, onDragEnd }: BallLayerProps): ReactNode =>
 {
     const ref = useRef<HTMLDivElement>(null)
 
-    const toPx = (v: Vector2) => ({ x: v.x * size.w, y: v.y * size.h })
-    const toNorm = (p: Vector2) => ({ x: Math.min(1, Math.max(0, p.x / size.w)), y: Math.min(1, Math.max(0, p.y / size.h)) })
+    const toPx = (v: Vector2): { x: number; y: number } => ({ x: v.x * size.w, y: v.y * size.h })
+    const toNorm = (p: Vector2): { x: number; y: number } => ({ x: Math.min(1, Math.max(0, p.x / size.w)), y: Math.min(1, Math.max(0, p.y / size.h)) })
 
     const pos = toPx(value)
 
-    const startDrag = (e: React.MouseEvent<HTMLDivElement>) =>
+    const startDrag = (e: React.MouseEvent<HTMLDivElement>): void =>
     {
         e.stopPropagation()
         const container = e.currentTarget.parentElement as HTMLDivElement
@@ -31,7 +32,7 @@ export const BallLayer = ({ size, grid, value, onChange, onDragStart, onDragEnd 
         const my = e.clientY - rect.top
         const localOffset = { x: mx - pos.x, y: my - pos.y }
 
-        const onMove = (me: MouseEvent) =>
+        const onMove = (me: MouseEvent): void =>
         {
             const r = container.getBoundingClientRect()
             const mx2 = me.clientX - r.left
@@ -40,7 +41,7 @@ export const BallLayer = ({ size, grid, value, onChange, onDragStart, onDragEnd 
             const ny = my2 - localOffset.y
             onChange(toNorm({ x: nx, y: ny }))
         }
-        const onUp = () =>
+        const onUp = (): void =>
         {
             window.removeEventListener("mousemove", onMove)
             window.removeEventListener("mouseup", onUp)

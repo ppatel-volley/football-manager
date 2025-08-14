@@ -1,17 +1,17 @@
 ## Formation Editor Mirroring Policy (POC/Phase 2)
 
-To minimise duplication while supporting authentic attacking positioning, the Formation Editor (FET) stores mappings for a single team across the full pitch (both halves). The opposition’s behaviour is derived at runtime by mirroring the authored team across the vertical midline.
+To minimise duplication while supporting authentic attacking positioning, the Formation Editor (FET) stores mappings for a single team across the full pitch (both halves). The opposition's behaviour is derived at runtime by mirroring the authored team across the halfway line.
 
 Authoring rules:
 - Grid: 20x15 (columns x rows) zones.
-- Saved mappings are keyed by ball grid cell key `"c_r"` for any `c ∈ [0, cols)` and `r ∈ [0, rows)`.
+- Saved mappings are keyed by ball grid cell key "c_r" for any `c ∈ [0, cols)` and `r ∈ [0, rows)`.
 - Role positions are normalised coordinates `x ∈ [0,1], y ∈ [0,1]` and can be placed anywhere (own or opposition half) to capture attacking/defending contexts for the authored team.
 
 Runtime application (opposition only):
-- Mirror axes: vertical and horizontal midlines at `x = 0.5`, `y = 0.5`.
-- Cell mirror: `c' = cols − 1 − c`, `r' = rows − 1 − r`.
-- Position mirror: `x' = 1 − x`, `y' = 1 − y`.
-- Only one team’s mappings are persisted; when the ball is in the mirrored cell, the opposition adopts the mirrored positions.
+- Mirror axis: halfway line at `y = 0.5`.
+- Cell mirror: `c' = c`, `r' = rows − 1 − r`.
+- Position mirror: `x' = x`, `y' = 1 − y`.
+- Only one team's mappings are persisted; when the ball is in the mirrored cell, the opposition adopts the mirrored positions.
 
 Editor staging semantics (for reference):
 - When the ball is moved to a new cell and any player is adjusted, those edits are staged to that ball cell; multiple cells can be staged and then committed in one operation.
@@ -368,7 +368,7 @@ class Team {
 
   private formationPositions: Float32Array;
   private teamColor: 'HOME' | 'AWAY';
-  private currentPhase: 'ATTACK' | 'DEFEND' | 'TRANSITION';
+  private currentPosture: 'ATTACK' | 'BALANCE' | 'DEFEND';  // Team posture based on FET posture system
 
   constructor(
     id: string,
@@ -382,7 +382,7 @@ class Team {
     this.players = players;
     this.formation = formation;
     this.teamColor = teamColor;
-    this.currentPhase = 'TRANSITION';
+    this.currentPosture = 'BALANCE';  // Start in balanced posture
 
     // Assign captain (highest-rated player)
     this.captain = this.findCaptain();
@@ -1453,7 +1453,82 @@ interface GameState
   lastTouch: Player | null;            // Last player to touch ball
   pressureLevel: number;               // 0-1, attacking pressure intensity
   tempo: number;                       // 0-1, pace of play
+
+  // Team tactical postures (FET integration)
+  homeTeamPosture: TeamPosture;        // HOME team's current tactical posture
+  awayTeamPosture: TeamPosture;        // AWAY team's current tactical posture
 }
+
+### 3.2.7 Team Posture Determination System
+
+**Team posture** defines the tactical stance each team adopts based on match context, ball position, and possession. This system integrates with the FET posture system (ATTACK/BALANCE/DEFEND) to provide dynamic tactical behaviour.
+
+```typescript
+class PostureDeterminationEngine {
+  public determineTeamPosture(
+    team: Team,
+    gameState: GameState,
+    tacticalInstructions?: TacticalCommand
+  ): TeamPosture {
+    // Override from tactical instructions takes priority
+    if (tacticalInstructions?.forcedPosture) {
+      return tacticalInstructions.forcedPosture;
+    }
+
+    const ballPosition = gameState.ball.position;
+    const hasPossession = gameState.possession === team.side;
+    const isInOwnHalf = this.isInOwnHalf(ballPosition, team.side);
+    const isInOpponentHalf = this.isInOpponentHalf(ballPosition, team.side);
+    const scoreDifference = this.getScoreDifference(gameState, team.side);
+    const timeRemaining = this.getTimeRemaining(gameState);
+
+    // Basic posture rules based on ball position and possession
+    if (hasPossession) {
+      if (isInOpponentHalf) {
+        return 'ATTACK';  // Have ball in opponent half = attack
+      } else if (isInOwnHalf) {
+        return 'BALANCE'; // Have ball in own half = build up (balance)
+      }
+    } else {
+      if (isInOwnHalf) {
+        return 'DEFEND';  // Opponent has ball in our half = defend
+      } else if (isInOpponentHalf) {
+        return 'BALANCE'; // Opponent has ball in their half = balanced pressing
+      }
+    }
+
+    // Situational modifiers
+    if (scoreDifference < -1 && timeRemaining < 15) {
+      return 'ATTACK';  // Desperate for goals
+    } else if (scoreDifference > 1 && timeRemaining < 20) {
+      return 'DEFEND';  // Protecting lead
+    }
+
+    return 'BALANCE'; // Default to balanced posture
+  }
+
+  private isInOwnHalf(ballPos: Vector2, teamSide: 'HOME' | 'AWAY'): boolean {
+    return teamSide === 'HOME' ? ballPos.x < 0.5 : ballPos.x > 0.5;
+  }
+
+  private isInOpponentHalf(ballPos: Vector2, teamSide: 'HOME' | 'AWAY'): boolean {
+    return teamSide === 'HOME' ? ballPos.x > 0.5 : ballPos.x < 0.5;
+  }
+}
+```
+
+#### Team Posture Mapping Table
+
+| Ball Position | Possession | Team Posture | Formation Positions Used |
+|---------------|------------|--------------|-------------------------|
+| Own half | Own team | BALANCE | Balanced positions for build-up play |
+| Own half | Opposition | DEFEND | Compact defensive positions |
+| Middle third | Own team | BALANCE | Transitional attacking positions |
+| Middle third | Opposition | BALANCE | Balanced pressing positions |
+| Opponent half | Own team | ATTACK | Advanced attacking positions |
+| Opponent half | Opposition | BALANCE | Medium defensive block |
+
+**Note**: These postures directly correspond to the FET posture data exported from the Formation Editor Tool, ensuring consistent tactical behaviour between formation design and runtime execution.
 
 interface MatchTime
 {
@@ -3440,14 +3515,23 @@ class POCFormationGrid {
 #### 3.4.2 Formation Data Management
 
 ```typescript
+// Team posture types aligned with FET posture system
+export type TeamPosture = "ATTACK" | "BALANCE" | "DEFEND";
+
 interface FormationDefinition {
   id: string;                       // "4-4-2-flat"
   positions: Float32Array;          // Pre-computed normalized positions [x1,y1,x2,y2,...]
   roles: PlayerRole[];              // Corresponding roles for each position
-  phases: {
-    attack: Float32Array;           // Attacking phase adjustments
-    defend: Float32Array;           // Defensive phase adjustments
-    transition: Float32Array;       // Neutral/transition positions
+  postures: {
+    ATTACK: Float32Array;           // Attacking posture positions (more advanced)
+    BALANCE: Float32Array;          // Balanced posture positions (default)
+    DEFEND: Float32Array;           // Defensive posture positions (more compact)
+  };
+  // Formation metadata for runtime integration
+  metadata?: {
+    formationName: string;          // Display name
+    tacticalType: 'offensive' | 'balanced' | 'defensive';
+    suitableAgainst: string[];      // Counter-formation recommendations
   };
 }
 
@@ -3474,65 +3558,172 @@ class FormationManager {
   }
 
   private createFormation442(): FormationDefinition {
-    // Normalized positions for 4-4-2 formation (home team attacking right)
-    const positions = new Float32Array([
+    // Balanced posture positions for 4-4-2 formation (home team attacking right)
+    const balancePositions = new Float32Array([
       // Goalkeeper
       0.05, 0.5,
-
       // Defense (4)
-      0.25, 0.2,  // Left back
-      0.20, 0.35, // Center back left
-      0.20, 0.65, // Center back right
-      0.25, 0.8,  // Right back
-
+      0.2, 0.2,   // Left back
+      0.2, 0.4,   // Center back left
+      0.2, 0.6,   // Center back right
+      0.2, 0.8,   // Right back
       // Midfield (4)
-      0.45, 0.15, // Left midfield
-      0.50, 0.35, // Center midfield left
-      0.50, 0.65, // Center midfield right
-      0.45, 0.85, // Right midfield
-
+      0.35, 0.35, // Left midfield
+      0.35, 0.65, // Right midfield
+      0.48, 0.3,  // Left wing
+      0.48, 0.7,  // Right wing
       // Attack (2)
-      0.75, 0.4,  // Striker left
-      0.75, 0.6   // Striker right
+      0.6, 0.45,  // Striker left
+      0.6, 0.55   // Striker right
+    ]);
+
+    // Attack posture - more advanced positions
+    const attackPositions = new Float32Array([
+      // Goalkeeper
+      0.05, 0.5,
+      // Defense (4) - pushed up
+      0.22, 0.24,  // Left back advanced
+      0.22, 0.4,   // Center back left
+      0.22, 0.6,   // Center back right
+      0.22, 0.76,  // Right back advanced
+      // Midfield (4) - more attacking
+      0.4, 0.35,   // Left midfield higher
+      0.4, 0.65,   // Right midfield higher
+      0.52, 0.3,   // Left wing advanced
+      0.52, 0.7,   // Right wing advanced
+      // Attack (2) - closer to goal
+      0.62, 0.45,  // Striker left
+      0.62, 0.55   // Striker right
+    ]);
+
+    // Defend posture - more compact positions
+    const defendPositions = new Float32Array([
+      // Goalkeeper
+      0.05, 0.5,
+      // Defense (4) - deeper
+      0.18, 0.22,  // Left back deeper
+      0.18, 0.4,   // Center back left
+      0.18, 0.6,   // Center back right
+      0.18, 0.78,  // Right back deeper
+      // Midfield (4) - more defensive
+      0.3, 0.38,   // Left midfield deeper
+      0.3, 0.62,   // Right midfield deeper
+      0.4, 0.34,   // Left wing tracking back
+      0.4, 0.66,   // Right wing tracking back
+      // Attack (2) - dropping back
+      0.48, 0.48,  // Striker left
+      0.48, 0.52   // Striker right
     ]);
 
     return {
       id: "4-4-2-flat",
-      positions,
+      positions: balancePositions, // Default to balance positions
       roles: [
-        PlayerRole.GOALKEEPER,
-        PlayerRole.FULL_BACK, PlayerRole.CENTRE_BACK, PlayerRole.CENTRE_BACK, PlayerRole.FULL_BACK,
-        PlayerRole.WINGER, PlayerRole.CENTRAL_MIDFIELDER, PlayerRole.CENTRAL_MIDFIELDER, PlayerRole.WINGER,
-        PlayerRole.STRIKER, PlayerRole.STRIKER
+        'GK',
+        'LB', 'CB_L', 'CB_R', 'RB',      // Defense
+        'CM_L', 'CM_R', 'LW', 'RW',      // Midfield
+        'ST_L', 'ST_R'                    // Attack
       ],
-      phases: {
-        attack: this.createAttackingAdjustments(positions),
-        defend: this.createDefensiveAdjustments(positions),
-        transition: positions.slice() // Copy of base positions
+      postures: {
+        ATTACK: attackPositions,
+        BALANCE: balancePositions,
+        DEFEND: defendPositions
+      },
+      metadata: {
+        formationName: "4-4-2 Flat",
+        tacticalType: 'balanced',
+        suitableAgainst: ["4-3-3", "3-5-2"]
       }
     };
   }
 
-  private createAttackingAdjustments(basePositions: Float32Array): Float32Array {
-    const adjusted = basePositions.slice();
+  // Enhanced method to get positions based on team posture
+  public getPlayerPositions(
+    formationId: string,
+    teamPosture: TeamPosture,
+    ballPosition?: Vector2
+  ): Float32Array {
+    const formation = this.formations.get(formationId);
+    if (!formation) {
+      throw new Error(`Formation ${formationId} not found`);
+    }
 
-    // Push players forward in attacking phase
-    for (let i = 0; i < adjusted.length; i += 2) {
-      adjusted[i] += 0.1; // Move 10% further up pitch
+    // Get base positions for the requested posture
+    const basePositions = formation.postures[teamPosture];
+
+    // Optional: Apply ball-relative positioning adjustments (FET integration)
+    if (ballPosition) {
+      return this.applyBallInfluence(basePositions, ballPosition, teamPosture);
+    }
+
+    return basePositions.slice(); // Return copy
+  }
+
+  private applyBallInfluence(
+    positions: Float32Array,
+    ballPos: Vector2,
+    posture: TeamPosture
+  ): Float32Array {
+    const adjusted = positions.slice();
+    const influenceStrength = posture === 'ATTACK' ? 0.15 :
+                             posture === 'BALANCE' ? 0.10 : 0.05;
+
+    // Apply subtle ball attraction to non-goalkeeper players
+    for (let i = 2; i < adjusted.length; i += 2) { // Skip goalkeeper
+      const playerX = adjusted[i];
+      const playerY = adjusted[i + 1];
+
+      // Calculate ball influence vector
+      const dx = ballPos.x - playerX;
+      const dy = ballPos.y - playerY;
+
+      // Apply influence (stronger for attacking postures)
+      adjusted[i] += dx * influenceStrength;
+      adjusted[i + 1] += dy * influenceStrength;
+
+      // Clamp to field boundaries
+      adjusted[i] = Math.max(0, Math.min(1, adjusted[i]));
+      adjusted[i + 1] = Math.max(0, Math.min(1, adjusted[i + 1]));
     }
 
     return adjusted;
   }
 
-  private createDefensiveAdjustments(basePositions: Float32Array): Float32Array {
-    const adjusted = basePositions.slice();
+  // Integration method for updating game state with new postures
+  public updateTeamPostures(
+    gameState: GameState,
+    postureEngine: PostureDeterminationEngine
+  ): void {
+    const homeTeam = gameState.teams[0];
+    const awayTeam = gameState.teams[1];
 
-    // Pull players back in defensive phase (except goalkeeper)
-    for (let i = 2; i < adjusted.length; i += 2) { // Skip goalkeeper (index 0,1)
-      adjusted[i] -= 0.08; // Move 8% back towards own goal
+    // Determine new postures for both teams
+    gameState.homeTeamPosture = postureEngine.determineTeamPosture(
+      homeTeam, gameState
+    );
+    gameState.awayTeamPosture = postureEngine.determineTeamPosture(
+      awayTeam, gameState
+    );
+
+    // Update player positions based on new postures
+    this.applyPosturePositions(homeTeam, gameState.homeTeamPosture, gameState.ball.position);
+    this.applyPosturePositions(awayTeam, gameState.awayTeamPosture, gameState.ball.position);
+  }
+
+  private applyPosturePositions(
+    team: Team,
+    posture: TeamPosture,
+    ballPosition: Vector2
+  ): void {
+    const positions = this.getPlayerPositions(team.formation, posture, ballPosition);
+
+    // Update each player's target position
+    for (let i = 0; i < team.players.length && i * 2 < positions.length; i++) {
+      team.players[i].targetPosition = {
+        x: positions[i * 2],
+        y: positions[i * 2 + 1]
+      };
     }
-
-    return adjusted;
   }
 }
 ```

@@ -103,6 +103,13 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 **POC Approach**: Use pre-defined formation templates (4-4-2, 4-3-3) with basic positioning rules.
 
+**Opposition Mirroring (Editor Visualisation)**:
+- The editor supports a Ghost Opposition view that reflects the user's formation to the other half for tactical preview.
+- Mirroring uses the halfway line: positions map as y' = 1 − y (x unchanged).
+- The opposition's ball cell is the mirror of the user's: (c, r) → (c, rows − 1 − r).
+- Ghost positions are taken from the user's mapping at that mirrored ball cell, then mirrored across the halfway line.
+- Ghost is view-only; the user's team remains editable and layered above.
+
 ### 3.2 POC Acceptance Criteria
 
 #### 3.2.1 Ball Physics and Boundaries
@@ -311,7 +318,7 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 #### 3.6.2 Half-Time Procedures
 - **Automatic Transition**: Brief pause at 45 minutes, automatic progression to second half
-- **Team Switch**: Team that didn't kick off first half kicks off second half  
+- **Team Switch**: Team that didn't kick off first half kicks off second half
 - **Formation Reset**: Players return to kick-off positions
 - **Simple UI**: Minimal "Half Time" notification (brief, non-blocking)
 

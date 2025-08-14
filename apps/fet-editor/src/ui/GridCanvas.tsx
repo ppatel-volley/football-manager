@@ -92,9 +92,27 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
             ctx.fillStyle = "rgba(0, 200, 60, 0.32)"
             ctx.fillRect(highlightCell.c * cell.w, highlightCell.r * cell.h, cell.w, cell.h)
         }
-    }, [cols, rows, cell.h, cell.w, highlightCell?.c, highlightCell?.r, mappedCells?.length, pendingCells?.length])
 
-    const getCellFromEvent = (e: React.MouseEvent<HTMLCanvasElement>) =>
+        // Axes labels: alphabetic along pitch length (rows, A..), numeric along width (cols, 1..)
+        ctx.fillStyle = "#ddd"
+        ctx.font = "12px sans-serif"
+        // Left side row labels (A at top)
+        for (let r = 0; r < rows; r++)
+        {
+            const letter = String.fromCharCode(65 + r) // A,B,C...
+            ctx.fillText(letter, 4, r * cell.h + 12)
+        }
+        // Top column labels (1..)
+        for (let c = 0; c < cols; c++)
+        {
+            const num = String(c + 1)
+            ctx.fillText(num, c * cell.w + 4, 12)
+        }
+    // Intentionally depend on scalar props; coloredCells etc. are drawn via passed values
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cols, rows, cell.h, cell.w, highlightCell?.c, highlightCell?.r])
+
+    const getCellFromEvent = (e: React.MouseEvent<HTMLCanvasElement>): { c: number; r: number } | null =>
     {
         const canvas = ref.current
         if (!canvas) return null
@@ -114,7 +132,7 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
         return set
     }, [mappedCells, pendingCells])
 
-    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>): void =>
     {
         const cellPos = getCellFromEvent(e)
         if (!cellPos) return
@@ -139,7 +157,7 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
         }
     }
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>): void =>
     {
         const st = stateRef.current
         if (st.mode === 'none') return
@@ -158,13 +176,13 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
         stateRef.current.last = key
     }
 
-    const handleMouseUpLeave = () =>
+    const handleMouseUpLeave = (): void =>
     {
         stateRef.current = { mode: 'none', source: null, last: undefined }
         if (ref.current) ref.current.style.cursor = 'default'
     }
 
-    const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>): void =>
     {
         e.preventDefault()
     }
