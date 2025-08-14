@@ -9,9 +9,11 @@ interface BallLayerProps
     grid: GridSize
     value: Vector2
     onChange: (v: Vector2) => void
+    onDragStart?: () => void
+    onDragEnd?: () => void
 }
 
-export const BallLayer = ({ size, grid, value, onChange }: BallLayerProps): ReactNode =>
+export const BallLayer = ({ size, grid, value, onChange, onDragStart, onDragEnd }: BallLayerProps): ReactNode =>
 {
     const ref = useRef<HTMLDivElement>(null)
 
@@ -22,6 +24,7 @@ export const BallLayer = ({ size, grid, value, onChange }: BallLayerProps): Reac
 
     const startDrag = (e: React.MouseEvent<HTMLDivElement>) =>
     {
+        e.stopPropagation()
         const container = e.currentTarget.parentElement as HTMLDivElement
         const rect = container.getBoundingClientRect()
         const mx = e.clientX - rect.left
@@ -41,7 +44,9 @@ export const BallLayer = ({ size, grid, value, onChange }: BallLayerProps): Reac
         {
             window.removeEventListener("mousemove", onMove)
             window.removeEventListener("mouseup", onUp)
+            if (onDragEnd) onDragEnd()
         }
+        if (onDragStart) onDragStart()
         window.addEventListener("mousemove", onMove)
         window.addEventListener("mouseup", onUp)
     }

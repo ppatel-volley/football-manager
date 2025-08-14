@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 
 interface GridCanvasProps
 {
@@ -9,11 +9,15 @@ interface GridCanvasProps
     highlightCell?: { c: number; r: number } | null
     mappedCells?: Array<{ c: number; r: number }>
     pendingCells?: Array<{ c: number; r: number }>
+    onCopyPaint?: (target: { c: number; r: number }, source: { c: number; r: number }) => void
+    onClearPaint?: (target: { c: number; r: number }) => void
+    coloredCells?: Array<{ c: number; r: number; color: string }>
 }
 
-export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendingCells }: GridCanvasProps): ReactNode =>
+export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendingCells, onCopyPaint, onClearPaint, coloredCells }: GridCanvasProps): ReactNode =>
 {
     const ref = useRef<HTMLCanvasElement>(null)
+    const stateRef = useRef<{ mode: 'none' | 'copy' | 'clear'; source: { c: number; r: number } | null; last?: string }>({ mode: 'none', source: null })
 
     useEffect(() =>
     {
@@ -52,30 +56,118 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
             ctx.stroke()
         }
 
-        if (mappedCells && mappedCells.length > 0)
+        if (coloredCells && coloredCells.length > 0)
         {
-            ctx.fillStyle = "rgba(0, 150, 255, 0.12)"
-            for (const mc of mappedCells)
+            for (const cc of coloredCells)
             {
-                ctx.fillRect(mc.c * cell.w, mc.r * cell.h, cell.w, cell.h)
+                ctx.fillStyle = cc.color
+                ctx.fillRect(cc.c * cell.w, cc.r * cell.h, cell.w, cell.h)
             }
         }
-
-        if (pendingCells && pendingCells.length > 0)
+        else
         {
-            ctx.fillStyle = "rgba(0, 255, 100, 0.12)"
-            for (const pc of pendingCells)
+            if (mappedCells && mappedCells.length > 0)
             {
-                ctx.fillRect(pc.c * cell.w, pc.r * cell.h, cell.w, cell.h)
+                // Very light blue for set cells (fallback)
+                ctx.fillStyle = "rgba(140, 200, 255, 0.18)"
+                for (const mc of mappedCells)
+                {
+                    ctx.fillRect(mc.c * cell.w, mc.r * cell.h, cell.w, cell.h)
+                }
+            }
+            if (pendingCells && pendingCells.length > 0)
+            {
+                // Same as set for fallback
+                ctx.fillStyle = "rgba(140, 200, 255, 0.18)"
+                for (const pc of pendingCells)
+                {
+                    ctx.fillRect(pc.c * cell.w, pc.r * cell.h, cell.w, cell.h)
+                }
             }
         }
 
         if (highlightCell)
         {
-            ctx.fillStyle = "rgba(255,255,0,0.15)"
+            // Ball-occupied cell highlight: distinct green shade
+            ctx.fillStyle = "rgba(0, 200, 60, 0.32)"
             ctx.fillRect(highlightCell.c * cell.w, highlightCell.r * cell.h, cell.w, cell.h)
         }
     }, [cols, rows, cell.h, cell.w, highlightCell?.c, highlightCell?.r, mappedCells?.length, pendingCells?.length])
+
+    const getCellFromEvent = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    {
+        const canvas = ref.current
+        if (!canvas) return null
+        const rect = canvas.getBoundingClientRect()
+        const mx = e.clientX - rect.left
+        const my = e.clientY - rect.top
+        const c = Math.max(0, Math.min(cols - 1, Math.floor(mx / cell.w)))
+        const r = Math.max(0, Math.min(rows - 1, Math.floor(my / cell.h)))
+        return { c, r }
+    }
+
+    const cellsWithSetting = useMemo(() =>
+    {
+        const set = new Set<string>()
+        for (const m of (mappedCells ?? [])) set.add(`${m.c}_${m.r}`)
+        for (const p of (pendingCells ?? [])) set.add(`${p.c}_${p.r}`)
+        return set
+    }, [mappedCells, pendingCells])
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    {
+        const cellPos = getCellFromEvent(e)
+        if (!cellPos) return
+        if (e.button === 0)
+        {
+            // Left button: start copy paint only if starting cell has mapping
+            const key = `${cellPos.c}_${cellPos.r}`
+            if (cellsWithSetting.has(key))
+            {
+                stateRef.current = { mode: 'copy', source: cellPos, last: undefined }
+                if (ref.current) ref.current.style.cursor = 'copy'
+            }
+        }
+        else if (e.button === 2)
+        {
+            // Right button: start clear paint
+            e.preventDefault()
+            stateRef.current = { mode: 'clear', source: null, last: undefined }
+            onClearPaint?.(cellPos)
+            stateRef.current.last = `${cellPos.c}_${cellPos.r}`
+            if (ref.current) ref.current.style.cursor = 'not-allowed'
+        }
+    }
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    {
+        const st = stateRef.current
+        if (st.mode === 'none') return
+        const cellPos = getCellFromEvent(e)
+        if (!cellPos) return
+        const key = `${cellPos.c}_${cellPos.r}`
+        if (st.last === key) return
+        if (st.mode === 'copy' && st.source)
+        {
+            onCopyPaint?.(cellPos, st.source)
+        }
+        else if (st.mode === 'clear')
+        {
+            onClearPaint?.(cellPos)
+        }
+        stateRef.current.last = key
+    }
+
+    const handleMouseUpLeave = () =>
+    {
+        stateRef.current = { mode: 'none', source: null, last: undefined }
+        if (ref.current) ref.current.style.cursor = 'default'
+    }
+
+    const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    {
+        e.preventDefault()
+    }
 
     return (
         <canvas
@@ -83,6 +175,11 @@ export const GridCanvas = ({ cols, rows, cell, highlightCell, mappedCells, pendi
             width={cols * cell.w}
             height={rows * cell.h}
             style={{ background: "#0a5d0a", border: "2px solid #444" }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpLeave}
+            onMouseLeave={handleMouseUpLeave}
+            onContextMenu={handleContextMenu}
         />
     )
 }

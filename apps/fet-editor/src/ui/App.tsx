@@ -1,12 +1,12 @@
 import type { ReactNode } from "react"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { GridCanvas } from "./GridCanvas"
 import { MarkersLayer } from "./MarkersLayer"
 import { BallLayer } from "./BallLayer"
 import { cellKey } from "../lib/cellKey"
 import type { FormationData } from "../types/Formation"
 import type { EditorDoc } from "../types/EditorDoc"
-import type { PlayerRole, Vector2 } from "../types/Formation"
+import type { PlayerRole, Vector2, Posture } from "../types/Formation"
 
 export const App = (): ReactNode =>
 {
@@ -46,11 +46,59 @@ export const App = (): ReactNode =>
                 ST_L: { x: 0.45, y: 0.45 },
                 ST_R: { x: 0.45, y: 0.55 },
             },
+            postures:
+            {
+                ATTACK: {
+                    GK: { x: 0.05, y: 0.5 },
+                    LB: { x: 0.22, y: 0.24 },
+                    CB_L: { x: 0.22, y: 0.4 },
+                    CB_R: { x: 0.22, y: 0.6 },
+                    RB: { x: 0.22, y: 0.76 },
+                    CM_L: { x: 0.4, y: 0.35 },
+                    CM_R: { x: 0.4, y: 0.65 },
+                    LW: { x: 0.52, y: 0.3 },
+                    RW: { x: 0.52, y: 0.7 },
+                    ST_L: { x: 0.6, y: 0.45 },
+                    ST_R: { x: 0.6, y: 0.55 },
+                },
+                BALANCE: {
+                    GK: { x: 0.05, y: 0.5 },
+                    LB: { x: 0.2, y: 0.2 },
+                    CB_L: { x: 0.2, y: 0.4 },
+                    CB_R: { x: 0.2, y: 0.6 },
+                    RB: { x: 0.2, y: 0.8 },
+                    CM_L: { x: 0.35, y: 0.35 },
+                    CM_R: { x: 0.35, y: 0.65 },
+                    LW: { x: 0.48, y: 0.3 },
+                    RW: { x: 0.48, y: 0.7 },
+                    ST_L: { x: 0.55, y: 0.45 },
+                    ST_R: { x: 0.55, y: 0.55 },
+                },
+                DEFEND: {
+                    GK: { x: 0.05, y: 0.5 },
+                    LB: { x: 0.18, y: 0.22 },
+                    CB_L: { x: 0.18, y: 0.4 },
+                    CB_R: { x: 0.18, y: 0.6 },
+                    RB: { x: 0.18, y: 0.78 },
+                    CM_L: { x: 0.3, y: 0.38 },
+                    CM_R: { x: 0.3, y: 0.62 },
+                    LW: { x: 0.4, y: 0.34 },
+                    RW: { x: 0.4, y: 0.66 },
+                    ST_L: { x: 0.48, y: 0.48 },
+                    ST_R: { x: 0.48, y: 0.52 },
+                },
+            },
         },
-        mapping: {},
-        ball: { x: 0.45, y: 0.5 },
+        posture: "BALANCE",
+        mapping: { ATTACK: {}, BALANCE: {}, DEFEND: {} },
+        ball: { x: 0.5, y: 0.5 },
     })
     const [pending, setPending] = useState<Record<string, typeof doc.formation.roles>>({})
+    const [paintMode, setPaintMode] = useState<"none" | "copy" | "clear">("none")
+    const [paintSource, setPaintSource] = useState<{ c: number; r: number } | null>(null)
+    const paintLast = useRef<string | null>(null)
+    const canvasContainerRef = useRef<HTMLDivElement>(null)
+    const [isBallDragging, setIsBallDragging] = useState(false)
 
     // Load formations from repo folder via Vite glob
     const formationFiles = (import.meta as any).glob("../formations/*.json", { eager: true }) as Record<string, { default: FormationData } | FormationData>
@@ -142,7 +190,7 @@ export const App = (): ReactNode =>
     {
         const preset = presets[id] as Record<PlayerRole, Vector2>
         const roles = clampOwnHalf(preset)
-        setDoc((d) => ({ ...d, formation: { formationId: id, name: id, roles: { ...roles } }, ball: { x: 0.45, y: 0.5 } }))
+        setDoc((d) => ({ ...d, formation: { formationId: id, name: id, roles: { ...roles } }, ball: { x: 0.5, y: 0.5 } }))
     }
 
     const exportEditorDoc = () =>
@@ -188,12 +236,30 @@ export const App = (): ReactNode =>
                 const maybeFormation = parsed as Partial<FormationData>
                 if (maybeDoc && maybeDoc.grid && maybeDoc.mapping && maybeDoc.formation)
                 {
-                    setDoc(maybeDoc as EditorDoc)
+                    // Backfill posture/mapping if older schema loaded
+                    const posture: Posture = (maybeDoc as any).posture ?? "BALANCE"
+                    const mapping = (maybeDoc as any).mapping
+                    const normalizedMapping: EditorDoc["mapping"] = ((): EditorDoc["mapping"] =>
+                    {
+                        if (mapping && ("ATTACK" in mapping || "BALANCE" in mapping || "DEFEND" in mapping))
+                        {
+                            return mapping as EditorDoc["mapping"]
+                        }
+                        return { ATTACK: {}, BALANCE: mapping as any as Record<string, Record<PlayerRole, Vector2>> ?? {}, DEFEND: {} }
+                    })()
+                    setDoc((d) => ({
+                        ...d,
+                        ...maybeDoc,
+                        posture,
+                        mapping: normalizedMapping,
+                        ball: { x: 0.5, y: 0.5 },
+                    } as EditorDoc))
                     return
                 }
                 if (maybeFormation && maybeFormation.formationId && maybeFormation.roles)
                 {
-                    setDoc((d) => ({ ...d, formation: maybeFormation as FormationData }))
+                    const roles = clampOwnHalf(maybeFormation.roles as Record<PlayerRole, Vector2>)
+                    setDoc((d) => ({ ...d, formation: { ...(maybeFormation as FormationData), roles }, ball: { x: 0.5, y: 0.5 } }))
                     return
                 }
                 // Fallback: ignore
@@ -247,68 +313,60 @@ export const App = (): ReactNode =>
     // Export compact schema per FET-TDD
     const exportCompact = () =>
     {
-        // Map grid cell mappings to compact representation under a single phase "attack"
-        const zones: number[] = []
-        const positions: number[] = [] // interleaved x,y per role in a fixed order
-        const priorities: number[] = []
-        const flexibility: number[] = []
+        // Build compact export for ATTACK/BALANCE/DEFEND phases
+        const phases: Record<string, { zones: number[]; positions: number[]; priorities: number[]; flexibility: number[] }> = {}
 
-        // We will export the current ball cell mapping if present; otherwise export base roles as a single entry (zone -1)
-        const baseRoles = doc.formation.roles
-        const roleOrder = Object.keys(baseRoles) as PlayerRole[]
-
-        const pushRoleSet = (set: Record<PlayerRole, Vector2>, zoneIndex: number) =>
-        {
-            zones.push(zoneIndex)
-            for (const r of roleOrder)
-            {
-                const p = set[r]
-                positions.push(p.x, p.y)
-                priorities.push(5)
-                flexibility.push(20)
-            }
-        }
-
+        const roleOrder = Object.keys(doc.formation.roles) as PlayerRole[]
         const gridWidth = doc.grid.cols
-        const gridHeight = doc.grid.rows
         const toIndex = (c: number, r: number) => r * gridWidth + c
 
-        const mappingKeys = Object.keys(doc.mapping)
-        if (mappingKeys.length > 0)
+        const buildPhase = (posture: Posture, base: Record<PlayerRole, Vector2>) =>
         {
-            for (const key of mappingKeys)
+            const zones: number[] = []
+            const positions: number[] = []
+            const priorities: number[] = []
+            const flexibility: number[] = []
+
+            const mapping = doc.mapping[posture] ?? {}
+            const keys = Object.keys(mapping)
+            const pushSet = (set: Record<PlayerRole, Vector2>, zoneIndex: number) =>
             {
-                const [cStr, rStr] = key.split("_")
-                const c = Number.parseInt(cStr ?? "0", 10)
-                const r = Number.parseInt(rStr ?? "0", 10)
-                const idx = toIndex(c, r)
-                const set = doc.mapping[key]
-                if (set)
+                zones.push(zoneIndex)
+                for (const r of roleOrder)
                 {
-                    pushRoleSet(set, idx)
+                    const p = set[r]
+                    positions.push(p.x, p.y)
+                    priorities.push(5)
+                    flexibility.push(20)
                 }
             }
-        }
-        else
-        {
-            // No per-zone mapping; export base formation with virtual zone -1
-            pushRoleSet(baseRoles, -1)
-        }
-
-        const compact = {
-            id: doc.formation.formationId,
-            phases:
+            if (keys.length === 0)
             {
-                attack:
+                pushSet(base, -1)
+            }
+            else
+            {
+                for (const k of keys)
                 {
-                    zones,
-                    positions,
-                    priorities,
-                    flexibility,
-                },
-            },
+                    const [cStr, rStr] = k.split("_")
+                    const c = Number.parseInt(cStr ?? "0", 10)
+                    const r = Number.parseInt(rStr ?? "0", 10)
+                    pushSet(mapping[k]!, toIndex(c, r))
+                }
+            }
+            phases[posture.toLowerCase()] = { zones, positions, priorities, flexibility }
         }
 
+        const bases: Record<Posture, Record<PlayerRole, Vector2>> = {
+            ATTACK: doc.formation.postures?.ATTACK ?? doc.formation.roles,
+            BALANCE: doc.formation.postures?.BALANCE ?? doc.formation.roles,
+            DEFEND: doc.formation.postures?.DEFEND ?? doc.formation.roles,
+        }
+        buildPhase("ATTACK", bases.ATTACK)
+        buildPhase("BALANCE", bases.BALANCE)
+        buildPhase("DEFEND", bases.DEFEND)
+
+        const compact = { id: doc.formation.formationId, phases }
         const blob = new Blob([JSON.stringify(compact, null, 2)], { type: "application/json" })
         const url = URL.createObjectURL(blob)
         const a = document.createElement("a")
@@ -348,7 +406,11 @@ export const App = (): ReactNode =>
                         onClick={() =>
                         {
                             const found = availableFormations.find((f) => f.path === selectedFormationPath)
-                            if (found) setDoc((d) => ({ ...d, formation: found.data }))
+                            if (found)
+                            {
+                                const clamped = { ...found.data, roles: clampOwnHalf((found.data as FormationData).roles) }
+                                setDoc((d) => ({ ...d, formation: clamped, ball: { x: 0.5, y: 0.5 } }))
+                            }
                         }}
                     >
                         Load Selected
@@ -392,6 +454,41 @@ export const App = (): ReactNode =>
                         <input type="file" accept="application/json" onChange={importEditorDoc} style={{ display: "none" }} />
                     </label>
                     <button onClick={exportCompact}>Export Compact</button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 12, color: "#bbb" }}>Posture</span>
+                        <select
+                            value={doc.posture}
+                            onChange={(e) =>
+                            {
+                                const next = e.target.value as Posture
+                                setDoc((d) =>
+                                {
+                                    // On posture switch, if formation has base posture presets, apply as working roles
+                                    const base = d.formation.postures?.[next]
+                                    return base ? { ...d, posture: next, formation: { ...d.formation, roles: { ...base } } } : { ...d, posture: next }
+                                })
+                            }}
+                            style={{ background: "#222", color: "#fff", border: "1px solid #555", borderRadius: 6, padding: "4px 8px" }}
+                        >
+                            <option value="ATTACK">ATTACK</option>
+                            <option value="BALANCE">BALANCE</option>
+                            <option value="DEFEND">DEFEND</option>
+                        </select>
+                        <button
+                            onClick={() =>
+                            {
+                                setDoc((d) =>
+                                {
+                                    const nextPostures = { ...(d.formation.postures ?? {}) } as NonNullable<typeof d.formation.postures>
+                                    nextPostures[d.posture] = { ...d.formation.roles }
+                                    return { ...d, formation: { ...d.formation, postures: nextPostures } }
+                                })
+                            }}
+                            title="Save current role positions as the default for this posture"
+                        >
+                            Save to posture
+                        </button>
+                    </div>
                     <button
                         onClick={() =>
                         {
@@ -406,7 +503,7 @@ export const App = (): ReactNode =>
                         onClick={() =>
                         {
                             // Commit all pending into mapping
-                            setDoc((d) => ({ ...d, mapping: { ...d.mapping, ...pending } }))
+                            setDoc((d) => ({ ...d, mapping: { ...d.mapping, [d.posture]: { ...d.mapping[d.posture], ...pending } } }))
                             setPending({})
                         }}
                         disabled={Object.keys(pending).length === 0}
@@ -418,20 +515,20 @@ export const App = (): ReactNode =>
                         {
                             if (!doc.ball) return
                             const key = cellKey(doc.grid, doc.ball)
-                            if (!Object.prototype.hasOwnProperty.call(doc.mapping, key)) return
+                            if (!Object.prototype.hasOwnProperty.call(doc.mapping[doc.posture] ?? {}, key)) return
                             setDoc((d) =>
                             {
-                                const next = { ...d.mapping }
-                                delete next[key]
-                                return { ...d, mapping: next }
+                                const nextPostureMap = { ...(d.mapping[d.posture] ?? {}) }
+                                delete nextPostureMap[key]
+                                return { ...d, mapping: { ...d.mapping, [d.posture]: nextPostureMap } }
                             })
                         }}
-                        disabled={!Object.keys(doc.mapping).includes(cellKey(doc.grid, doc.ball!))}
+                        disabled={!Object.keys(doc.mapping[doc.posture] ?? {}).includes(cellKey(doc.grid, doc.ball!))}
                     >
                         Delete mapping for current cell
                     </button>
-                    <span style={{ fontSize: 12, padding: 6, color: Object.keys(doc.mapping).includes(cellKey(doc.grid, doc.ball!)) ? "#0f0" : "#aaa" }}>
-                        {Object.keys(doc.mapping).includes(cellKey(doc.grid, doc.ball!)) ? "Committed mapping exists for current cell" : Object.keys(pending).includes(cellKey(doc.grid, doc.ball!)) ? "Staged mapping exists for current cell" : "No mapping for current cell"}
+                    <span style={{ fontSize: 12, padding: 6, color: Object.keys(doc.mapping[doc.posture] ?? {}).includes(cellKey(doc.grid, doc.ball!)) ? "#0f0" : "#aaa" }}>
+                        {Object.keys(doc.mapping[doc.posture] ?? {}).includes(cellKey(doc.grid, doc.ball!)) ? "Committed mapping exists for current cell (this posture)" : Object.keys(pending).includes(cellKey(doc.grid, doc.ball!)) ? "Staged mapping exists for current cell" : "No mapping for current cell"}
                     </span>
                 </div>
                 <div style={{ marginTop: 12 }}>
@@ -457,7 +554,7 @@ export const App = (): ReactNode =>
                 </div>
             </div>
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                <div style={{ position: "relative", width: canvasSize.w, height: canvasSize.h }}>
+                <div ref={canvasContainerRef} style={{ position: "relative", width: canvasSize.w, height: canvasSize.h, cursor: paintMode === "copy" ? "copy" : paintMode === "clear" ? "not-allowed" : "auto" }}>
                     <GridCanvas
                         cols={grid.cols}
                         rows={grid.rows}
@@ -468,7 +565,7 @@ export const App = (): ReactNode =>
                             const r = Math.max(0, Math.min(grid.rows - 1, Math.floor((doc.ball?.y ?? 0.5) * grid.rows)))
                             return { c, r }
                         })()}
-                        mappedCells={Object.keys(doc.mapping ?? {}).map((k) =>
+                        mappedCells={Object.keys(doc.mapping?.[doc.posture] ?? {}).map((k) =>
                         {
                             const [cStr, rStr] = (k as string).split("_")
                             const c = Number.parseInt(cStr ?? "0", 10)
@@ -482,8 +579,176 @@ export const App = (): ReactNode =>
                             const r = Number.parseInt(rStr ?? "0", 10)
                             return { c, r }
                         })}
+                        coloredCells={(() =>
+                        {
+                            // Deterministic color per unique mapping signature (stable across renders)
+                            const colorMap = new Map<string, string>()
+                            const cells: Array<{ c: number; r: number; color: string }> = []
+                            const toSig = (set: Record<PlayerRole, Vector2>) =>
+                            {
+                                const roles = Object.keys(set).sort() as PlayerRole[]
+                                return roles.map((rname) =>
+                                {
+                                    const p = set[rname]
+                                    return `${rname}:${p.x.toFixed(3)},${p.y.toFixed(3)}`
+                                }).join("|")
+                            }
+                            const colorForSig = (sig: string) =>
+                            {
+                                let h = 2166136261 >>> 0 // FNV offset basis
+                                for (let i = 0; i < sig.length; i++)
+                                {
+                                    h ^= sig.charCodeAt(i)
+                                    h = Math.imul(h, 16777619)
+                                }
+                                const hue = h % 360
+                                const sat = 70
+                                const light = 72
+                                return `hsla(${hue}, ${sat}%, ${light}%, 0.28)`
+                            }
+                            const pushCell = (k: string, set: Record<PlayerRole, Vector2>) =>
+                            {
+                                const [cStr, rStr] = k.split("_")
+                                const c = Number.parseInt(cStr ?? "0", 10)
+                                const r = Number.parseInt(rStr ?? "0", 10)
+                                const sig = toSig(set)
+                                let color = colorMap.get(sig)
+                                if (!color)
+                                {
+                                    color = colorForSig(sig)
+                                    colorMap.set(sig, color)
+                                }
+                                cells.push({ c, r, color })
+                            }
+                            for (const k of Object.keys(doc.mapping?.[doc.posture] ?? {}))
+                            {
+                                pushCell(k, doc.mapping[doc.posture]![k]!)
+                            }
+                            for (const k of Object.keys(pending ?? {}))
+                            {
+                                pushCell(k, pending[k]!)
+                            }
+                            return cells
+                        })()}
+                        onCopyPaint={(target, source) =>
+                        {
+                            const keySource = `${source.c}_${source.r}`
+                            const keyTarget = `${target.c}_${target.r}`
+                            const src = doc.mapping[doc.posture]?.[keySource] ?? pending[keySource]
+                            if (!src) return
+                            // If painting into the current highlighted ball cell, also apply preview roles
+                            const bc = Math.max(0, Math.min(grid.cols - 1, Math.floor((doc.ball?.x ?? 0.5) * grid.cols)))
+                            const br = Math.max(0, Math.min(grid.rows - 1, Math.floor((doc.ball?.y ?? 0.5) * grid.rows)))
+                            const ballKey = `${bc}_${br}`
+                            setDoc((d) => ({
+                                ...d,
+                                mapping: {
+                                    ...d.mapping,
+                                    [d.posture]: {
+                                        ...(d.mapping[d.posture] ?? {}),
+                                        [keyTarget]: { ...src },
+                                    },
+                                },
+                                formation: keyTarget === ballKey ? { ...d.formation, roles: { ...src } } : d.formation,
+                            }))
+                        }}
+                        onClearPaint={(target) =>
+                        {
+                            const keyTarget = `${target.c}_${target.r}`
+                            setDoc((d) =>
+                            {
+                                const map = { ...(d.mapping[d.posture] ?? {}) }
+                                if (!Object.prototype.hasOwnProperty.call(map, keyTarget)) return d
+                                delete map[keyTarget]
+                                return { ...d, mapping: { ...d.mapping, [d.posture]: map } }
+                            })
+                        }}
                     />
-                    <div style={{ position: "absolute", inset: 0 }}>
+                    <div
+                        style={{ position: "absolute", inset: 0 }}
+                        onMouseDown={(e) =>
+                        {
+                            if (paintMode !== "none" || isBallDragging) return
+                            const container = canvasContainerRef.current
+                            if (!container) return
+                            const rect = container.getBoundingClientRect()
+                            const mx = e.clientX - rect.left
+                            const my = e.clientY - rect.top
+                            const c = Math.max(0, Math.min(grid.cols - 1, Math.floor(mx / cellSize.w)))
+                            const r = Math.max(0, Math.min(grid.rows - 1, Math.floor(my / cellSize.h)))
+                            const key = `${c}_${r}`
+                            if (e.button === 0)
+                            {
+                                if ((doc.mapping[doc.posture] ?? {})[key] || pending[key])
+                                {
+                                    setPaintMode("copy")
+                                    setPaintSource({ c, r })
+                                    paintLast.current = null
+                                }
+                            }
+                            else if (e.button === 2)
+                            {
+                                e.preventDefault()
+                                setPaintMode("clear")
+                                setPaintSource(null)
+                                // Clear immediately on first cell
+                                setDoc((d) =>
+                                {
+                                    const map = { ...(d.mapping[d.posture] ?? {}) }
+                                    if (!Object.prototype.hasOwnProperty.call(map, key)) return d
+                                    delete map[key]
+                                    return { ...d, mapping: { ...d.mapping, [d.posture]: map } }
+                                })
+                                paintLast.current = key
+                            }
+                        }}
+                        onMouseMove={(e) =>
+                        {
+                            if (isBallDragging) return
+                            if (paintMode === "none") return
+                            const container = canvasContainerRef.current
+                            if (!container) return
+                            const rect = container.getBoundingClientRect()
+                            const mx = e.clientX - rect.left
+                            const my = e.clientY - rect.top
+                            const c = Math.max(0, Math.min(grid.cols - 1, Math.floor(mx / cellSize.w)))
+                            const r = Math.max(0, Math.min(grid.rows - 1, Math.floor(my / cellSize.h)))
+                            const key = `${c}_${r}`
+                            if (paintLast.current === key) return
+                            if (paintMode === "copy" && paintSource)
+                            {
+                                const srcKey = `${paintSource.c}_${paintSource.r}`
+                                const src = (doc.mapping[doc.posture] ?? {})[srcKey] ?? pending[srcKey]
+                                if (src)
+                                {
+                                    setDoc((d) => ({
+                                        ...d,
+                                        mapping: {
+                                            ...d.mapping,
+                                            [d.posture]: {
+                                                ...(d.mapping[d.posture] ?? {}),
+                                                [key]: { ...src },
+                                            },
+                                        },
+                                    }))
+                                    paintLast.current = key
+                                }
+                            }
+                            else if (paintMode === "clear")
+                            {
+                                setDoc((d) =>
+                                {
+                                    const map = { ...(d.mapping[d.posture] ?? {}) }
+                                    if (!Object.prototype.hasOwnProperty.call(map, key)) return d
+                                    delete map[key]
+                                    paintLast.current = key
+                                    return { ...d, mapping: { ...d.mapping, [d.posture]: map } }
+                                })
+                            }
+                        }}
+                        onMouseUp={() => { setPaintMode("none"); setPaintSource(null); paintLast.current = null }}
+                        onContextMenu={(e) => e.preventDefault()}
+                    >
                         <BallLayer
                             size={canvasSize}
                             grid={grid}
@@ -493,7 +758,7 @@ export const App = (): ReactNode =>
                                 setDoc((d) =>
                                 {
                                     const key = cellKey(d.grid, ball)
-                                    const preset = d.mapping[key] ?? pending[key]
+                                    const preset = d.mapping[d.posture]?.[key] ?? pending[key]
                                     if (preset)
                                     {
                                         return { ...d, ball, formation: { ...d.formation, roles: { ...preset } } }
@@ -501,9 +766,94 @@ export const App = (): ReactNode =>
                                     return { ...d, ball }
                                 })
                             }}
+                            onDragStart={() => setIsBallDragging(true)}
+                            onDragEnd={() => setIsBallDragging(false)}
                         />
                     </div>
-                    <div style={{ position: "absolute", inset: 0 }}>
+                    <div
+                        style={{ position: "absolute", inset: 0 }}
+                        onMouseDown={(e) =>
+                        {
+                            if (paintMode !== "none" || isBallDragging) return
+                            const container = canvasContainerRef.current
+                            if (!container) return
+                            const rect = container.getBoundingClientRect()
+                            const mx = e.clientX - rect.left
+                            const my = e.clientY - rect.top
+                            const c = Math.max(0, Math.min(grid.cols - 1, Math.floor(mx / cellSize.w)))
+                            const r = Math.max(0, Math.min(grid.rows - 1, Math.floor(my / cellSize.h)))
+                            const key = `${c}_${r}`
+                            if (e.button === 0)
+                            {
+                                if ((doc.mapping[doc.posture] ?? {})[key] || pending[key])
+                                {
+                                    setPaintMode("copy")
+                                    setPaintSource({ c, r })
+                                    paintLast.current = null
+                                }
+                            }
+                            else if (e.button === 2)
+                            {
+                                e.preventDefault()
+                                setPaintMode("clear")
+                                setPaintSource(null)
+                                setDoc((d) =>
+                                {
+                                    const map = { ...(d.mapping[d.posture] ?? {}) }
+                                    if (!Object.prototype.hasOwnProperty.call(map, key)) return d
+                                    delete map[key]
+                                    return { ...d, mapping: { ...d.mapping, [d.posture]: map } }
+                                })
+                                paintLast.current = key
+                            }
+                        }}
+                        onMouseMove={(e) =>
+                        {
+                            if (isBallDragging) return
+                            if (paintMode === "none") return
+                            const container = canvasContainerRef.current
+                            if (!container) return
+                            const rect = container.getBoundingClientRect()
+                            const mx = e.clientX - rect.left
+                            const my = e.clientY - rect.top
+                            const c = Math.max(0, Math.min(grid.cols - 1, Math.floor(mx / cellSize.w)))
+                            const r = Math.max(0, Math.min(grid.rows - 1, Math.floor(my / cellSize.h)))
+                            const key = `${c}_${r}`
+                            if (paintLast.current === key) return
+                            if (paintMode === "copy" && paintSource)
+                            {
+                                const srcKey = `${paintSource.c}_${paintSource.r}`
+                                const src = (doc.mapping[doc.posture] ?? {})[srcKey] ?? pending[srcKey]
+                                if (src)
+                                {
+                                    setDoc((d) => ({
+                                        ...d,
+                                        mapping: {
+                                            ...d.mapping,
+                                            [d.posture]: {
+                                                ...(d.mapping[d.posture] ?? {}),
+                                                [key]: { ...src },
+                                            },
+                                        },
+                                    }))
+                                    paintLast.current = key
+                                }
+                            }
+                            else if (paintMode === "clear")
+                            {
+                                setDoc((d) =>
+                                {
+                                    const map = { ...(d.mapping[d.posture] ?? {}) }
+                                    if (!Object.prototype.hasOwnProperty.call(map, key)) return d
+                                    delete map[key]
+                                    paintLast.current = key
+                                    return { ...d, mapping: { ...d.mapping, [d.posture]: map } }
+                                })
+                            }
+                        }}
+                        onMouseUp={() => { setPaintMode("none"); setPaintSource(null); paintLast.current = null }}
+                        onContextMenu={(e) => e.preventDefault()}
+                    >
                         <MarkersLayer
                             size={canvasSize}
                             grid={grid}

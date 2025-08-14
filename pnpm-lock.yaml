@@ -26,7 +26,7 @@ importers:
     dependencies:
       '@game/server':
         specifier: workspace:*
-        version: file:apps/server(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(socket.io-adapter@2.5.5)(typescript@5.7.3)
+        version: file:apps/server(eslint@9.29.0(jiti@2.4.2))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(socket.io-adapter@2.5.5)(typescript@5.7.3)
       '@noriginmedia/norigin-spatial-navigation':
         specifier: ^2.3.0
         version: 2.3.0(react@19.1.0)
@@ -381,6 +381,7 @@ packages:
   '@aws-sdk/lib-dynamodb@3.830.0':
     resolution: {integrity: sha512-j8VtdHXIuheRfnujCuX6mTmsrJqXawL/mdVMdUgliNQe803QZUsfEuc/dKPjXWOSp+WRHU/zZaHtTh3cC04AmQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: Please upgrade to @aws-sdk/lib-dynamodb@3.850.0 to support Command reuse https://github.com/aws/aws-sdk-js-v3/issues/7217.
     peerDependencies:
       '@aws-sdk/client-dynamodb': ^3.830.0
 
@@ -7650,14 +7651,14 @@ snapshots:
       '@eslint/core': 0.15.0
       levn: 0.4.1
 
-  '@game/server@file:apps/server(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(socket.io-adapter@2.5.5)(typescript@5.7.3)':
+  '@game/server@file:apps/server(eslint@9.29.0(jiti@2.4.2))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(socket.io-adapter@2.5.5)(typescript@5.7.3)':
     dependencies:
       '@aws-sdk/client-lambda': 3.833.0
       '@aws-sdk/client-s3': 3.832.0
       '@volley/logger': 1.3.1
       '@volley/vgf': 1.31.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(socket.io-adapter@2.5.5)
       '@volley/vox': 2.0.4
-      '@volley/waterfall': 2.5.3(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@volley/flowscript@0.17.11)(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
+      '@volley/waterfall': 2.5.3(@volley/flowscript@0.17.11)(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
       cors: 2.8.5
       date-fns: 4.1.0
       dotenv: 16.5.0
@@ -9368,14 +9369,6 @@ snapshots:
       eslint-plugin-unused-imports: 3.2.0(@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))
       typescript: 5.7.3
 
-  '@volley/eslint-config-volley@1.2.6(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)':
-    dependencies:
-      '@typescript-eslint/eslint-plugin': 6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
-      '@typescript-eslint/parser': 6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
-      eslint: 9.29.0(jiti@2.4.2)
-      eslint-config-prettier: 9.1.0(eslint@9.29.0(jiti@2.4.2))
-      typescript: 5.7.3
-
   '@volley/flowscript@0.17.11':
     dependencies:
       '@volley/arcsecond': 3.1.0-p3
@@ -9628,11 +9621,11 @@ snapshots:
       - supports-color
       - typescript
 
-  '@volley/waterfall-gev@0.6.4-6(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@volley/gev@1.16.2)(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)':
+  '@volley/waterfall-gev@0.6.4-6(@volley/gev@1.16.2)(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)':
     dependencies:
       '@volley/flowscript': 0.17.11
       '@volley/gev': 1.16.2
-      '@volley/waterfall': 2.5.3(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@volley/flowscript@0.17.11)(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
+      '@volley/waterfall': 2.5.3(@volley/flowscript@0.17.11)(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
       '@volley/waterfall-utils': 0.4.2-5(@volley/flowscript@0.17.11)(@volley/gev@1.16.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - '@typescript-eslint/eslint-plugin'
@@ -9751,16 +9744,16 @@ snapshots:
       - supports-color
       - typescript
 
-  '@volley/waterfall@2.5.3(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@volley/flowscript@0.17.11)(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)':
+  '@volley/waterfall@2.5.3(@volley/flowscript@0.17.11)(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)':
     dependencies:
       '@volley/dac': 1.0.7
-      '@volley/eslint-config-volley': 1.2.6(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
+      '@volley/eslint-config-volley': 1.2.6(76e2a08df2d89b848e1f315b6cfc4235)
       '@volley/gev': 1.16.2
       '@volley/gev-engine-handler': 1.9.6(@volley/gev@1.16.2)
       '@volley/gev-plugin-hal': 2.14.4(@volley/flowscript@0.17.11)(@volley/gev-plugin-tracking@3.3.11(@volley/gev@1.16.2))(@volley/gev@1.16.2)
       '@volley/gev-plugin-question': 1.4.4(jest@29.7.0(@types/node@20.19.0)(ts-node@10.9.2(@swc/core@1.12.1)(@types/node@20.19.0)(typescript@5.7.3)))(typescript@5.7.3)
       '@volley/gev-plugin-tracking': 3.3.11(@volley/gev@1.16.2)(aws-sdk@2.1692.0)
-      '@volley/waterfall-gev': 0.6.4-6(@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@typescript-eslint/parser@6.21.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3))(@volley/gev@1.16.2)(eslint-config-prettier@9.1.0(eslint@9.29.0(jiti@2.4.2)))(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
+      '@volley/waterfall-gev': 0.6.4-6(@volley/gev@1.16.2)(eslint@9.29.0(jiti@2.4.2))(typescript@5.7.3)
       compromise: 14.14.4
       compromise-speech: 0.1.1(compromise@14.14.4)
       dotenv: 16.5.0

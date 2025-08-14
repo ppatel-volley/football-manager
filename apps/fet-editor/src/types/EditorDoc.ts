@@ -1,4 +1,4 @@
-import type { FormationData, PlayerRole, Vector2 } from "./Formation"
+import type { FormationData, PlayerRole, Posture, Vector2 } from "./Formation"
 
 export interface GridSize
 {
@@ -10,8 +10,10 @@ export interface EditorDoc
 {
     grid: GridSize
     formation: FormationData
-    // Mapping from grid cell key "c_r" to role positions at that ball location
-    mapping: Record<string, Record<PlayerRole, Vector2>>
+    // Current editing posture
+    posture: Posture
+    // Mapping from grid cell key "c_r" to role positions at that ball location, per posture
+    mapping: Record<Posture, Record<string, Record<PlayerRole, Vector2>>>
     // Current ball position (normalised)
     ball?: Vector2
 }
