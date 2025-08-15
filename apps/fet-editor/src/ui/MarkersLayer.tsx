@@ -16,8 +16,6 @@ interface MarkersLayerProps
     isTeamMoving?: boolean
 }
 
-const roleOrder: PlayerRole[] = ["GK", "LB", "CB_L", "CB_R", "RB", "CM_L", "CM_R", "LW", "RW", "ST_L", "ST_R"]
-
 export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragStart, onDragEnd, ghost, isTeamMoving = false }: MarkersLayerProps): ReactNode =>
 {
     const [drag, setDrag] = useState<{ role: PlayerRole; offset: Vector2 } | null>(null)
@@ -25,7 +23,12 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragSt
     const px = (v: Vector2): { x: number; y: number } => ({ x: v.x * size.w, y: v.y * size.h })
     const norm = (p: Vector2): { x: number; y: number } => ({ x: Math.min(1, Math.max(0, p.x / size.w)), y: Math.min(1, Math.max(0, p.y / size.h)) })
 
-    const items = useMemo(() => roleOrder.map((r) => ({ role: r, p: roles[r] })), [roles])
+    // Use dynamic role detection instead of hardcoded array
+    const items = useMemo(() => 
+        Object.entries(roles)
+            .filter(([_, position]) => position != null) // Filter out undefined positions
+            .map(([role, position]) => ({ role: role as PlayerRole, p: position }))
+    , [roles])
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void =>
     {

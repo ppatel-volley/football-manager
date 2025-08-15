@@ -6,20 +6,12 @@ import type { PlayerRole, Posture, Vector2 } from "../types/Formation";
 interface ControlsPanelProps
 {
     doc: EditorDoc;
-    presets: Record<string, Record<PlayerRole, Vector2>>;
-    selectedFormationPath: string;
-    availableFormations: Array<{ path: string; id: string; name: string; data: { roles: Record<PlayerRole, Vector2> } }>;
     snap: boolean;
     showGhostOpposition: boolean;
     showMirrorLegend: boolean;
     onChangeDoc: (updater: (d: EditorDoc) => EditorDoc) => void;
-    onApplyPreset: (id: keyof ControlsPanelProps["presets"]) => void;
-    onLoadSelected: (path: string) => void;
-    onSetSelectedPath: (path: string) => void;
     onExportFormation: () => void;
     onImportFormation: React.ChangeEventHandler<HTMLInputElement>;
-    onExportProject: () => void;
-    onImportProject: React.ChangeEventHandler<HTMLInputElement>;
     onExportCompact: () => void;
     onToggleSnap: (v: boolean) => void;
     onToggleGhost: (v: boolean) => void;
@@ -35,20 +27,12 @@ export function ControlsPanel(props: ControlsPanelProps): ReactNode
 {
     const {
         doc,
-        presets,
-        selectedFormationPath,
-        availableFormations,
         snap,
         showGhostOpposition,
         showMirrorLegend,
         onChangeDoc,
-        onApplyPreset,
-        onLoadSelected,
-        onSetSelectedPath,
         onExportFormation,
         onImportFormation,
-        onExportProject,
-        onImportProject,
         onExportCompact,
         onToggleSnap,
         onToggleGhost,
@@ -61,32 +45,7 @@ export function ControlsPanel(props: ControlsPanelProps): ReactNode
     } = props;
 
     return (
-        <div style={{ width: 320, padding: 16, borderRight: "2px solid #333" }}>
-            <h2 style={{ marginTop: 0 }}>Formation Editor</h2>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <label style={{ fontSize: 12, color: "#bbb" }}>Template</label>
-                <select
-                    value={Object.keys(presets).includes(doc.formation.formationId) ? doc.formation.formationId : ""}
-                    onChange={(e) => onApplyPreset(e.target.value)}
-                    style={{ background: "#222", color: "#fff", border: "1px solid #555", borderRadius: 6, padding: "4px 8px" }}
-                >
-                    <option value="" disabled>Select template…</option>
-                    {Object.keys(presets).map((k) => (
-                        <option key={k} value={k}>{k}</option>
-                    ))}
-                </select>
-                <label style={{ fontSize: 12, color: "#bbb", marginLeft: 8 }}>From files</label>
-                <select
-                    value={selectedFormationPath}
-                    onChange={(e) => onSetSelectedPath(e.target.value)}
-                    style={{ background: "#222", color: "#fff", border: "1px solid #555", borderRadius: 6, padding: "4px 8px" }}
-                >
-                    {availableFormations.map((f) => (
-                        <option key={f.path} value={f.path}>{f.name || f.id || f.path}</option>
-                    ))}
-                </select>
-                <button onClick={() => onLoadSelected(selectedFormationPath)}>Load Selected</button>
-            </div>
+        <div style={{ padding: 16, overflowY: "auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
                 <label style={{ display: "grid", gap: 4 }}>
                     <span style={{ fontSize: 12, color: "#bbb" }}>Formation ID</span>
@@ -113,11 +72,6 @@ export function ControlsPanel(props: ControlsPanelProps): ReactNode
                 <label style={{ display: "inline-block" }}>
                     <span style={{ padding: 6, border: "1px solid #555", borderRadius: 6, cursor: "pointer" }}>Load Formation</span>
                     <input type="file" accept="application/json" onChange={onImportFormation} style={{ display: "none" }} />
-                </label>
-                <button onClick={onExportProject}>Save Project</button>
-                <label style={{ display: "inline-block" }}>
-                    <span style={{ padding: 6, border: "1px solid #555", borderRadius: 6, cursor: "pointer" }}>Load Project</span>
-                    <input type="file" accept="application/json" onChange={onImportProject} style={{ display: "none" }} />
                 </label>
                 <button onClick={onExportCompact}>Export Compact</button>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

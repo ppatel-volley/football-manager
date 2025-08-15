@@ -1,0 +1,510 @@
+{
+  "version": "1.0.0",
+  "lastModified": "2025-08-15T12:00:00Z",
+  "formations": {
+    "4-4-2": {
+      "formationId": "4-4-2",
+      "name": "4-4-2 Flat",
+      "category": "Balanced",
+      "playerComposition": ["GK", "LB", "CB_L", "CB_R", "RB", "LW", "CM_L", "CM_R", "RW", "ST_L", "ST_R"],
+      "postures": {
+        "ATTACK": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "LB": { "x": 0.22, "y": 0.24, "priority": 7, "flexibility": 0.3 },
+                    "CB_L": { "x": 0.22, "y": 0.4, "priority": 9, "flexibility": 0.2 },
+                    "CB_R": { "x": 0.22, "y": 0.6, "priority": 9, "flexibility": 0.2 },
+                    "RB": { "x": 0.22, "y": 0.76, "priority": 7, "flexibility": 0.3 },
+                    "CM_L": { "x": 0.4, "y": 0.35, "priority": 8, "flexibility": 0.4 },
+                    "CM_R": { "x": 0.4, "y": 0.65, "priority": 8, "flexibility": 0.4 },
+                    "LW": { "x": 0.52, "y": 0.3, "priority": 7, "flexibility": 0.5 },
+                    "RW": { "x": 0.52, "y": 0.7, "priority": 7, "flexibility": 0.5 },
+                    "ST_L": { "x": 0.62, "y": 0.45, "priority": 9, "flexibility": 0.3 },
+                    "ST_R": { "x": 0.62, "y": 0.55, "priority": 9, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "LB": { "x": 0.18, "y": 0.22, "priority": 8, "flexibility": 0.2 },
+                    "CB_L": { "x": 0.18, "y": 0.4, "priority": 9, "flexibility": 0.1 },
+                    "CB_R": { "x": 0.18, "y": 0.6, "priority": 9, "flexibility": 0.1 },
+                    "RB": { "x": 0.18, "y": 0.78, "priority": 8, "flexibility": 0.2 },
+                    "CM_L": { "x": 0.3, "y": 0.38, "priority": 7, "flexibility": 0.3 },
+                    "CM_R": { "x": 0.3, "y": 0.62, "priority": 7, "flexibility": 0.3 },
+                    "LW": { "x": 0.4, "y": 0.34, "priority": 6, "flexibility": 0.4 },
+                    "RW": { "x": 0.4, "y": 0.66, "priority": 6, "flexibility": 0.4 },
+                    "ST_L": { "x": 0.48, "y": 0.48, "priority": 7, "flexibility": 0.3 },
+                    "ST_R": { "x": 0.48, "y": 0.52, "priority": 7, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "BALANCE": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "LB": { "x": 0.2, "y": 0.2, "priority": 7, "flexibility": 0.3 },
+                    "CB_L": { "x": 0.2, "y": 0.4, "priority": 9, "flexibility": 0.2 },
+                    "CB_R": { "x": 0.2, "y": 0.6, "priority": 9, "flexibility": 0.2 },
+                    "RB": { "x": 0.2, "y": 0.8, "priority": 7, "flexibility": 0.3 },
+                    "CM_L": { "x": 0.35, "y": 0.35, "priority": 8, "flexibility": 0.4 },
+                    "CM_R": { "x": 0.35, "y": 0.65, "priority": 8, "flexibility": 0.4 },
+                    "LW": { "x": 0.48, "y": 0.3, "priority": 7, "flexibility": 0.5 },
+                    "RW": { "x": 0.48, "y": 0.7, "priority": 7, "flexibility": 0.5 },
+                    "ST_L": { "x": 0.6, "y": 0.45, "priority": 8, "flexibility": 0.3 },
+                    "ST_R": { "x": 0.6, "y": 0.55, "priority": 8, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 9, "flexibility": 0.1 },
+                    "LB": { "x": 0.2, "y": 0.2, "priority": 7, "flexibility": 0.2 },
+                    "CB_L": { "x": 0.2, "y": 0.4, "priority": 9, "flexibility": 0.1 },
+                    "CB_R": { "x": 0.2, "y": 0.6, "priority": 9, "flexibility": 0.1 },
+                    "RB": { "x": 0.2, "y": 0.8, "priority": 7, "flexibility": 0.2 },
+                    "CM_L": { "x": 0.35, "y": 0.35, "priority": 7, "flexibility": 0.3 },
+                    "CM_R": { "x": 0.35, "y": 0.65, "priority": 7, "flexibility": 0.3 },
+                    "LW": { "x": 0.48, "y": 0.3, "priority": 6, "flexibility": 0.4 },
+                    "RW": { "x": 0.48, "y": 0.7, "priority": 6, "flexibility": 0.4 },
+                    "ST_L": { "x": 0.6, "y": 0.45, "priority": 7, "flexibility": 0.3 },
+                    "ST_R": { "x": 0.6, "y": 0.55, "priority": 7, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "DEFEND": {
+          "phases": {
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "LB": { "x": 0.18, "y": 0.22, "priority": 8, "flexibility": 0.2 },
+                    "CB_L": { "x": 0.18, "y": 0.4, "priority": 10, "flexibility": 0.1 },
+                    "CB_R": { "x": 0.18, "y": 0.6, "priority": 10, "flexibility": 0.1 },
+                    "RB": { "x": 0.18, "y": 0.78, "priority": 8, "flexibility": 0.2 },
+                    "CM_L": { "x": 0.3, "y": 0.38, "priority": 8, "flexibility": 0.2 },
+                    "CM_R": { "x": 0.3, "y": 0.62, "priority": 8, "flexibility": 0.2 },
+                    "LW": { "x": 0.4, "y": 0.34, "priority": 6, "flexibility": 0.3 },
+                    "RW": { "x": 0.4, "y": 0.66, "priority": 6, "flexibility": 0.3 },
+                    "ST_L": { "x": 0.48, "y": 0.48, "priority": 5, "flexibility": 0.4 },
+                    "ST_R": { "x": 0.48, "y": 0.52, "priority": 5, "flexibility": 0.4 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "author": "Formation Editor Tool",
+        "description": "Classic 4-4-2 formation with flat midfield",
+        "tags": ["balanced", "classic", "beginner-friendly"],
+        "difficulty": "beginner"
+      }
+    },
+    "4-3-3": {
+      "formationId": "4-3-3",
+      "name": "4-3-3 Attack",
+      "category": "Attacking",
+      "playerComposition": ["GK", "LB", "CB_L", "CB_R", "RB", "CM_L", "CM_R", "LW", "RW", "ST_L", "ST_R"],
+      "postures": {
+        "ATTACK": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "LB": { "x": 0.22, "y": 0.22, "priority": 7, "flexibility": 0.4 },
+                    "CB_L": { "x": 0.22, "y": 0.4, "priority": 9, "flexibility": 0.2 },
+                    "CB_R": { "x": 0.22, "y": 0.6, "priority": 9, "flexibility": 0.2 },
+                    "RB": { "x": 0.22, "y": 0.78, "priority": 7, "flexibility": 0.4 },
+                    "CM_L": { "x": 0.44, "y": 0.38, "priority": 8, "flexibility": 0.4 },
+                    "CM_R": { "x": 0.44, "y": 0.62, "priority": 8, "flexibility": 0.4 },
+                    "LW": { "x": 0.66, "y": 0.26, "priority": 8, "flexibility": 0.5 },
+                    "RW": { "x": 0.66, "y": 0.74, "priority": 8, "flexibility": 0.5 },
+                    "ST_L": { "x": 0.74, "y": 0.5, "priority": 9, "flexibility": 0.3 },
+                    "ST_R": { "x": 0.46, "y": 0.5, "priority": 7, "flexibility": 0.4 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "BALANCE": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "LB": { "x": 0.2, "y": 0.2, "priority": 7, "flexibility": 0.3 },
+                    "CB_L": { "x": 0.2, "y": 0.4, "priority": 9, "flexibility": 0.2 },
+                    "CB_R": { "x": 0.2, "y": 0.6, "priority": 9, "flexibility": 0.2 },
+                    "RB": { "x": 0.2, "y": 0.8, "priority": 7, "flexibility": 0.3 },
+                    "CM_L": { "x": 0.4, "y": 0.38, "priority": 8, "flexibility": 0.4 },
+                    "CM_R": { "x": 0.4, "y": 0.62, "priority": 8, "flexibility": 0.4 },
+                    "LW": { "x": 0.62, "y": 0.28, "priority": 7, "flexibility": 0.5 },
+                    "RW": { "x": 0.62, "y": 0.72, "priority": 7, "flexibility": 0.5 },
+                    "ST_L": { "x": 0.7, "y": 0.5, "priority": 8, "flexibility": 0.3 },
+                    "ST_R": { "x": 0.4, "y": 0.5, "priority": 7, "flexibility": 0.4 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 9, "flexibility": 0.1 },
+                    "LB": { "x": 0.18, "y": 0.22, "priority": 7, "flexibility": 0.2 },
+                    "CB_L": { "x": 0.18, "y": 0.4, "priority": 9, "flexibility": 0.1 },
+                    "CB_R": { "x": 0.18, "y": 0.6, "priority": 9, "flexibility": 0.1 },
+                    "RB": { "x": 0.18, "y": 0.78, "priority": 7, "flexibility": 0.2 },
+                    "CM_L": { "x": 0.36, "y": 0.4, "priority": 7, "flexibility": 0.3 },
+                    "CM_R": { "x": 0.36, "y": 0.6, "priority": 7, "flexibility": 0.3 },
+                    "LW": { "x": 0.56, "y": 0.3, "priority": 6, "flexibility": 0.4 },
+                    "RW": { "x": 0.56, "y": 0.7, "priority": 6, "flexibility": 0.4 },
+                    "ST_L": { "x": 0.66, "y": 0.5, "priority": 6, "flexibility": 0.4 },
+                    "ST_R": { "x": 0.42, "y": 0.5, "priority": 6, "flexibility": 0.4 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "author": "Formation Editor Tool",
+        "description": "Attacking 4-3-3 with wide forwards",
+        "tags": ["attacking", "wide", "advanced"],
+        "difficulty": "intermediate"
+      }
+    },
+    "5-3-2": {
+      "formationId": "5-3-2",
+      "name": "5-3-2 Defensive",
+      "category": "Defensive",
+      "playerComposition": ["GK", "LWB", "CB_1", "CB_2", "CB_3", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
+      "postures": {
+        "DEFEND": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "LWB": { "x": 0.25, "y": 0.18, "priority": 7, "flexibility": 0.4 },
+                    "CB_1": { "x": 0.18, "y": 0.35, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.18, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.18, "y": 0.65, "priority": 9, "flexibility": 0.2 },
+                    "RWB": { "x": 0.25, "y": 0.82, "priority": 7, "flexibility": 0.4 },
+                    "CM_1": { "x": 0.4, "y": 0.35, "priority": 7, "flexibility": 0.4 },
+                    "CM_2": { "x": 0.4, "y": 0.5, "priority": 7, "flexibility": 0.4 },
+                    "CM_3": { "x": 0.4, "y": 0.65, "priority": 7, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.6, "y": 0.45, "priority": 8, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.6, "y": 0.55, "priority": 8, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "LWB": { "x": 0.15, "y": 0.15, "priority": 8, "flexibility": 0.3 },
+                    "CB_1": { "x": 0.15, "y": 0.35, "priority": 10, "flexibility": 0.1 },
+                    "CB_2": { "x": 0.15, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "CB_3": { "x": 0.15, "y": 0.65, "priority": 10, "flexibility": 0.1 },
+                    "RWB": { "x": 0.15, "y": 0.85, "priority": 8, "flexibility": 0.3 },
+                    "CM_1": { "x": 0.35, "y": 0.35, "priority": 8, "flexibility": 0.3 },
+                    "CM_2": { "x": 0.35, "y": 0.5, "priority": 8, "flexibility": 0.3 },
+                    "CM_3": { "x": 0.35, "y": 0.65, "priority": 8, "flexibility": 0.3 },
+                    "ST_1": { "x": 0.55, "y": 0.45, "priority": 9, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.55, "y": 0.55, "priority": 9, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "BALANCE": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "LWB": { "x": 0.3, "y": 0.18, "priority": 7, "flexibility": 0.4 },
+                    "CB_1": { "x": 0.2, "y": 0.37, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.2, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.2, "y": 0.63, "priority": 9, "flexibility": 0.2 },
+                    "RWB": { "x": 0.3, "y": 0.82, "priority": 7, "flexibility": 0.4 },
+                    "CM_1": { "x": 0.45, "y": 0.38, "priority": 7, "flexibility": 0.4 },
+                    "CM_2": { "x": 0.45, "y": 0.5, "priority": 7, "flexibility": 0.4 },
+                    "CM_3": { "x": 0.45, "y": 0.62, "priority": 7, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.65, "y": 0.45, "priority": 8, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.65, "y": 0.55, "priority": 8, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x7_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 9, "flexibility": 0.1 },
+                    "LWB": { "x": 0.18, "y": 0.18, "priority": 7, "flexibility": 0.3 },
+                    "CB_1": { "x": 0.18, "y": 0.37, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.18, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.18, "y": 0.63, "priority": 9, "flexibility": 0.2 },
+                    "RWB": { "x": 0.18, "y": 0.82, "priority": 7, "flexibility": 0.4 },
+                    "CM_1": { "x": 0.4, "y": 0.38, "priority": 7, "flexibility": 0.4 },
+                    "CM_2": { "x": 0.4, "y": 0.5, "priority": 7, "flexibility": 0.4 },
+                    "CM_3": { "x": 0.4, "y": 0.62, "priority": 7, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.6, "y": 0.45, "priority": 8, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.6, "y": 0.55, "priority": 8, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "author": "Formation Editor Tool",
+        "description": "Defensive 5-3-2 with wing-backs",
+        "tags": ["defensive", "counter-attack", "advanced"],
+        "difficulty": "advanced"
+      }
+    },
+    "3-5-2": {
+      "formationId": "3-5-2",
+      "name": "3-5-2 Balanced",
+      "category": "Balanced",
+      "playerComposition": ["GK", "CB_1", "CB_2", "CB_3", "CDM_1", "CDM_2", "LM", "RM", "CAM", "ST_1", "ST_2"],
+      "postures": {
+        "ATTACK": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "CB_1": { "x": 0.2, "y": 0.35, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.2, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.2, "y": 0.65, "priority": 9, "flexibility": 0.2 },
+                    "CDM_1": { "x": 0.38, "y": 0.4, "priority": 8, "flexibility": 0.3 },
+                    "CDM_2": { "x": 0.38, "y": 0.6, "priority": 8, "flexibility": 0.3 },
+                    "LM": { "x": 0.55, "y": 0.2, "priority": 7, "flexibility": 0.4 },
+                    "RM": { "x": 0.55, "y": 0.8, "priority": 7, "flexibility": 0.4 },
+                    "CAM": { "x": 0.42, "y": 0.5, "priority": 8, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.7, "y": 0.45, "priority": 9, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.7, "y": 0.55, "priority": 9, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "CB_1": { "x": 0.18, "y": 0.35, "priority": 10, "flexibility": 0.1 },
+                    "CB_2": { "x": 0.18, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "CB_3": { "x": 0.18, "y": 0.65, "priority": 10, "flexibility": 0.1 },
+                    "CDM_1": { "x": 0.32, "y": 0.4, "priority": 9, "flexibility": 0.2 },
+                    "CDM_2": { "x": 0.32, "y": 0.6, "priority": 9, "flexibility": 0.2 },
+                    "LM": { "x": 0.4, "y": 0.25, "priority": 7, "flexibility": 0.3 },
+                    "RM": { "x": 0.4, "y": 0.75, "priority": 7, "flexibility": 0.3 },
+                    "CAM": { "x": 0.38, "y": 0.5, "priority": 7, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.55, "y": 0.47, "priority": 7, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.55, "y": 0.53, "priority": 7, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "BALANCE": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "CB_1": { "x": 0.19, "y": 0.35, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.19, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.19, "y": 0.65, "priority": 9, "flexibility": 0.2 },
+                    "CDM_1": { "x": 0.35, "y": 0.4, "priority": 8, "flexibility": 0.3 },
+                    "CDM_2": { "x": 0.35, "y": 0.6, "priority": 8, "flexibility": 0.3 },
+                    "LM": { "x": 0.5, "y": 0.22, "priority": 7, "flexibility": 0.4 },
+                    "RM": { "x": 0.5, "y": 0.78, "priority": 7, "flexibility": 0.4 },
+                    "CAM": { "x": 0.4, "y": 0.5, "priority": 8, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.65, "y": 0.45, "priority": 8, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.65, "y": 0.55, "priority": 8, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 9, "flexibility": 0.1 },
+                    "CB_1": { "x": 0.18, "y": 0.35, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.18, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.18, "y": 0.65, "priority": 9, "flexibility": 0.2 },
+                    "CDM_1": { "x": 0.33, "y": 0.4, "priority": 8, "flexibility": 0.3 },
+                    "CDM_2": { "x": 0.33, "y": 0.6, "priority": 8, "flexibility": 0.3 },
+                    "LM": { "x": 0.42, "y": 0.25, "priority": 7, "flexibility": 0.3 },
+                    "RM": { "x": 0.42, "y": 0.75, "priority": 7, "flexibility": 0.3 },
+                    "CAM": { "x": 0.37, "y": 0.5, "priority": 7, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.58, "y": 0.47, "priority": 7, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.58, "y": 0.53, "priority": 7, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "DEFEND": {
+          "phases": {
+            "ATTACK": {
+              "positions": {
+                "x10_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 8, "flexibility": 0.1 },
+                    "CB_1": { "x": 0.17, "y": 0.35, "priority": 9, "flexibility": 0.2 },
+                    "CB_2": { "x": 0.17, "y": 0.5, "priority": 9, "flexibility": 0.2 },
+                    "CB_3": { "x": 0.17, "y": 0.65, "priority": 9, "flexibility": 0.2 },
+                    "CDM_1": { "x": 0.32, "y": 0.4, "priority": 8, "flexibility": 0.3 },
+                    "CDM_2": { "x": 0.32, "y": 0.6, "priority": 8, "flexibility": 0.3 },
+                    "LM": { "x": 0.45, "y": 0.25, "priority": 7, "flexibility": 0.4 },
+                    "RM": { "x": 0.45, "y": 0.75, "priority": 7, "flexibility": 0.4 },
+                    "CAM": { "x": 0.4, "y": 0.5, "priority": 7, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.6, "y": 0.47, "priority": 8, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.6, "y": 0.53, "priority": 8, "flexibility": 0.3 }
+                  }
+                }
+              }
+            },
+            "DEFEND": {
+              "positions": {
+                "x5_y7": {
+                  "players": {
+                    "GK": { "x": 0.05, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "CB_1": { "x": 0.15, "y": 0.35, "priority": 10, "flexibility": 0.1 },
+                    "CB_2": { "x": 0.15, "y": 0.5, "priority": 10, "flexibility": 0.1 },
+                    "CB_3": { "x": 0.15, "y": 0.65, "priority": 10, "flexibility": 0.1 },
+                    "CDM_1": { "x": 0.28, "y": 0.42, "priority": 9, "flexibility": 0.2 },
+                    "CDM_2": { "x": 0.28, "y": 0.58, "priority": 9, "flexibility": 0.2 },
+                    "LM": { "x": 0.38, "y": 0.28, "priority": 7, "flexibility": 0.3 },
+                    "RM": { "x": 0.38, "y": 0.72, "priority": 7, "flexibility": 0.3 },
+                    "CAM": { "x": 0.35, "y": 0.5, "priority": 6, "flexibility": 0.4 },
+                    "ST_1": { "x": 0.52, "y": 0.48, "priority": 6, "flexibility": 0.3 },
+                    "ST_2": { "x": 0.52, "y": 0.52, "priority": 6, "flexibility": 0.3 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "author": "Formation Editor Tool",
+        "description": "Balanced 3-5-2 with attacking midfielder and wide midfielders",
+        "tags": ["balanced", "midfield-heavy", "advanced"],
+        "difficulty": "intermediate"
+      }
+    }
+  },
+  "kickoffPositions": {
+    "4-4-2": {
+      "formationId": "4-4-2",
+      "positions": {
+        "GK": { "x": 0.05, "y": 0.5 },
+        "LB": { "x": 0.2, "y": 0.2 },
+        "CB_L": { "x": 0.2, "y": 0.4 },
+        "CB_R": { "x": 0.2, "y": 0.6 },
+        "RB": { "x": 0.2, "y": 0.8 },
+        "CM_L": { "x": 0.35, "y": 0.35 },
+        "CM_R": { "x": 0.35, "y": 0.65 },
+        "LW": { "x": 0.45, "y": 0.3 },
+        "RW": { "x": 0.45, "y": 0.7 },
+        "ST_L": { "x": 0.49, "y": 0.48 },
+        "ST_R": { "x": 0.49, "y": 0.52 }
+      }
+    },
+    "4-3-3": {
+      "formationId": "4-3-3",
+      "positions": {
+        "GK": { "x": 0.05, "y": 0.5 },
+        "LB": { "x": 0.2, "y": 0.2 },
+        "CB_L": { "x": 0.2, "y": 0.4 },
+        "CB_R": { "x": 0.2, "y": 0.6 },
+        "RB": { "x": 0.2, "y": 0.8 },
+        "CM_L": { "x": 0.35, "y": 0.35 },
+        "CM_R": { "x": 0.35, "y": 0.65 },
+        "LW": { "x": 0.45, "y": 0.25 },
+        "RW": { "x": 0.45, "y": 0.75 },
+        "ST_L": { "x": 0.49, "y": 0.5 },
+        "ST_R": { "x": 0.4, "y": 0.5 }
+      }
+    },
+    "5-3-2": {
+      "formationId": "5-3-2",
+      "positions": {
+        "GK": { "x": 0.05, "y": 0.5 },
+        "LWB": { "x": 0.18, "y": 0.15 },
+        "CB_1": { "x": 0.18, "y": 0.35 },
+        "CB_2": { "x": 0.18, "y": 0.5 },
+        "CB_3": { "x": 0.18, "y": 0.65 },
+        "RWB": { "x": 0.18, "y": 0.85 },
+        "CM_1": { "x": 0.35, "y": 0.35 },
+        "CM_2": { "x": 0.35, "y": 0.5 },
+        "CM_3": { "x": 0.35, "y": 0.65 },
+        "ST_1": { "x": 0.49, "y": 0.48 },
+        "ST_2": { "x": 0.49, "y": 0.52 }
+      }
+    },
+    "3-5-2": {
+      "formationId": "3-5-2",
+      "positions": {
+        "GK": { "x": 0.05, "y": 0.5 },
+        "CB_1": { "x": 0.19, "y": 0.35 },
+        "CB_2": { "x": 0.19, "y": 0.5 },
+        "CB_3": { "x": 0.19, "y": 0.65 },
+        "CDM_1": { "x": 0.35, "y": 0.4 },
+        "CDM_2": { "x": 0.35, "y": 0.6 },
+        "LM": { "x": 0.35, "y": 0.22 },
+        "RM": { "x": 0.35, "y": 0.78 },
+        "CAM": { "x": 0.38, "y": 0.5 },
+        "ST_1": { "x": 0.49, "y": 0.48 },
+        "ST_2": { "x": 0.49, "y": 0.52 }
+      }
+    }
+  }
+}

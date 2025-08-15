@@ -10,6 +10,7 @@ import type { PlayerRole, Posture,Vector2 } from "../types/Formation"
 import { ControlsPanel } from "./ControlsPanel"
 import { EditorCanvas } from "./EditorCanvas"
 import { ErrorBoundary } from "./ErrorBoundary"
+import { FormationDropdown } from "./FormationDropdown"
 import { usePaintHandlers } from "./hooks/usePaintHandlers"
 
 export const App = (): ReactNode =>
@@ -104,137 +105,26 @@ export const App = (): ReactNode =>
     const [isBallDragging, setIsBallDragging] = useState(false)
     const [isTeamMoving, setIsTeamMoving] = useState(false)
 
-    // Load formations from repo folder via Vite glob (declare type via `as` for TS)
-    const formationFiles = (import.meta as unknown as { glob: <T = unknown>(p: string, opts: { eager: boolean }) => Record<string, T> })
-        .glob<FormationData | { default: FormationData }>("../formations/*.json", { eager: true })
-    const normalizeFormationModule = (m: FormationData | { default: FormationData }): FormationData =>
+    
+    // Uber formation dropdown state
+    const [selectedUberFormationId, setSelectedUberFormationId] = useState<string>("")
+    
+    const handleUberFormationSelect = (formationId: string, kickoffPositions: Record<PlayerRole, Vector2>): void =>
     {
-        return ("default" in m ? m.default : m)
+        setSelectedUberFormationId(formationId)
+        // Apply the kickoff positions immediately
+        const clamped = clampOwnHalf(kickoffPositions)
+        setDoc((d) => ({ ...d, formation: { formationId, name: formationId, roles: clamped }, ball: { x: 0.5, y: 0.5 } }))
     }
-    const availableFormations = useMemo(() =>
+    
+    const handleApplyKickoff = (kickoffPositions: Record<PlayerRole, Vector2>): void =>
     {
-        const entries = Object.entries(formationFiles)
-        return entries.map(([path, mod]) =>
-        {
-            const data = mod as FormationData | { default: FormationData }
-            const resolved: FormationData = normalizeFormationModule(data)
-            return { path, id: resolved.formationId, name: resolved.name, data: resolved }
-        })
-    }, [formationFiles])
-    const [selectedFormationPath, setSelectedFormationPath] = useState<string>(availableFormations[0]?.path ?? "")
-
-    const presets: Record<string, Record<PlayerRole, Vector2>> = {
-        "4-4-2": {
-            GK: { x: 0.05, y: 0.5 },
-            LB: { x: 0.2, y: 0.2 },
-            CB_L: { x: 0.2, y: 0.4 },
-            CB_R: { x: 0.2, y: 0.6 },
-            RB: { x: 0.2, y: 0.8 },
-            CM_L: { x: 0.35, y: 0.35 },
-            CM_R: { x: 0.35, y: 0.65 },
-            LW: { x: 0.48, y: 0.3 },
-            RW: { x: 0.48, y: 0.7 },
-            ST_L: { x: 0.6, y: 0.45 },
-            ST_R: { x: 0.6, y: 0.55 },
-        },
-        "4-3-3": {
-            GK: { x: 0.05, y: 0.5 },
-            LB: { x: 0.2, y: 0.2 },
-            CB_L: { x: 0.2, y: 0.4 },
-            CB_R: { x: 0.2, y: 0.6 },
-            RB: { x: 0.2, y: 0.8 },
-            // Mid three (use CM_L/CM_R and repurpose ST_R as central mid position)
-            CM_L: { x: 0.4, y: 0.38 },
-            CM_R: { x: 0.4, y: 0.62 },
-            // Wingers higher
-            LW: { x: 0.62, y: 0.28 },
-            RW: { x: 0.62, y: 0.72 },
-            // Centre forward
-            ST_L: { x: 0.7, y: 0.5 },
-            // Auxiliary mid (use ST_R as CM_C approx)
-            ST_R: { x: 0.4, y: 0.5 },
-        },
-        // Approximations using available roles
-        "3-5-2": {
-            GK: { x: 0.05, y: 0.5 },
-            LB: { x: 0.18, y: 0.3 }, // LCB-ish wing-back deeper
-            CB_L: { x: 0.18, y: 0.45 },
-            CB_R: { x: 0.18, y: 0.55 },
-            RB: { x: 0.18, y: 0.7 }, // RCB-ish wing-back deeper
-            CM_L: { x: 0.35, y: 0.38 },
-            CM_R: { x: 0.35, y: 0.62 },
-            LW: { x: 0.52, y: 0.34 }, // LWB advanced
-            RW: { x: 0.52, y: 0.66 }, // RWB advanced
-            ST_L: { x: 0.62, y: 0.45 },
-            ST_R: { x: 0.62, y: 0.55 },
-        },
-        "5-3-2": {
-            GK: { x: 0.05, y: 0.5 },
-            LB: { x: 0.12, y: 0.25 },
-            CB_L: { x: 0.12, y: 0.45 },
-            CB_R: { x: 0.12, y: 0.55 },
-            RB: { x: 0.12, y: 0.75 },
-            CM_L: { x: 0.3, y: 0.4 },
-            CM_R: { x: 0.3, y: 0.6 },
-            LW: { x: 0.22, y: 0.3 }, // LWB deeper
-            RW: { x: 0.22, y: 0.7 }, // RWB deeper
-            ST_L: { x: 0.55, y: 0.47 },
-            ST_R: { x: 0.55, y: 0.53 },
-        },
-        "4-2-3-1": {
-            GK: { x: 0.05, y: 0.5 },
-            LB: { x: 0.2, y: 0.25 },
-            CB_L: { x: 0.2, y: 0.45 },
-            CB_R: { x: 0.2, y: 0.55 },
-            RB: { x: 0.2, y: 0.75 },
-            CM_L: { x: 0.32, y: 0.42 }, // DM left
-            CM_R: { x: 0.32, y: 0.58 }, // DM right
-            LW: { x: 0.56, y: 0.35 },
-            RW: { x: 0.56, y: 0.65 },
-            ST_L: { x: 0.72, y: 0.5 }, // ST
-            ST_R: { x: 0.48, y: 0.5 }, // CAM approximation
-        },
+        const clamped = clampOwnHalf(kickoffPositions)
+        setDoc((d) => ({ ...d, formation: { ...d.formation, roles: clamped }, ball: { x: 0.5, y: 0.5 } }))
     }
 
-    const applyPreset = (id: keyof typeof presets): void =>
-    {
-        const preset = presets[id] as Record<PlayerRole, Vector2>
-        const roles = clampOwnHalf(preset)
-        setDoc((d) => ({ ...d, formation: { formationId: id, name: id, roles: { ...roles } }, ball: { x: 0.5, y: 0.5 } }))
-    }
 
-    const exportProject = (): void =>
-    {
-        const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = `${doc.formation.formationId}.project.json`
-        a.click()
-        URL.revokeObjectURL(url)
-    }
 
-    const importProject: React.ChangeEventHandler<HTMLInputElement> = (e): void =>
-    {
-        const file = e.target.files?.[0]
-        if (!file) return
-        void file.text().then((t) =>
-        {
-            try
-            {
-                const parsed = JSON.parse(t) as unknown
-                if (validateEditorDoc(parsed))
-                {
-                    setDoc(parsed as EditorDoc)
-                }
-                else
-                {
-                    console.warn("Invalid project file; ignoring")
-                }
-            }
-            catch { /* ignore */ }
-        }).catch(() => {})
-    }
 
     const exportFormation = (): void =>
     {
@@ -548,60 +438,52 @@ export const App = (): ReactNode =>
 
     return (
         <div style={{ display: "flex", height: "100vh", background: "#111", color: "#fff" }}>
-            <ControlsPanel
-                doc={doc}
-                presets={presets}
-                selectedFormationPath={selectedFormationPath}
-                availableFormations={availableFormations}
-                snap={snap}
-                showGhostOpposition={showGhostOpposition}
-                showMirrorLegend={showMirrorLegend}
-                onChangeDoc={(updater) => setDoc((d) => updater(d))}
-                onApplyPreset={(id) => applyPreset(id)}
-                onLoadSelected={(path) =>
-                {
-                    const found = availableFormations.find((f) => f.path === path)
-                    if (found)
+            <div style={{ flex: 1, padding: 16, borderRight: "2px solid #333", overflowY: "auto" }}>
+                <h2 style={{ marginTop: 0 }}>Formation Editor</h2>
+                <FormationDropdown
+                    selectedFormationId={selectedUberFormationId}
+                    onSelectionChange={handleUberFormationSelect}
+                    onApplyKickoff={handleApplyKickoff}
+                />
+                <ControlsPanel
+                    doc={doc}
+                    snap={snap}
+                    showGhostOpposition={showGhostOpposition}
+                    showMirrorLegend={showMirrorLegend}
+                    onChangeDoc={(updater) => setDoc((d) => updater(d))}
+                    onExportFormation={exportFormation}
+                    onImportFormation={importFormation}
+                    onExportCompact={exportCompact}
+                    onToggleSnap={setSnap}
+                    onToggleGhost={setShowGhostOpposition}
+                    onToggleLegend={setShowMirrorLegend}
+                    onStageCurrentCell={() =>
                     {
-                        const clamped = { ...found.data, roles: clampOwnHalf((found.data).roles) }
-                        setDoc((d) => ({ ...d, formation: clamped, ball: { x: 0.5, y: 0.5 } }))
-                    }
-                }}
-                onSetSelectedPath={setSelectedFormationPath}
-                onExportFormation={exportFormation}
-                onImportFormation={importFormation}
-                onExportProject={exportProject}
-                onImportProject={importProject}
-                onExportCompact={exportCompact}
-                onToggleSnap={setSnap}
-                onToggleGhost={setShowGhostOpposition}
-                onToggleLegend={setShowMirrorLegend}
-                onStageCurrentCell={() =>
-                {
-                    if (!doc.ball) return
-                    const key = cellKey(doc.grid, doc.ball)
-                    setPending((p) => ({ ...p, [key]: { ...doc.formation.roles } }))
-                }}
-                onCommitPending={() =>
-                {
-                    setDoc((d) => ({ ...d, mapping: { ...d.mapping, [d.posture]: { ...d.mapping[d.posture], ...pending } } }))
-                    setPending({})
-                }}
-                onDeleteCurrentCell={() =>
-                {
-                    if (!doc.ball) return
-                    const key = cellKey(doc.grid, doc.ball)
-                    if (!Object.prototype.hasOwnProperty.call(doc.mapping[doc.posture] ?? {}, key)) return
-                    setDoc((d) =>
+                        if (!doc.ball) return
+                        const key = cellKey(doc.grid, doc.ball)
+                        setPending((p) => ({ ...p, [key]: { ...doc.formation.roles } }))
+                    }}
+                    onCommitPending={() =>
                     {
-                        const nextPostureMap = { ...(d.mapping[d.posture] ?? {}) }
-                        delete nextPostureMap[key]
-                        return { ...d, mapping: { ...d.mapping, [d.posture]: nextPostureMap } }
-                    })
-                }}
-                hasMappingAtBall={Object.keys(doc.mapping[doc.posture] ?? {}).includes(cellKey(doc.grid, doc.ball!))}
-                hasPendingAtBall={Object.keys(pending).includes(cellKey(doc.grid, doc.ball!))}
-            />
+                        setDoc((d) => ({ ...d, mapping: { ...d.mapping, [d.posture]: { ...d.mapping[d.posture], ...pending } } }))
+                        setPending({})
+                    }}
+                    onDeleteCurrentCell={() =>
+                    {
+                        if (!doc.ball) return
+                        const key = cellKey(doc.grid, doc.ball)
+                        if (!Object.prototype.hasOwnProperty.call(doc.mapping[doc.posture] ?? {}, key)) return
+                        setDoc((d) =>
+                        {
+                            const nextPostureMap = { ...(d.mapping[d.posture] ?? {}) }
+                            delete nextPostureMap[key]
+                            return { ...d, mapping: { ...d.mapping, [d.posture]: nextPostureMap } }
+                        })
+                    }}
+                    hasMappingAtBall={Object.keys(doc.mapping[doc.posture] ?? {}).includes(cellKey(doc.grid, doc.ball!))}
+                    hasPendingAtBall={Object.keys(pending).includes(cellKey(doc.grid, doc.ball!))}
+                />
+            </div>
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                 <ErrorBoundary>
                     <EditorCanvas

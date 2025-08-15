@@ -19,7 +19,8 @@
         "@commitlint/cli": "^19.8.1",
         "@commitlint/config-conventional": "^19.8.1",
         "knip": "^5.52.0",
-        "sort-package-json": "^2.15.1"
+        "sort-package-json": "^2.15.1",
+        "typedoc": "^0.28.10"
     },
     "packageManager": "pnpm@10.6.5",
     "engines": {

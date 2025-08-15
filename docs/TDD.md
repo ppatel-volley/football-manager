@@ -37,7 +37,8 @@ This Technical Design Document outlines the technical architecture and implement
 - 2D Canvas physics (no Z-axis/height)
 - Ball in/out detection with basic restarts (throw-ins, corners, goal kicks)
 - Half-time transitions with team switching
-- Formation-based player positioning (pre-defined 4-4-2, 4-3-3)
+- Formation-based player positioning with flexible role system (supports variable defender/midfielder/forward compositions)
+- Dynamic formation templates: 4-4-2, 4-3-3, 5-3-2 (5 defenders), 3-5-2 (5 midfielders), 4-2-3-1, 3-4-3
 - Basic statistics tracking (possession, shots, corners)
 - FireTV Stick 4K Max optimisation (30+ FPS target)
 
@@ -76,7 +77,7 @@ This Technical Design Document outlines the technical architecture and implement
 | **Match Phases** | ⚠️ Limited | Complete | POC: KICKOFF, IN_PLAY, OUT_OF_PLAY, THROW_IN, CORNER_KICK, GOAL_KICK<br/>Phase 2: +FREE_KICK, +PENALTY, +OFFSIDE |
 | **AI Difficulty** | ✅ Full | Enhanced | BEGINNER, AMATEUR, PROFESSIONAL, WORLD_CLASS |
 | **Physics Engine** | ✅ 2D Only | 3D Enhanced | POC: Simple 2D Canvas physics<br/>Phase 2: +Ball height, +Spin effects, +Advanced trajectories |
-| **Formation System** | ⚠️ Basic | FET Integrated | POC: Predefined 4-4-2/4-3-3 templates<br/>Phase 2: FET-TDD schema consumption |
+| **Formation System** | ✅ Flexible | FET Integrated | POC: Flexible role system supporting multiple formations<br/>Phase 2: FET-TDD schema with dynamic player compositions |
 | **Player Attributes** | ✅ Full | Enhanced | 0.0-10.0 scale (PRD specification) |
 | **Match Statistics** | ⚠️ Minimal | Advanced | POC: Possession, shots, corners<br/>Phase 2: +Passes, +Fouls, +Cards, +Heatmaps |
 | **Voice Commands** | ❌ Disabled | ✅ Full | Completely out of scope for POC |
@@ -3438,7 +3439,63 @@ This comprehensive AI architecture provides realistic football simulation throug
 
 ### 3.4 Optimized Formation and Positioning System
 
-#### 3.4.1 Float32Array Grid System for ARM NEON Optimization
+#### 3.4.1 Flexible Player Role System Implementation
+
+**Key Innovation**: Removed rigid player type constraints to support tactical diversity
+
+The formation system now supports variable numbers of any position type, allowing formations to define their exact player compositions based on tactical requirements:
+
+```typescript
+// Base position types for flexible formations
+type BasePosition = 
+  | "GK"      // Goalkeeper
+  | "CB"      // Centre Back
+  | "LB"      // Left Back  
+  | "RB"      // Right Back
+  | "LWB"     // Left Wing Back
+  | "RWB"     // Right Wing Back
+  | "DM"      // Defensive Midfielder
+  | "CM"      // Central Midfielder
+  | "AM"      // Attacking Midfielder
+  | "LM"      // Left Midfielder
+  | "RM"      // Right Midfielder
+  | "LW"      // Left Winger
+  | "RW"      // Right Winger
+  | "CF"      // Centre Forward
+  | "ST"      // Striker
+
+// Dynamic player role creation (e.g., CB_1, CB_2, CB_3)
+type PlayerRole = string
+
+// Formation templates define exact player compositions
+const FORMATION_TEMPLATES: Record<string, PlayerRole[]> = {
+  "4-4-2": ["GK", "LB", "CB_1", "CB_2", "RB", "LM", "CM_1", "CM_2", "RM", "ST_1", "ST_2"],
+  "4-3-3": ["GK", "LB", "CB_1", "CB_2", "RB", "DM", "CM_1", "CM_2", "LW", "RW", "ST"],
+  "5-3-2": ["GK", "LWB", "CB_1", "CB_2", "CB_3", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
+  "3-5-2": ["GK", "CB_1", "CB_2", "CB_3", "CDM_1", "CDM_2", "LM", "RM", "CAM", "ST_1", "ST_2"],
+  "4-2-3-1": ["GK", "LB", "CB_1", "CB_2", "RB", "DM_1", "DM_2", "LW", "AM", "RW", "ST"],
+  "3-4-3": ["GK", "CB_1", "CB_2", "CB_3", "LM", "CM_1", "CM_2", "RM", "LW", "ST", "RW"],
+}
+
+interface FlexibleFormationData {
+  formationId: string;
+  name: string;
+  category: FormationCategory;
+  playerComposition: PlayerRole[];        // Defines exactly which players this formation uses
+  postures: {
+    [posture: string]: PostureData;
+  };
+  metadata: FormationMetadata;
+}
+```
+
+**System Benefits**:
+- **5-3-2 Formation**: Uses 5 defenders (LWB, CB_1, CB_2, CB_3, RWB) for defensive solidity
+- **3-5-2 Formation**: Uses 5 midfielders (CDM_1, CDM_2, LM, RM, CAM) for midfield control
+- **Dynamic Role Assignment**: Multiple players in same base position (CB_1, CB_2, CB_3) can have specialised roles
+- **Tactical Flexibility**: AI system adapts to formations with non-standard player distributions
+
+#### 3.4.2 Float32Array Grid System for ARM NEON Optimization
 
 **Performance Strategy**: Hybrid integer/float approach optimized for FireTV ARM Cortex-A55 NEON capabilities
 
@@ -4937,7 +4994,7 @@ Prompt: "28 unique football club badges inspired by English league teams, herald
 
 **Formation Diagrams:**
 ```
-Prompt: "Clean tactical formation diagrams for football: 4-4-2, 4-3-3, 3-5-2, 4-2-3-1, 5-3-2 formations, minimalist design with player position dots and movement arrows, suitable for TV interface display"
+Prompt: "Clean tactical formation diagrams for football: 4-4-2, 4-3-3, 3-5-2, 4-2-3-1, 5-3-2, 3-4-3 formations, minimalist design with player position dots and movement arrows, suitable for TV interface display. System now supports flexible player compositions - formations can define variable numbers of defenders, midfielders, and forwards as needed."
 ```
 
 **UI Elements:**

@@ -29,8 +29,9 @@ graph TB
 
 #### 2.2.1 Formation Editor UI
 - **Technology**: React with Canvas for pitch visualisation
-- **Responsibilities**: Visual formation editing, player positioning, real-time preview
-- **Input Methods**: Mouse drag-and-drop, keyboard shortcuts, template selection
+- **Responsibilities**: Visual formation editing, player positioning, real-time preview, formation template selection
+- **Input Methods**: Mouse drag-and-drop, keyboard shortcuts, formation dropdown selection
+- **Formation Templates**: Dropdown selector that loads pre-defined formations with kick-off positions automatically applied
 
 #### 2.2.2 Grid System Engine
 - **Grid Density**: 20x15 grid (300 zones total)
@@ -156,31 +157,107 @@ The 20×15 grid system overlays the FIFA-compliant pitch:
 
 ## 4. Data Architecture
 
-### 4.1 Core Data Structures
+### 4.1 Flexible Player Role System
+
+**Key Innovation**: The Formation Editor Tool now supports completely flexible player compositions, removing all rigid constraints about formation structure. This allows formations to define their exact tactical requirements rather than being forced into predefined player type distributions.
+
+#### 4.1.1 Constraint Removal Benefits
+
+- **Variable Defender Counts**: 5-3-2 formation uses 5 defenders whilst 3-5-2 uses only 3
+- **Flexible Midfielder Numbers**: 3-5-2 employs 5 midfielders (CDM_1, CDM_2, LM, RM, CAM) for midfield dominance
+- **Dynamic Role Naming**: Players numbered by position (CB_1, CB_2, CB_3) to support multiple instances
+- **Tactical Authenticity**: Each formation reflects real-world tactical setups without artificial limitations
+
+The system now supports flexible player compositions for different formations, removing rigid constraints:
 
 ```typescript
-interface FormationData {
-  formationId: string;           // "4-4-2-flat"
-  name: string;                  // "4-4-2 Flat Formation"
-  category: FormationCategory;   // "Defensive" | "Balanced" | "Attacking"
-  phases: {
-    [phase in GamePhase]: PhaseData;
+// Base position types for flexible formations
+type BasePosition = 
+  | "GK"      // Goalkeeper
+  | "CB"      // Centre Back
+  | "LB"      // Left Back  
+  | "RB"      // Right Back
+  | "LWB"     // Left Wing Back
+  | "RWB"     // Right Wing Back
+  | "DM"      // Defensive Midfielder
+  | "CM"      // Central Midfielder
+  | "AM"      // Attacking Midfielder
+  | "LM"      // Left Midfielder
+  | "RM"      // Right Midfielder
+  | "LW"      // Left Winger
+  | "RW"      // Right Winger
+  | "CF"      // Centre Forward
+  | "ST"      // Striker
+
+// Dynamic player role system (e.g., CB_1, CB_2, CB_3)
+type PlayerRole = string
+
+// Formation templates define exact player compositions
+const FORMATION_TEMPLATES: Record<string, PlayerRole[]> = {
+  "4-4-2": ["GK", "LB", "CB_1", "CB_2", "RB", "LM", "CM_1", "CM_2", "RM", "ST_1", "ST_2"],
+  "4-3-3": ["GK", "LB", "CB_1", "CB_2", "RB", "DM", "CM_1", "CM_2", "LW", "RW", "ST"],
+  "5-3-2": ["GK", "LWB", "CB_1", "CB_2", "CB_3", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
+  "3-5-2": ["GK", "CB_1", "CB_2", "CB_3", "LWB", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
+  "4-2-3-1": ["GK", "LB", "CB_1", "CB_2", "RB", "DM_1", "DM_2", "LW", "AM", "RW", "ST"],
+  "3-4-3": ["GK", "CB_1", "CB_2", "CB_3", "LM", "CM_1", "CM_2", "RM", "LW", "ST", "RW"],
+}
+```
+
+### 4.2 Uber Formation Data Structure
+
+All formation data is contained within a single JSON file (`formations.json`) that includes all formations across all postures and phases:
+
+```typescript
+interface UberFormationData {
+  version: string;
+  lastModified: string;
+  formations: {
+    [formationId: string]: FormationDefinition;
+  };
+  kickoffPositions: {
+    [formationId: string]: KickoffPositionSet;
+  };
+}
+
+interface FormationDefinition {
+  formationId: string;                    // "5-3-2"
+  name: string;                          // "5-3-2 Defensive"
+  category: FormationCategory;           // "Defensive" | "Balanced" | "Attacking"
+  playerComposition: PlayerRole[];       // Defines exactly which players this formation uses
+  postures: {
+    [posture: string]: PostureData;      // "defensive", "balanced", "attacking"
   };
   metadata: FormationMetadata;
 }
 
+interface PostureData {
+  phases: {
+    [phase in GamePhase]: PhaseData;
+  };
+}
+
 interface PhaseData {
   positions: {
-    [zoneId: string]: {          // "x12_y8" format
+    [zoneId: string]: {                  // "x12_y8" format
       players: {
-        [playerRole: string]: {   // "CB_LEFT", "CDM", "RW" etc.
-          x: number;             // 0.0-1.0 normalised
-          y: number;             // 0.0-1.0 normalised
-          priority: number;      // 1-10 positioning importance
-          flexibility: number;   // 0.0-1.0 deviation allowed
+        [playerRole: string]: {          // "CB_1", "CM_2", "ST_1" etc.
+          x: number;                     // 0.0-1.0 normalised
+          y: number;                     // 0.0-1.0 normalised
+          priority: number;              // 1-10 positioning importance
+          flexibility: number;           // 0.0-1.0 deviation allowed
           contextualModifiers: ContextualModifier[];
         }
       }
+    }
+  };
+}
+
+interface KickoffPositionSet {
+  formationId: string;
+  positions: {
+    [playerRole: string]: {
+      x: number;                 // 0.0-1.0 normalised
+      y: number;                 // 0.0-1.0 normalised
     }
   };
 }
@@ -601,8 +678,8 @@ interface ExportMetadata {
 }
 ```
 
-**Storage Location**: `assets/formations/` directory in repository
-**File Format**: Compressed JSON with `.formation` extension
+**Storage Location**: `assets/formations.json` in repository root
+**File Format**: Single JSON file containing all formation data
 **Versioning Policy**:
 - Major version changes require TDD updates
 - Minor versions maintain backward compatibility
@@ -616,8 +693,7 @@ interface ExportMetadata {
 
 ### 6.4 File Types
 
-- Formation File (`.formation.json`): Minimal, engine-ready formation definition (`FormationData`).
-- Project File (`.project.json`): Editor working state containing grid, posture, ball, and per-cell mappings (`EditorDoc`). Used for iterative authoring; not required at runtime.
+- Formation Data File (`formations.json`): Single uber file containing all formation definitions, postures, phases, and kick-off positions. Used by both editor and runtime.
 
 ## 7. User Interface Specifications
 
@@ -627,13 +703,12 @@ interface ExportMetadata {
 interface FETUserInterface {
   components: {
     PitchCanvas: CanvasComponent;        // Main editing area
-    FormationSelector: SelectComponent;  // Formation templates
+    FormationDropdown: DropdownComponent; // Formation template selector with kick-off positioning
     PlayerRolePanel: PanelComponent;     // Role assignments
     ValidationPanel: PanelComponent;     // Error display
     PreviewControls: ControlComponent;   // Animation preview
-    ExportPanel: PanelComponent;         // Data export options
+    DataExportPanel: PanelComponent;     // Single file export options
     GhostOppositionToggle: ToggleComponent; // Enables mirrored opposition view
-    ProjectAutosave: ServiceComponent;   // Periodic autosave to local storage
   };
 
   interactions: {
@@ -641,17 +716,20 @@ interface FETUserInterface {
     keyboardShortcuts: KeyboardHandler;
     multiSelection: SelectionHandler;
     undoRedo: HistoryHandler;
+    formationSelection: {
+      onSelect: (formationId: string) => void; // Loads formation with kick-off positions
+      applyKickoffPositions: () => void;       // Positions team in kick-off formation
+    };
     ghostView: {
       toggle: () => void;               // Enable/disable ghost view
       behavior: "view-only";            // Ghost is visible but not editable
       updateModel: "mirror-halfway";    // Mirrors ball cell and positions across halfway line
-    }
-    project: {
-      save: () => void;                 // Manual save
-      load: () => void;                 // Load from file
-      autosaveIntervalMs: number;       // e.g. 5000ms
-      storageKey: string;               // namespaced key for local storage
-    }
+    };
+    dataManagement: {
+      exportToFile: () => void;         // Export formations.json
+      importFromFile: () => void;       // Import formations.json
+      validateData: () => void;         // Validate uber file structure
+    };
   };
 }
 ```
@@ -679,10 +757,11 @@ interface ValidationError {
 
 ### 8.1 Phase 2A: Core Editor (Months 4-5)
 **Strict Scope Limitations**:
+- **Formation Template Dropdown**: Selection interface that loads formations with kick-off positions
 - **Single Formation Category**: Balanced formations only (defer Defensive/Attacking)
 - **Single Grid Density**: 20x15 fixed (no dynamic scaling)
 - **Two Game Phases**: ATTACK/DEFEND only (defer transitions and set pieces)
-- **JSON Export/Import**: Basic serialization without versioning
+- **Single Data File**: All formations stored in `formations.json` uber file
 - **Base Validations**: Bounds checking and overlap detection only
 
 ### 9.2 Phase 2B: Enhanced Features (Month 6)
