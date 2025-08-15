@@ -43,9 +43,120 @@ graph TB
 - **Performance Checks**: Memory usage estimation, CPU overhead analysis
 - **Real-time Feedback**: Instant validation with visual error indicators
 
-## 3. Data Architecture
+#### 2.2.4 FIFA-Compliant Pitch Rendering
+- **Standards Compliance**: All pitch markings follow FIFA Laws of the Game specifications
+- **Accurate Proportions**: Dimensions based on standard 105m × 68m professional pitch
+- **Visual Fidelity**: Realistic pitch appearance for authentic formation design experience
 
-### 3.1 Core Data Structures
+## 3. FIFA-Compliant Pitch Specifications
+
+### 3.1 Official FIFA Dimensions
+
+The Formation Editor Tool implements FIFA-compliant pitch markings based on the maximum FIFA-allowed pitch dimensions (110m × 68m). All measurements are proportionally scaled and normalised to the canvas coordinate system.
+
+#### 3.1.1 Core Pitch Markings
+
+```typescript
+interface FIFAPitchDimensions {
+  // Base pitch: 110m × 68m (FIFA maximum allowed)
+  pitchLength: 110; // metres (100-110m FIFA range)
+  pitchWidth: 68;   // metres (64-75m FIFA range)
+  
+  // Goal specifications
+  goal: {
+    width: 7.32;    // metres (8 yards)
+    height: 2.44;   // metres (8 feet)
+    depth: 0.6;     // metres (behind goal line)
+    postWidth: 0.12; // metres (5 inches)
+  };
+  
+  // Goal area (6-yard box)
+  goalArea: {
+    depth: 5.5;     // metres (6 yards)
+    width: 18.32;   // metres (20 yards)
+  };
+  
+  // Penalty area (18-yard box)
+  penaltyArea: {
+    depth: 16.5;    // metres (18 yards)
+    width: 40.32;   // metres (44 yards)
+  };
+  
+  // Penalty specifications
+  penalty: {
+    spotDistance: 11.0;  // metres (12 yards from goal line)
+    arcRadius: 9.15;     // metres (10 yards)
+  };
+  
+  // Center circle
+  centerCircle: {
+    radius: 9.15;   // metres (10 yards)
+  };
+  
+  // Corner specifications
+  corner: {
+    arcRadius: 1.0; // metres (1 yard)
+    flagHeight: 1.5; // metres minimum
+  };
+  
+  // Line markings
+  lines: {
+    width: 0.12;    // metres (5 inches maximum)
+    color: '#FFFFFF'; // White as per FIFA regulations
+  };
+}
+```
+
+#### 3.1.2 Canvas Implementation
+
+The pitch markings are rendered using HTML5 Canvas with precise proportional scaling:
+
+```typescript
+class FIFAPitchRenderer {
+  private calculateDimensions(canvasWidth: number, canvasHeight: number): RendererDimensions {
+    return {
+      // Goal: 7.32m wide (10.76% of pitch width)
+      goalWidth: 0.1076 * canvasHeight,
+      
+      // Goal area: 5.5m deep × 18.32m wide
+      goalAreaDepth: (5.5 / 110) * canvasWidth,   // 5.0% of pitch length
+      goalAreaWidth: (18.32 / 68) * canvasHeight, // 26.94% of pitch width
+      
+      // Penalty area: 16.5m deep × 40.32m wide
+      penaltyAreaDepth: (16.5 / 110) * canvasWidth, // 15.0% of pitch length
+      penaltyAreaWidth: (40.32 / 68) * canvasHeight, // 59.29% of pitch width
+      
+      // Penalty spot: 11m from goal line
+      penaltySpotDistance: (11 / 110) * canvasWidth, // 10.0% of pitch length
+      
+      // Center circle: 9.15m radius
+      centerCircleRadius: (9.15 / 68) * canvasHeight, // 13.46% of pitch width
+      
+      // Corner arc: 1m radius
+      cornerRadius: (1 / 68) * canvasHeight, // 1.47% of pitch width
+    };
+  }
+}
+```
+
+#### 3.1.3 Quality Assurance Standards
+
+- **Measurement Accuracy**: All dimensions accurate to within 0.1% of FIFA specifications
+- **Visual Consistency**: Consistent line weights and colours across all markings
+- **Proportional Scaling**: Maintains correct proportions across different canvas sizes
+- **Performance Optimised**: Uses offscreen canvas caching for efficient rendering
+
+### 3.2 Grid System Integration
+
+The 20×15 grid system overlays the FIFA-compliant pitch:
+
+- **Zone Size**: Each grid cell represents 5.5m × 4.53m of real pitch space
+- **Precision**: Grid boundaries align with major pitch markings where applicable
+- **Navigation**: Grid coordinates correspond to real-world football tactical zones
+
+## 4. Data Architecture
+
+### 4.1 Core Data Structures
 
 ```typescript
 interface FormationData {

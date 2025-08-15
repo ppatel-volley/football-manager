@@ -231,8 +231,11 @@ function drawPitch(ctx: CanvasRenderingContext2D, fieldWidth: number, fieldHeigh
     ctx.lineTo(fieldWidth / 2, fieldHeight)
     ctx.stroke()
 
-    // Center circle
-    const centerCircleRadius = (0.32 * fieldHeight) / 2 // match 10-yard radius relative to our existing proportions
+    // Center circle: 9.15m radius (13.46% of pitch width)
+    const centerCircleRadius = (9.15 / 68) * fieldHeight
+    
+    // Penalty arc: 9.15m radius (same as center circle)
+    const penaltyArcRadius = centerCircleRadius
     ctx.beginPath()
     ctx.arc(fieldWidth / 2, fieldHeight / 2, centerCircleRadius, 0, Math.PI * 2)
     ctx.stroke()
@@ -243,15 +246,20 @@ function drawPitch(ctx: CanvasRenderingContext2D, fieldWidth: number, fieldHeigh
     ctx.fillStyle = "#ffffff"
     ctx.fill()
 
-    // Dimensions derived from POC renderer ratios
-    const goalWidth = 0.145 * fieldHeight
-    const goalAreaDepth = 0.028125 * fieldWidth
-    const goalAreaWidth = 0.145 * fieldHeight
-    const penaltyAreaDepth = 0.084375 * fieldWidth
-    const penaltyAreaWidth = 0.32 * fieldHeight
-    const penaltySpotDistance = 0.05625 * fieldWidth
+    // FIFA standard dimensions (based on 110m × 68m pitch - maximum FIFA length)
+    // Goal: 7.32m wide (10.76% of pitch width)
+    const goalWidth = 0.1076 * fieldHeight
+    // Goal area: 5.5m deep × 18.32m wide
+    const goalAreaDepth = (5.5 / 110) * fieldWidth  // 5.0% of pitch length
+    const goalAreaWidth = (18.32 / 68) * fieldHeight // 26.94% of pitch width
+    // Penalty area: 16.5m deep × 40.32m wide  
+    const penaltyAreaDepth = (16.5 / 110) * fieldWidth // 15.0% of pitch length
+    const penaltyAreaWidth = (40.32 / 68) * fieldHeight // 59.29% of pitch width
+    // Penalty spot: 11m from goal line
+    const penaltySpotDistance = (11 / 110) * fieldWidth // 10.0% of pitch length
     const goalDepth = 0.009 * fieldWidth
-    const cornerRadius = 0.007 * fieldHeight
+    // Corner arc: 1m radius
+    const cornerRadius = (1 / 68) * fieldHeight // 1.47% of pitch width
 
     const goalY = (fieldHeight - goalWidth) / 2
     const goalAreaY = (fieldHeight - goalAreaWidth) / 2
@@ -266,9 +274,10 @@ function drawPitch(ctx: CanvasRenderingContext2D, fieldWidth: number, fieldHeigh
     ctx.arc(penaltySpotDistance, fieldHeight / 2, 3, 0, Math.PI * 2)
     ctx.fillStyle = "#ffffff"
     ctx.fill()
-    // Left penalty arc
+    // Left penalty arc - only draw the part outside the penalty box
+    const arcStartAngle = Math.acos((penaltyAreaDepth - penaltySpotDistance) / penaltyArcRadius)
     ctx.beginPath()
-    ctx.arc(penaltySpotDistance, fieldHeight / 2, centerCircleRadius, -Math.PI / 3, Math.PI / 3)
+    ctx.arc(penaltySpotDistance, fieldHeight / 2, penaltyArcRadius, -arcStartAngle, arcStartAngle)
     ctx.stroke()
 
     // Right penalty area
@@ -279,9 +288,9 @@ function drawPitch(ctx: CanvasRenderingContext2D, fieldWidth: number, fieldHeigh
     ctx.beginPath()
     ctx.arc(fieldWidth - penaltySpotDistance, fieldHeight / 2, 3, 0, Math.PI * 2)
     ctx.fill()
-    // Right penalty arc
+    // Right penalty arc - only draw the part outside the penalty box
     ctx.beginPath()
-    ctx.arc(fieldWidth - penaltySpotDistance, fieldHeight / 2, centerCircleRadius, (2 * Math.PI) / 3, (4 * Math.PI) / 3)
+    ctx.arc(fieldWidth - penaltySpotDistance, fieldHeight / 2, penaltyArcRadius, Math.PI - arcStartAngle, Math.PI + arcStartAngle)
     ctx.stroke()
 
     // Corner arcs

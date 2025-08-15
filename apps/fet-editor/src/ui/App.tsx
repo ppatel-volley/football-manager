@@ -102,6 +102,7 @@ export const App = (): ReactNode =>
     const [showMirrorLegend, setShowMirrorLegend] = useState<boolean>(true)
     const ghostRoles = useMemo(() => computeGhostRoles(doc, pending), [doc, pending])
     const [isBallDragging, setIsBallDragging] = useState(false)
+    const [isTeamMoving, setIsTeamMoving] = useState(false)
 
     // Load formations from repo folder via Vite glob (declare type via `as` for TS)
     const formationFiles = (import.meta as unknown as { glob: <T = unknown>(p: string, opts: { eager: boolean }) => Record<string, T> })
@@ -411,6 +412,86 @@ export const App = (): ReactNode =>
         return () => window.clearInterval(id)
     }, [doc])
 
+    // Team movement with cursor keys
+    useEffect(() =>
+    {
+        const moveTeam = (deltaX: number, deltaY: number): void =>
+        {
+            setIsTeamMoving(true)
+            const moveAmount = 0.02 // Amount to move on each keypress
+            const adjustedDeltaX = deltaX * moveAmount
+            const adjustedDeltaY = deltaY * moveAmount
+
+            setDoc((d) =>
+            {
+                const updatedRoles = { ...d.formation.roles }
+                
+                // Move all players by the delta amount, except goalkeeper
+                Object.keys(updatedRoles).forEach((roleKey) =>
+                {
+                    const role = roleKey as PlayerRole
+                    
+                    // Skip goalkeeper - GK stays in position
+                    if (role === 'GK')
+                    {
+                        return
+                    }
+                    
+                    const currentPos = updatedRoles[role]
+                    updatedRoles[role] = {
+                        x: Math.max(0, Math.min(1, currentPos.x + adjustedDeltaX)),
+                        y: Math.max(0, Math.min(1, currentPos.y + adjustedDeltaY))
+                    }
+                })
+
+                // Update current ball cell mapping if it exists
+                if (d.ball)
+                {
+                    const key = cellKey(d.grid, d.ball)
+                    setPending((p) => ({ ...p, [key]: updatedRoles }))
+                }
+
+                return { ...d, formation: { ...d.formation, roles: updatedRoles } }
+            })
+
+            // Clear the moving state after a short delay for visual feedback
+            setTimeout(() => setIsTeamMoving(false), 150)
+        }
+
+        const handleKeyDown = (e: KeyboardEvent): void =>
+        {
+            // Only handle cursor keys when not in input field
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)
+            {
+                return
+            }
+
+            // Prevent default browser behaviour for cursor keys
+            switch (e.key)
+            {
+                case 'ArrowUp':
+                    e.preventDefault()
+                    moveTeam(0, -1)
+                    break
+                case 'ArrowDown':
+                    e.preventDefault()
+                    moveTeam(0, 1)
+                    break
+                case 'ArrowLeft':
+                    e.preventDefault()
+                    moveTeam(-1, 0)
+                    break
+                case 'ArrowRight':
+                    e.preventDefault()
+                    moveTeam(1, 0)
+                    break
+            }
+        }
+
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [doc.ball, doc.grid])
+
     // Painting helpers (deduped handlers)
     const paintHandlers = usePaintHandlers({
         grid,
@@ -534,6 +615,7 @@ export const App = (): ReactNode =>
                         snap={snap}
                         showGhostOpposition={showGhostOpposition}
                         showMirrorLegend={showMirrorLegend}
+                        isTeamMoving={isTeamMoving}
                         setDoc={setDoc}
                         setPending={setPending}
                         setIsBallDragging={setIsBallDragging}

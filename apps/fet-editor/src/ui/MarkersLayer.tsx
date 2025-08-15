@@ -13,11 +13,12 @@ interface MarkersLayerProps
     onDragStart?: () => void
     onDragEnd?: () => void
     ghost?: boolean
+    isTeamMoving?: boolean
 }
 
 const roleOrder: PlayerRole[] = ["GK", "LB", "CB_L", "CB_R", "RB", "CM_L", "CM_R", "LW", "RW", "ST_L", "ST_R"]
 
-export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragStart, onDragEnd, ghost }: MarkersLayerProps): ReactNode =>
+export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragStart, onDragEnd, ghost, isTeamMoving = false }: MarkersLayerProps): ReactNode =>
 {
     const [drag, setDrag] = useState<{ role: PlayerRole; offset: Vector2 } | null>(null)
 
@@ -99,14 +100,16 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragSt
                                 width: 18,
                                 height: 18,
                                 borderRadius: 9,
-                                background: ghost ? "rgba(255,255,255,0.12)" : "#111",
-                                border: ghost ? "2px dashed #aaa" : "2px solid #fff",
+                                background: ghost ? "rgba(255,255,255,0.12)" : (isTeamMoving && role !== 'GK') ? "#333" : "#111",
+                                border: ghost ? "2px dashed #aaa" : (isTeamMoving && role !== 'GK') ? "2px solid #4CAF50" : "2px solid #fff",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontSize: 10,
                                 userSelect: "none",
                                 cursor: ghost ? "default" : "grab",
+                                boxShadow: (isTeamMoving && !ghost && role !== 'GK') ? "0 0 8px rgba(76, 175, 80, 0.6)" : "none",
+                                transition: "all 0.15s ease",
                             }}
                             title={role}
                         >

@@ -97,7 +97,51 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Distribution Speed**: Quick distribution (throw/roll) maintains attacking momentum, long distribution (drop kick/punt) creates counter-attack opportunities
 - **Defensive Leadership**: Goalkeeper organises defensive line and communicates tactical adjustments
 
-### 3.1 Formation System (Phase 2)
+### 3.1 FIFA-Compliant Pitch System
+
+#### 3.1.1 Official FIFA Pitch Standards
+
+Super Soccer Manager: Pro Edition implements FIFA-compliant pitch markings to ensure authentic football simulation. All dimensions are based on FIFA Laws of the Game for professional football.
+
+**Standard Pitch Dimensions**:
+- **Length**: 110 metres (FIFA maximum allowed, range: 100-110m)
+- **Width**: 68 metres (FIFA standard, range: 64-75m)
+
+**Goal Specifications**:
+- **Width**: 7.32 metres (8 yards)
+- **Height**: 2.44 metres (8 feet) 
+- **Post Width**: Maximum 12 centimetres (5 inches)
+
+**Penalty Area (18-yard box)**:
+- **Depth**: 16.5 metres (18 yards from goal line)
+- **Width**: 40.32 metres (44 yards total width)
+
+**Goal Area (6-yard box)**:
+- **Depth**: 5.5 metres (6 yards from goal line)
+- **Width**: 18.32 metres (20 yards total width)
+
+**Circle and Arc Specifications**:
+- **Center Circle**: 9.15 metres radius (10 yards)
+- **Penalty Arc**: 9.15 metres radius (10 yards, extends outside penalty area)
+- **Corner Arc**: 1 metre radius (1 yard)
+
+**Spot Positioning**:
+- **Penalty Spot**: 11 metres from goal line (12 yards)
+- **Center Spot**: Pitch center for kick-off
+
+#### 3.1.2 Visual Implementation Standards
+
+**Proportional Accuracy**: All pitch markings maintain accurate proportions regardless of screen size or resolution, ensuring consistent gameplay experience across devices.
+
+**Quality Standards**:
+- Line markings use FIFA-compliant white colour (#FFFFFF)
+- Consistent line width throughout all markings
+- Accurate measurement ratios maintained at all zoom levels
+- Smooth rendering of curved elements (circles, arcs)
+
+**Formation Editor Tool Integration**: The Formation Editor Tool uses identical FIFA specifications, ensuring formations designed in the editor translate accurately to match simulation.
+
+### 3.2 Formation System (Phase 2)
 
 **Future Implementation**: A developer-only Formation Editor Tool will be delivered in Phase 2 to enable sophisticated tactical AI positioning. See `docs/FET-TDD.md` for complete technical specifications.
 

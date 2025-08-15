@@ -785,6 +785,101 @@ class Ball {
 }
 ```
 
+### 3.3 FIFA-Compliant Pitch System
+
+**Standards Compliance**: All pitch rendering follows FIFA Laws of the Game specifications to ensure authentic football simulation and Formation Editor Tool accuracy.
+
+#### 3.3.1 Official FIFA Pitch Dimensions
+
+The game engine uses maximum FIFA pitch dimensions (110m × 68m) with all markings proportionally scaled:
+
+```typescript
+interface FIFAPitchSpecifications {
+  // Maximum FIFA-allowed pitch dimensions
+  pitch: {
+    length: 110;    // metres (FIFA maximum, range: 100-110m)
+    width: 68;      // metres (FIFA standard, range: 64-75m)
+  };
+  
+  // Goal specifications (FIFA Law 1)
+  goal: {
+    width: 7.32;    // metres (8 yards)
+    height: 2.44;   // metres (8 feet)
+    postWidth: 0.12; // metres (5 inches maximum)
+  };
+  
+  // Penalty area (18-yard box)
+  penaltyArea: {
+    depth: 16.5;    // metres (18 yards)
+    width: 40.32;   // metres (44 yards)
+  };
+  
+  // Goal area (6-yard box)
+  goalArea: {
+    depth: 5.5;     // metres (6 yards)
+    width: 18.32;   // metres (20 yards)
+  };
+  
+  // Circle and arc specifications
+  centerCircle: {
+    radius: 9.15;   // metres (10 yards)
+  };
+  
+  penaltyArc: {
+    radius: 9.15;   // metres (10 yards, same as center circle)
+  };
+  
+  cornerArc: {
+    radius: 1.0;    // metres (1 yard)
+  };
+  
+  // Spot positioning
+  penaltySpot: {
+    distanceFromGoal: 11.0; // metres (12 yards)
+  };
+}
+```
+
+#### 3.3.2 Canvas Rendering Implementation
+
+Pitch markings use proportional scaling for accurate representation:
+
+```typescript
+class FIFAPitchRenderer {
+  public renderPitch(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    // Calculate proportional dimensions
+    const dims = {
+      goalWidth: 0.1076 * height,           // 7.32m/68m = 10.76%
+      goalAreaDepth: (5.5 / 110) * width,   // 5.0% of pitch length  
+      goalAreaWidth: (18.32 / 68) * height, // 26.94% of pitch width
+      penaltyAreaDepth: (16.5 / 110) * width, // 15.0% of pitch length
+      penaltyAreaWidth: (40.32 / 68) * height, // 59.29% of pitch width
+      penaltySpotDistance: (11 / 110) * width, // 10.0% of pitch length
+      centerCircleRadius: (9.15 / 68) * height, // 13.46% of pitch width
+      cornerRadius: (1 / 68) * height       // 1.47% of pitch width
+    };
+    
+    // Render all FIFA-compliant markings with precise measurements
+    this.drawFieldBoundaries(ctx, width, height);
+    this.drawPenaltyAreas(ctx, dims);
+    this.drawGoalAreas(ctx, dims);
+    this.drawCenterCircle(ctx, dims);
+    this.drawPenaltyArcs(ctx, dims);
+    this.drawCornerArcs(ctx, dims);
+    this.drawGoals(ctx, dims);
+  }
+}
+```
+
+#### 3.3.3 Formation Editor Tool Integration
+
+The Formation Editor Tool (FET) uses the same FIFA specifications:
+
+- **Grid Overlay**: 20×15 grid cells overlay the FIFA-compliant pitch
+- **Real-World Mapping**: Each grid cell represents 5.5m × 4.53m of actual pitch space
+- **Tactical Zones**: Grid boundaries align with key FIFA pitch markings
+- **Position Accuracy**: Player positions use normalised coordinates (0.0-1.0) mapped to FIFA dimensions
+
 ### 3.6 POC 2D Physics Engine
 
 **POC Constraint**: Simple 2D Canvas physics with no Z-axis simulation. Complex 3D physics, ball height/elevation, realistic spin effects, and complex trajectory simulation are explicitly out-of-scope.

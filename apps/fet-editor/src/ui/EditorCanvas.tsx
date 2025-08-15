@@ -22,6 +22,7 @@ interface EditorCanvasProps
     snap: boolean;
     showGhostOpposition: boolean;
     showMirrorLegend: boolean;
+    isTeamMoving: boolean;
     setDoc: React.Dispatch<React.SetStateAction<EditorDoc>>;
     setPending: React.Dispatch<React.SetStateAction<Record<string, Record<PlayerRole, Vector2>>>>;
     setIsBallDragging: (v: boolean) => void;
@@ -29,7 +30,7 @@ interface EditorCanvasProps
 
 export function EditorCanvas(props: EditorCanvasProps): ReactNode
 {
-    const { doc, canvasSize, grid, cellSize, pending, ghostRoles, paintHandlers, snap, showGhostOpposition, showMirrorLegend, setDoc, setPending, setIsBallDragging } = props;
+    const { doc, canvasSize, grid, cellSize, pending, ghostRoles, paintHandlers, snap, showGhostOpposition, showMirrorLegend, isTeamMoving, setDoc, setPending, setIsBallDragging } = props;
     const rootRef = useRef<HTMLDivElement>(null);
 
     return (
@@ -149,6 +150,7 @@ export function EditorCanvas(props: EditorCanvasProps): ReactNode
                     }}
                     onDragStart={() => paintHandlers.setMode("none")}
                     onDragEnd={() => paintHandlers.setMode("none")}
+                    isTeamMoving={isTeamMoving}
                 />
             </div>
 

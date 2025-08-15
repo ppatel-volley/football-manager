@@ -130,7 +130,16 @@ export function ControlsPanel(props: ControlsPanelProps): ReactNode
                             onChangeDoc((d) =>
                             {
                                 const base = d.formation.postures?.[next]
-                                return base ? { ...d, posture: next, formation: { ...d.formation, roles: { ...base } } } : { ...d, posture: next }
+                                const newRoles = base ? { ...base } : d.formation.roles
+                                // Update the current ball cell's mapping to reflect the new posture formation
+                                const ballKey = d.ball ? `${Math.floor(d.ball.x * d.grid.cols)}_${Math.floor(d.ball.y * d.grid.rows)}` : null
+                                if (ballKey && d.mapping[d.posture]?.[ballKey])
+                                {
+                                    const updatedMapping = { ...d.mapping }
+                                    updatedMapping[d.posture] = { ...updatedMapping[d.posture], [ballKey]: { ...newRoles } }
+                                    return { ...d, posture: next, formation: { ...d.formation, roles: { ...newRoles } }, mapping: updatedMapping }
+                                }
+                                return { ...d, posture: next, formation: { ...d.formation, roles: { ...newRoles } } }
                             })
                         }}
                         style={{ background: "#222", color: "#fff", border: "1px solid #555", borderRadius: 6, padding: "4px 8px" }}
@@ -175,6 +184,13 @@ export function ControlsPanel(props: ControlsPanelProps): ReactNode
                 <label>
                     <input type="checkbox" checked={showMirrorLegend} onChange={(ev) => onToggleLegend(ev.target.checked)} /> Show mirroring legend
                 </label>
+            </div>
+            <div style={{ marginTop: 12, padding: "8px 12px", background: "#222", borderRadius: 6, border: "1px solid #444" }}>
+                <div style={{ fontSize: 12, color: "#4CAF50", fontWeight: "bold", marginBottom: 4 }}>Cursor Key Controls:</div>
+                <div style={{ fontSize: 11, color: "#bbb", lineHeight: "1.4" }}>
+                    Use arrow keys to move outfield players smoothly.<br />
+                    ↑↓←→ Move team (goalkeeper stays in position)
+                </div>
             </div>
         </div>
     )
