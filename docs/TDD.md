@@ -344,7 +344,8 @@ class GameManager {
     this.deterministicContext = {
       gameTime: 0,
       rng: new SeededRandom(matchSeed || 12345), // Same seed for both players
-      frameCount: 0
+      frameCount: 0,
+      matchSeed: matchSeed || 12345
     };
 
     // Initialize game systems
@@ -361,7 +362,13 @@ class GameManager {
     // Pre-allocate position buffer for SIMD optimization
     this.positionBuffer = new Float32Array(44); // 22 players * 2 coordinates
 
+    // Initialize match state and kick-off
     this.matchState = MatchState.PREPARING_KICKOFF;
+    this.initialKickOffTeam = Math.random() < 0.5 ? 'HOME' : 'AWAY'; // Random kick-off
+    this.kickOffTeam = this.initialKickOffTeam;
+    this.halfTimeTransitioned = false;
+    this.halfTimeStartTime = 0;
+    
     this.lastUpdateTime = 0; // Initialize to 0, use game time in update loop
   }
 
@@ -546,6 +553,7 @@ class Team {
   private formationPositions: Float32Array;
   private teamColor: 'HOME' | 'AWAY';
   private currentPhase: 'ATTACK' | 'DEFEND' | 'TRANSITION';
+  private currentMatchState: MatchState = MatchState.INTRODUCTION;
 
   constructor(
     id: string,
@@ -702,10 +710,209 @@ class Team {
   }
 
   public updatePlayers(context: GameContext, deltaTime: number): void {
+    // Apply captain leadership effects first
+    this.applyCaptainLeadershipEffects(context);
+    
     // Update each player's AI and movement
     for (const player of this.players) {
       player.update(context, deltaTime);
     }
+    
+    // Apply captain tactical overrides after individual updates
+    this.applyCaptainTacticalOverrides();
+  }
+
+  public resetPlayersToFormation(): void {
+    // Reset all players to their base formation positions
+    for (let i = 0; i < this.players.length; i++) {
+      const player = this.players[i];
+      const basePosition = this.getFormationBasePosition(i);
+      
+      player.position = { ...basePosition };
+      player.targetPosition = { ...basePosition };
+      player.hasBall = false;
+      player.velocity = { x: 0, y: 0 };
+      
+      // Reset player state for kick-off
+      player.stamina = 100;
+    }
+  }
+
+  private getFormationBasePosition(playerIndex: number): Vector2 {
+    // Get base position from formation data
+    const positionIndex = playerIndex * 2;
+    return {
+      x: this.formationPositions[positionIndex],
+      y: this.formationPositions[positionIndex + 1]
+    };
+  }
+
+  /**
+   * STATE TRANSITION HANDLER - Called by GameManager when match state changes
+   */
+  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
+    console.log(`Team ${this.name}: State change ${previousState} -> ${newState}`);
+    this.currentMatchState = newState;
+
+    switch (newState) {
+      case MatchState.INTRODUCTION:
+        this.handleIntroductionState();
+        break;
+
+      case MatchState.PREPARE_FOR_KICKOFF:
+        this.handlePrepareKickoffState();
+        break;
+
+      case MatchState.IN_PLAY:
+        this.handleInPlayState(previousState);
+        break;
+
+      case MatchState.GOAL_KICK:
+      case MatchState.CORNER_KICK:
+      case MatchState.THROW_IN:
+        this.handleSetPieceState(newState);
+        break;
+
+      case MatchState.GOAL_SCORED:
+        this.handleGoalScoredState();
+        break;
+
+      case MatchState.HALF_TIME:
+        this.handleHalfTimeState();
+        break;
+
+      case MatchState.FULL_TIME:
+        this.handleFullTimeState();
+        break;
+
+      default:
+        console.warn(`Team ${this.name}: Unhandled state transition to ${newState}`);
+        break;
+    }
+
+    // Propagate state change to all players
+    this.players.forEach(player => {
+      player.onMatchStateChange(newState, previousState);
+    });
+  }
+
+  private handleIntroductionState(): void {
+    // Players walk onto pitch, crowd atmosphere
+    // Set players to walking animation, move towards starting positions
+    this.players.forEach(player => {
+      player.setAnimationState('walking');
+      player.setMovementSpeed(0.02); // Slow walk onto pitch
+    });
+  }
+
+  private handlePrepareKickoffState(): void {
+    // Move players to kick-off positions quickly
+    this.resetPlayersToFormation();
+    this.players.forEach(player => {
+      player.setAnimationState('jogging');
+      player.setMovementSpeed(0.06); // Quick movement to positions
+    });
+  }
+
+  private handleInPlayState(previousState: MatchState): void {
+    // Resume normal gameplay
+    this.currentPhase = 'TRANSITION'; // Reset to neutral phase
+    this.players.forEach(player => {
+      player.setAnimationState('ready');
+      player.setMovementSpeed(player.getBaseMovementSpeed());
+    });
+
+    // If transitioning from set piece, clear any temporary roles
+    if (this.isSetPieceState(previousState)) {
+      this.clearSetPieceRoles();
+    }
+  }
+
+  private handleSetPieceState(setState: MatchState): void {
+    // Assign set piece roles and positions
+    switch (setState) {
+      case MatchState.GOAL_KICK:
+        this.assignGoalKickRoles();
+        break;
+      case MatchState.CORNER_KICK:
+        this.assignCornerKickRoles();
+        break;
+      case MatchState.THROW_IN:
+        this.assignThrowInRoles();
+        break;
+    }
+
+    // Move players to set piece positions
+    this.players.forEach(player => {
+      player.setAnimationState('positioning');
+      player.setMovementSpeed(0.04); // Moderate speed for positioning
+    });
+  }
+
+  private handleGoalScoredState(): void {
+    // Trigger appropriate celebration or disappointment
+    const goalScorer = this.findGoalScorer(); // Would be passed in state data
+    
+    if (goalScorer) {
+      // Our team scored - celebration
+      this.players.forEach(player => {
+        if (player === goalScorer) {
+          player.setAnimationState('celebrating');
+        } else {
+          player.setAnimationState('cheering');
+        }
+      });
+    } else {
+      // Opponent scored - disappointment
+      this.players.forEach(player => {
+        player.setAnimationState('disappointed');
+      });
+    }
+  }
+
+  private handleHalfTimeState(): void {
+    // Players walk off pitch
+    this.players.forEach(player => {
+      player.setAnimationState('walking');
+      player.setMovementSpeed(0.02);
+      // Set target to tunnel/sideline
+      player.targetPosition = this.calculateTunnelPosition();
+    });
+  }
+
+  private handleFullTimeState(): void {
+    // Match complete - varied reactions based on result
+    this.players.forEach(player => {
+      // Animation would depend on match result
+      player.setAnimationState('match_end');
+      player.setMovementSpeed(0.01); // Very slow movement
+    });
+  }
+
+  private isSetPieceState(state: MatchState): boolean {
+    return state === MatchState.GOAL_KICK || 
+           state === MatchState.CORNER_KICK || 
+           state === MatchState.THROW_IN;
+  }
+
+  private assignGoalKickRoles(): void {
+    // Goalkeeper takes kick, outfield players spread out
+    const goalkeeper = this.players.find(p => p.role === 'GOALKEEPER');
+    if (goalkeeper) {
+      goalkeeper.setTemporaryRole('goal_kicker');
+    }
+  }
+
+  private assignCornerKickRoles(): void {
+    // Find best corner kick taker, others position for cross
+    const cornerTaker = this.findBestCornerTaker();
+    cornerTaker?.setTemporaryRole('corner_taker');
+  }
+
+  private assignThrowInRoles(): void {
+    // Nearest outfield player takes throw-in
+    const throwInTaker = this.findNearestOutfieldPlayer();
+    throwInTaker?.setTemporaryRole('throw_in_taker');
   }
 
   public getPlayersInPositionOrder(): Player[] {
@@ -786,6 +993,10 @@ class Player {
   public hasBall: boolean = false;
   public stamina: number = 100; // 0-100
   public confidence: number = 80; // 0-100
+  public currentMatchState: MatchState = MatchState.INTRODUCTION;
+  public animationState: string = 'idle';
+  public movementSpeed: number = 0.04; // Base movement speed
+  public temporaryRole: string | null = null;
 
   // Attributes (from PRD specification)
   public attributes: PlayerAttributes;
@@ -976,6 +1187,152 @@ class Player {
     
     return hasGoodShootingPosition && hasSufficientShootingSkill;
   }
+
+  /**
+   * STATE TRANSITION HANDLER - Called by Team when match state changes
+   */
+  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
+    this.currentMatchState = newState;
+
+    switch (newState) {
+      case MatchState.INTRODUCTION:
+        this.handleIntroductionState();
+        break;
+
+      case MatchState.PREPARE_FOR_KICKOFF:
+        this.handlePrepareKickoffState();
+        break;
+
+      case MatchState.IN_PLAY:
+        this.handleInPlayState(previousState);
+        break;
+
+      case MatchState.GOAL_KICK:
+      case MatchState.CORNER_KICK:
+      case MatchState.THROW_IN:
+        this.handleSetPieceState(newState);
+        break;
+
+      case MatchState.GOAL_SCORED:
+        this.handleGoalScoredState();
+        break;
+
+      case MatchState.HALF_TIME:
+        this.handleHalfTimeState();
+        break;
+
+      case MatchState.FULL_TIME:
+        this.handleFullTimeState();
+        break;
+    }
+  }
+
+  private handleIntroductionState(): void {
+    // Walking onto pitch animation
+    this.setAnimationState('walking');
+    this.confidence = Math.max(60, this.confidence - 5); // Slight nerves
+  }
+
+  private handlePrepareKickoffState(): void {
+    // Get into position quickly
+    this.setAnimationState('jogging');
+    this.confidence = Math.min(100, this.confidence + 2); // Ready to play
+  }
+
+  private handleInPlayState(previousState: MatchState): void {
+    // Resume normal gameplay
+    this.setAnimationState('ready');
+    this.clearTemporaryRole(); // Clear any set piece roles
+    
+    // Adjust confidence based on previous state
+    if (previousState === MatchState.GOAL_SCORED) {
+      // Confidence affected by goal
+      this.confidence = Math.min(100, this.confidence + (this.scoredLastGoal() ? 10 : -5));
+    }
+  }
+
+  private handleSetPieceState(setState: MatchState): void {
+    // Set appropriate animation for set piece
+    this.setAnimationState('positioning');
+    
+    // Adjust behavior based on temporary role
+    if (this.temporaryRole) {
+      this.confidence = Math.min(100, this.confidence + 3); // Confidence boost for taking set piece
+    }
+  }
+
+  private handleGoalScoredState(): void {
+    // Different animations based on involvement
+    if (this.scoredLastGoal()) {
+      this.setAnimationState('celebrating');
+      this.confidence = Math.min(100, this.confidence + 15);
+    } else if (this.assistedLastGoal()) {
+      this.setAnimationState('cheering');
+      this.confidence = Math.min(100, this.confidence + 8);
+    } else {
+      this.setAnimationState('celebrating'); // Team celebration
+      this.confidence = Math.min(100, this.confidence + 5);
+    }
+  }
+
+  private handleHalfTimeState(): void {
+    // Walk off pitch
+    this.setAnimationState('walking');
+    this.stamina = Math.min(100, this.stamina + 20); // Partial stamina recovery
+  }
+
+  private handleFullTimeState(): void {
+    // Match end reactions
+    this.setAnimationState('match_end');
+    this.clearTemporaryRole();
+  }
+
+  // State-related helper methods
+  public setAnimationState(newState: string): void {
+    this.animationState = newState;
+  }
+
+  public setMovementSpeed(speed: number): void {
+    this.movementSpeed = speed;
+  }
+
+  public getBaseMovementSpeed(): number {
+    // Base speed modified by stamina and pace attribute
+    const staminaFactor = this.stamina / 100;
+    const paceFactor = this.attributes.pace / 10;
+    return 0.04 * staminaFactor * paceFactor;
+  }
+
+  public setTemporaryRole(role: string): void {
+    this.temporaryRole = role;
+  }
+
+  public clearTemporaryRole(): void {
+    this.temporaryRole = null;
+  }
+
+  public setTakesPenalties(takes: boolean): void {
+    this.aiState.takesPenalties = takes;
+  }
+
+  public setTakesFreeKicks(takes: boolean): void {
+    this.aiState.takesFreeKicks = takes;
+  }
+
+  public setTemporaryAttributes(attributes: PlayerAttributes): void {
+    // Temporarily boost attributes (cleared after match state change)
+    this.attributes = { ...attributes };
+  }
+
+  private scoredLastGoal(): boolean {
+    // Would check against match statistics
+    return false; // Placeholder
+  }
+
+  private assistedLastGoal(): boolean {
+    // Would check against match statistics  
+    return false; // Placeholder
+  }
 }
 
 interface SpaceAnalysis {
@@ -1092,6 +1449,7 @@ class Ball {
   public owner: Player | null;
   public lastTouchedBy: Player | null;
   public isMoving: boolean = false;
+  public currentMatchState: MatchState = MatchState.INTRODUCTION;
 
   private radius: number = 0.01; // Normalized ball size
   private friction: number = 0.98; // 2% velocity loss per frame
@@ -1223,6 +1581,115 @@ class Ball {
       position: { x: landingX, y: landingY },
       gridSquare
     };
+  }
+
+  /**
+   * STATE TRANSITION HANDLER - Called by GameManager when match state changes
+   */
+  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
+    this.currentMatchState = newState;
+
+    switch (newState) {
+      case MatchState.INTRODUCTION:
+      case MatchState.PREPARE_FOR_KICKOFF:
+        this.resetToKickoffPosition();
+        break;
+
+      case MatchState.IN_PLAY:
+        // Resume normal physics if transitioning from static state
+        if (this.isStaticState(previousState)) {
+          this.enablePhysics();
+        }
+        break;
+
+      case MatchState.GOAL_KICK:
+      case MatchState.CORNER_KICK:
+      case MatchState.THROW_IN:
+        this.prepareForSetPiece(newState);
+        break;
+
+      case MatchState.GOAL_SCORED:
+        this.handleGoalScored();
+        break;
+
+      case MatchState.HALF_TIME:
+      case MatchState.FULL_TIME:
+        this.stopMovement();
+        break;
+    }
+  }
+
+  private resetToKickoffPosition(): void {
+    this.position = { x: 0.5, y: 0.5 }; // Center circle
+    this.velocity = { x: 0, y: 0, z: 0 };
+    this.height = 0;
+    this.owner = null;
+    this.isMoving = false;
+  }
+
+  private prepareForSetPiece(setState: MatchState): void {
+    // Position ball for specific set piece
+    switch (setState) {
+      case MatchState.GOAL_KICK:
+        this.positionForGoalKick();
+        break;
+      case MatchState.CORNER_KICK:
+        this.positionForCornerKick();
+        break;
+      case MatchState.THROW_IN:
+        this.positionForThrowIn();
+        break;
+    }
+    
+    // Stop movement for set piece
+    this.stopMovement();
+  }
+
+  private handleGoalScored(): void {
+    // Stop ball movement, it will be reset for kick-off later
+    this.stopMovement();
+    
+    // Clear possession
+    this.owner = null;
+  }
+
+  private stopMovement(): void {
+    this.velocity = { x: 0, y: 0, z: 0 };
+    this.height = 0;
+    this.isMoving = false;
+  }
+
+  private enablePhysics(): void {
+    // Ball physics re-enabled - will respond to kicks and movement
+    // No specific action needed, physics will resume in update loop
+  }
+
+  private isStaticState(state: MatchState): boolean {
+    return [
+      MatchState.INTRODUCTION,
+      MatchState.PREPARE_FOR_KICKOFF,
+      MatchState.GOAL_KICK,
+      MatchState.CORNER_KICK,
+      MatchState.THROW_IN,
+      MatchState.GOAL_SCORED,
+      MatchState.HALF_TIME,
+      MatchState.FULL_TIME
+    ].includes(state);
+  }
+
+  private positionForGoalKick(): void {
+    // Position in goal area for goal kick
+    // Would be set by GameManager based on which team is kicking
+  }
+
+  private positionForCornerKick(): void {
+    // Position at corner arc
+    // Would be set by GameManager based on which corner
+  }
+
+  private positionForThrowIn(): void {
+    // Position at touchline where ball went out
+    // Would be set by GameManager based on boundary detection
   }
 }
 ```
@@ -2941,36 +3408,214 @@ enum MatchState
   FULL_TIME = 'full_time'
 }
 
-class MatchStateManager
-{
-  private currentState: MatchState;
-  private stateTimer: number;
-  private stateHandlers: Map<MatchState, StateHandler>;
+// MatchStateManager REMOVED - functionality absorbed into GameManager
 
-  public update(gameState: GameState, deltaTime: number): void
-  {
-    const handler = this.stateHandlers.get(this.currentState);
-    if (handler)
-    {
-      handler.update(gameState, deltaTime);
+// GameManager now handles ALL match state logic with a clean switch statement
+class GameManager {
+  private matchState: MatchState = MatchState.INTRODUCTION;
+  private stateTimer: number = 0; // Timer for current state
+  private stateData: any = {}; // State-specific data
 
-      // Check for state transitions
-      const nextState = handler.checkTransitions(gameState);
-      if (nextState && nextState !== this.currentState)
-      {
-        this.transitionToState(nextState, gameState);
-      }
+  // Main game loop with centralized state handling
+  public update(currentTime: number): void {
+    const deltaTime = (currentTime - this.lastUpdateTime) / 1000.0;
+    this.lastUpdateTime = currentTime;
+    const clampedDelta = Math.min(deltaTime, 1.0 / 30.0);
+
+    // Update deterministic context
+    this.deterministicContext.gameTime += clampedDelta;
+    this.deterministicContext.frameCount++;
+    this.stateTimer += clampedDelta;
+
+    // **CENTRALIZED STATE MACHINE** - All match logic flows through here
+    this.handleCurrentState(clampedDelta);
+    
+    // Check for state transitions after handling current state
+    this.checkStateTransitions();
+  }
+
+  /**
+   * CENTRALIZED STATE HANDLER - Single source of truth for all match states
+   */
+  private handleCurrentState(deltaTime: number): void {
+    switch (this.matchState) {
+      case MatchState.INTRODUCTION:
+        this.handleIntroductionState(deltaTime);
+        break;
+
+      case MatchState.PREPARE_FOR_KICKOFF:
+        this.handlePrepareKickoffState(deltaTime);
+        break;
+
+      case MatchState.IN_PLAY:
+        this.handleInPlayState(deltaTime);
+        break;
+
+      case MatchState.GOAL_KICK:
+        this.handleGoalKickState(deltaTime);
+        break;
+
+      case MatchState.CORNER_KICK:
+        this.handleCornerKickState(deltaTime);
+        break;
+
+      case MatchState.THROW_IN:
+        this.handleThrowInState(deltaTime);
+        break;
+
+      case MatchState.GOAL_SCORED:
+        this.handleGoalScoredState(deltaTime);
+        break;
+
+      case MatchState.HALF_TIME:
+        this.handleHalfTimeState(deltaTime);
+        break;
+
+      case MatchState.FULL_TIME:
+        this.handleFullTimeState(deltaTime);
+        break;
+
+      default:
+        console.warn(`Unhandled match state: ${this.matchState}`);
+        break;
     }
   }
 
-  private transitionToState(newState: MatchState, gameState: GameState): void
-  {
+  private transitionToState(newState: MatchState, stateData?: any): void {
+    console.log(`State transition: ${this.matchState} -> ${newState}`);
+    
     // Exit current state
-    const currentHandler = this.stateHandlers.get(this.currentState);
-    if (currentHandler)
-    {
-      currentHandler.exit(gameState);
+    this.exitCurrentState();
+    
+    // Update state
+    const previousState = this.matchState;
+    this.matchState = newState;
+    this.stateTimer = 0;
+    this.stateData = stateData || {};
+    
+    // Enter new state  
+    this.enterNewState(previousState);
+    
+    // Broadcast state change to systems that need it
+    this.broadcastStateChange(newState, previousState);
+  }
+
+  /**
+   * STATE ENTRY/EXIT HANDLERS - Called during state transitions
+   */
+  private exitCurrentState(): void {
+    switch (this.matchState) {
+      case MatchState.IN_PLAY:
+        // Stop ball if needed, clear temporary state
+        break;
+      case MatchState.GOAL_KICK:
+      case MatchState.CORNER_KICK:
+      case MatchState.THROW_IN:
+        // Clear set piece state
+        break;
     }
+  }
+
+  private enterNewState(previousState: MatchState): void {
+    switch (this.matchState) {
+      case MatchState.GOAL_KICK:
+        this.referee.blowBriefWhistle();
+        break;
+      case MatchState.CORNER_KICK:
+        this.referee.blowBriefWhistle();
+        break;
+      case MatchState.THROW_IN:
+        this.referee.blowBriefWhistle();
+        break;
+      case MatchState.GOAL_SCORED:
+        this.statistics.recordGoal(this.stateData.scoringTeam, this.stateData.scoringPlayer);
+        break;
+      case MatchState.HALF_TIME:
+        this.referee.blowExtendedWhistle();
+        break;
+      case MatchState.FULL_TIME:
+        this.referee.blowExtendedWhistle();
+        break;
+    }
+  }
+
+  /**
+   * STATE CHANGE BROADCASTING - Notify other systems of state changes
+   */
+  private broadcastStateChange(newState: MatchState, previousState: MatchState): void {
+    // Notify AI controllers
+    this.aiControllers.forEach(controller => {
+      controller.onMatchStateChange(newState, previousState);
+    });
+
+    // Notify teams
+    this.homeTeam.onMatchStateChange(newState, previousState);
+    this.awayTeam.onMatchStateChange(newState, previousState);
+
+    // Update statistics
+    this.statistics.recordStateChange(newState, this.deterministicContext.gameTime);
+
+    // Notify UI/Renderer (if needed)
+    this.notifyUIStateChange(newState);
+  }
+
+  /**
+   * INDIVIDUAL STATE HANDLERS - Pure functions that handle specific states
+   */
+  private handleIntroductionState(deltaTime: number): void {
+    // Players walking onto pitch, crowd noise, commentary
+    if (this.stateTimer > 30) { // 30 seconds introduction
+      this.transitionToState(MatchState.PREPARE_FOR_KICKOFF);
+    }
+  }
+
+  private handlePrepareKickoffState(deltaTime: number): void {
+    // Players move to kick-off positions
+    this.setupKickOffPositions(this.kickOffTeam);
+    
+    if (this.stateTimer > 5) { // 5 seconds to get in position
+      this.transitionToState(MatchState.IN_PLAY);
+    }
+  }
+
+  private handleInPlayState(deltaTime: number): void {
+    // Main gameplay - AI, physics, collision detection
+    this.updateAI(deltaTime);
+    this.updatePhysics(deltaTime);
+    this.updateStatistics(deltaTime);
+  }
+
+  private handleCornerKickState(deltaTime: number): void {
+    // Similar pattern to goal kick - position players, execute kick
+    // Implementation would follow same pattern as handleGoalKickState
+  }
+
+  private handleThrowInState(deltaTime: number): void {
+    // Similar pattern - position players, execute throw
+    // Implementation would follow same pattern as handleGoalKickState
+  }
+
+  private handleGoalScoredState(deltaTime: number): void {
+    // Celebration animation, update score display
+    if (this.stateTimer > 5) { // 5 seconds celebration
+      // Reset for kick-off by team that conceded
+      const concedingTeam = this.stateData.scoringTeam === 'HOME' ? 'AWAY' : 'HOME';
+      this.kickOffTeam = concedingTeam;
+      this.transitionToState(MatchState.PREPARE_FOR_KICKOFF);
+    }
+  }
+
+  private handleHalfTimeState(deltaTime: number): void {
+    // Display half-time statistics
+    if (this.stateTimer > 60) { // 1 minute half-time
+      this.transitionToSecondHalf();
+    }
+  }
+
+  private handleFullTimeState(deltaTime: number): void {
+    // Display final statistics, match summary
+    // Match is complete - no further transitions
+  }
 
     // Enter new state
     const newHandler = this.stateHandlers.get(newState);
@@ -3090,24 +3735,81 @@ interface GoalKickState {
   timeInPhase: number;                           // Seconds in current phase
 }
 
-class GoalKickController {
-  private penaltyAreaBounds: FieldZone;
-  private goalAreaBounds: FieldZone;
-  
-  constructor() {
-    // Define penalty area (18-yard box) and goal area (6-yard box) bounds
-    this.penaltyAreaBounds = this.calculatePenaltyAreaBounds();
-    this.goalAreaBounds = this.calculateGoalAreaBounds();
+// GoalKickController REMOVED - functionality absorbed into GameManager
+
+// Goal kick logic now handled directly in GameManager.handleGoalKickState()
+class GameManager {
+  /**
+   * GOAL KICK STATE HANDLER - Integrated into GameManager
+   */
+  private handleGoalKickState(deltaTime: number): void {
+    const goalKickData = this.stateData as GoalKickStateData;
+    
+    switch (goalKickData.phase) {
+      case GoalKickPhase.AWAITING_POSITIONING:
+        this.handleGoalKickPositioning(deltaTime);
+        break;
+        
+      case GoalKickPhase.READY_TO_KICK:
+        this.handleGoalKickReady(deltaTime);
+        break;
+        
+      case GoalKickPhase.BALL_IN_PLAY:
+        // Ball has been kicked and is moving - transition back to IN_PLAY
+        this.transitionToState(MatchState.IN_PLAY);
+        break;
+    }
   }
-  
-  public initiateGoalKick(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): GoalKickState {
+
+  private handleGoalKickPositioning(deltaTime: number): void {
+    const goalKickData = this.stateData as GoalKickStateData;
+    const opposingTeam = goalKickData.kickingTeam === 'HOME' ? this.awayTeam : this.homeTeam;
+    
+    // Check if opposing players have exited penalty area
+    const playersInPenaltyArea = opposingTeam.players.filter(player => 
+      this.isPlayerInPenaltyArea(player.position, goalKickData.kickingTeam)
+    );
+    
+    if (playersInPenaltyArea.length === 0) {
+      // All players have left penalty area - ready to kick
+      goalKickData.phase = GoalKickPhase.READY_TO_KICK;
+      this.referee.blowBriefWhistle(); // Signal ready for goal kick
+    }
+  }
+
+  private handleGoalKickReady(deltaTime: number): void {
+    const goalKickData = this.stateData as GoalKickStateData;
+    
+    // AI automatically takes goal kick after brief delay
+    if (this.stateTimer > 2.0) { // 2 second delay for realism
+      this.executeGoalKick(goalKickData);
+    }
+  }
+
+  private executeGoalKick(goalKickData: GoalKickStateData): void {
+    const kickingTeam = goalKickData.kickingTeam === 'HOME' ? this.homeTeam : this.awayTeam;
+    
+    // Find goalkeeper or suitable player for goal kick
+    const kicker = this.findGoalKicker(kickingTeam);
+    
+    // Execute kick with appropriate power and direction
+    const kickDirection = this.calculateGoalKickDirection(kicker, kickingTeam);
+    const kickPower = this.calculateGoalKickPower(kicker);
+    
+    this.ball.kick(kickDirection, kickPower, kicker);
+    
+    // Update state - ball is now in play
+    goalKickData.phase = GoalKickPhase.BALL_IN_PLAY;
+  }
+
+  private initiateGoalKick(kickingTeam: 'HOME' | 'AWAY'): void {
     const ballPosition = this.placeBallInGoalArea(kickingTeam);
-    const opposingPlayers = this.getOpposingPlayers(gameState, kickingTeam);
-    const playersInPenaltyArea = opposingPlayers.filter(player => 
+    const opposingTeam = kickingTeam === 'HOME' ? this.awayTeam : this.homeTeam;
+    const playersInPenaltyArea = opposingTeam.players.filter(player => 
       this.isPlayerInPenaltyArea(player.position, kickingTeam)
     );
     
-    return {
+    const goalKickData: GoalKickStateData = {
       phase: playersInPenaltyArea.length > 0 ? GoalKickPhase.AWAITING_POSITIONING : GoalKickPhase.READY_TO_KICK,
       kickingTeam,
       ballPosition,
@@ -3889,59 +4591,107 @@ interface WeatherConditions
 // Reference: see docs/CANONICAL-DEFINITIONS.md for canonical MatchStatistics schema
 ```
 
-#### 3.2.3 Half-Time System Implementation
+#### 3.2.3 Half-Time State Management
 
-The half-time system manages the transition between the first and second halves, ensuring proper team positioning and kick-off team alternation.
+Half-time is managed as a state within the Game Manager's finite state machine, eliminating the need for a separate manager class.
 
 ```typescript
-interface HalfTimeManager
-{
-  detectHalfTimeReached(matchTime: MatchTime): boolean;
-  resetPlayersToFormation(teams: [Team, Team]): void;
-  switchKickoffTeam(currentKickoff: 'HOME' | 'AWAY', initialKickoff: 'HOME' | 'AWAY'): 'HOME' | 'AWAY';
-  transitionToSecondHalf(gameState: GameState): GameState;
-}
+// Half-time logic integrated directly into GameManager
+class GameManager {
+  private matchState: MatchState = MatchState.INTRODUCTION;
+  private kickOffTeam: 'HOME' | 'AWAY';
+  private initialKickOffTeam: 'HOME' | 'AWAY';
+  private halfTimeTransitioned: boolean = false;
 
-class HalfTimeManager implements HalfTimeManager
-{
-  public detectHalfTimeReached(matchTime: MatchTime): boolean
-  {
-    const halfDuration = MATCH_DURATION / 2;
-    return matchTime.elapsed >= halfDuration &&
-           !matchTime.halfTimeTriggered &&
-           matchTime.period === 2;
+  private checkStateTransitions(): void {
+    switch (this.matchState) {
+      case MatchState.IN_PLAY:
+        if (this.isHalfTimeReached() && !this.halfTimeTransitioned) {
+          this.transitionToHalfTime();
+        }
+        else if (this.isFullTimeReached()) {
+          this.transitionToFullTime();
+        }
+        break;
+
+      case MatchState.HALF_TIME:
+        if (this.isHalfTimeComplete()) {
+          this.transitionToSecondHalf();
+        }
+        break;
+    }
   }
 
-  public resetPlayersToFormation(teams: [Team, Team]): void
-  {
-    teams.forEach(team => {
-      team.players.forEach(player => {
-        // Reset to formation positions within own half
-        player.position = { ...player.basePosition };
-        player.targetPosition = { ...player.basePosition };
-        player.state = PlayerState.WAITING_KICKOFF;
-        player.hasBall = false;
-      });
-    });
+  private isHalfTimeReached(): boolean {
+    const halfDuration = MATCH_DURATION / 2; // 45 minutes in seconds
+    const elapsed = this.deterministicContext.gameTime;
+    return elapsed >= halfDuration && !this.halfTimeTransitioned;
   }
 
-  public switchKickoffTeam(currentKickoff: 'HOME' | 'AWAY', initialKickoff: 'HOME' | 'AWAY'): 'HOME' | 'AWAY'
-  {
-    // Team that didn't kick off first half kicks off second half
-    return initialKickoff === 'HOME' ? 'AWAY' : 'HOME';
+  private isHalfTimeComplete(): boolean {
+    // Half-time lasts 1 minute in real-time (as per PRD spec)
+    const halfTimeStarted = this.matchState === MatchState.HALF_TIME;
+    const halfTimeDuration = 60; // 1 minute
+    // Track when half-time state was entered
+    return halfTimeStarted && (this.deterministicContext.gameTime - this.halfTimeStartTime) >= halfTimeDuration;
   }
 
-  public transitionToSecondHalf(gameState: GameState): GameState
-  {
-    return {
-      ...gameState,
-      phase: MatchPhase.KICKOFF,
-      kickoffTeam: this.switchKickoffTeam(gameState.kickoffTeam, gameState.initialKickoffTeam),
-      time: {
-        ...gameState.time,
-        halfTimeTriggered: true
-      }
-    };
+  private isFullTimeReached(): boolean {
+    const fullMatchDuration = MATCH_DURATION; // 90 minutes + stoppage
+    return this.deterministicContext.gameTime >= fullMatchDuration;
+  }
+
+  private transitionToHalfTime(): void {
+    console.log('Transitioning to half-time');
+    
+    // Set state
+    this.matchState = MatchState.HALF_TIME;
+    this.halfTimeTransitioned = true;
+    this.halfTimeStartTime = this.deterministicContext.gameTime;
+
+    // Referee blows extended whistle (1.25 seconds) as per PRD
+    this.referee.blowExtendedWhistle();
+
+    // Reset ball and player positions
+    this.resetForHalfTime();
+
+    // Switch kick-off team for second half
+    this.kickOffTeam = this.initialKickOffTeam === 'HOME' ? 'AWAY' : 'HOME';
+  }
+
+  private transitionToSecondHalf(): void {
+    console.log('Transitioning to second half');
+    
+    // Set state for second half kick-off
+    this.matchState = MatchState.PREPARE_FOR_KICKOFF;
+    
+    // Players take positions for second half kick-off
+    this.setupKickOffPositions(this.kickOffTeam);
+    
+    // Ball to center circle
+    this.ball.position = { x: 0.5, y: 0.5 };
+    this.ball.owner = null;
+  }
+
+  private transitionToFullTime(): void {
+    console.log('Match completed - Full time');
+    
+    this.matchState = MatchState.FULL_TIME;
+    
+    // Referee blows extended whistle (1.25 seconds) for full-time
+    this.referee.blowExtendedWhistle();
+  }
+
+  private resetForHalfTime(): void {
+    // Reset ball to center
+    this.ball.position = { x: 0.5, y: 0.5 };
+    this.ball.velocity = { x: 0, y: 0, z: 0 };
+    this.ball.owner = null;
+    this.ball.isMoving = false;
+
+    // Reset all players to formation positions
+    this.homeTeam.resetPlayersToFormation();
+    this.awayTeam.resetPlayersToFormation();
   }
 }
 ```
@@ -4040,6 +4790,7 @@ class TeamAIController implements AIController
   private ballProgression: BallProgressionEngine;
   private tacticalEngine: TacticalEngine;
   private greedyAssignment: GreedyAssignmentEngine;
+  private currentMatchState: MatchState = MatchState.INTRODUCTION;
 
   public teamId: string;
   public difficulty: AIDifficulty;
@@ -4049,6 +4800,190 @@ class TeamAIController implements AIController
   // Core AI processing
   public processFrame(gameState: GameState): void;
   public calculateTacticalSituation(gameState: GameState): TacticalSituation;
+
+  /**
+   * STATE TRANSITION HANDLER - Called by GameManager when match state changes
+   */
+  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
+    console.log(`TeamAI ${this.teamId}: State change ${previousState} -> ${newState}`);
+    this.currentMatchState = newState;
+
+    switch (newState) {
+      case MatchState.INTRODUCTION:
+        this.handleIntroductionState();
+        break;
+
+      case MatchState.PREPARE_FOR_KICKOFF:
+        this.handlePrepareKickoffState();
+        break;
+
+      case MatchState.IN_PLAY:
+        this.handleInPlayState(previousState);
+        break;
+
+      case MatchState.GOAL_KICK:
+      case MatchState.CORNER_KICK:
+      case MatchState.THROW_IN:
+        this.handleSetPieceState(newState);
+        break;
+
+      case MatchState.GOAL_SCORED:
+        this.handleGoalScoredState();
+        break;
+
+      case MatchState.HALF_TIME:
+        this.handleHalfTimeState();
+        break;
+
+      case MatchState.FULL_TIME:
+        this.handleFullTimeState();
+        break;
+
+      default:
+        console.warn(`TeamAI ${this.teamId}: Unhandled state transition to ${newState}`);
+        break;
+    }
+  }
+
+  private handleIntroductionState(): void {
+    // Prepare team for match start
+    this.currentStrategy = TeamStrategy.BALANCED; // Neutral starting strategy
+    this.tacticalMemory.clear(); // Clear previous match memory
+  }
+
+  private handlePrepareKickoffState(): void {
+    // Set kick-off tactical setup
+    if (this.isKickingOff()) {
+      this.currentStrategy = TeamStrategy.ATTACKING; // Be aggressive on kick-off
+    } else {
+      this.currentStrategy = TeamStrategy.DEFENSIVE; // Prepare to defend
+    }
+    
+    // Adjust AI difficulty for kick-off
+    this.adjustDifficultyForSituation('kickoff');
+  }
+
+  private handleInPlayState(previousState: MatchState): void {
+    // Resume normal gameplay AI
+    this.currentStrategy = this.calculateOptimalStrategy();
+    
+    // Adjust behavior based on transition context
+    if (this.isSetPieceState(previousState)) {
+      // Transitioning from set piece - be alert for quick counter
+      this.tacticalMemory.recordEvent('set_piece_ended', previousState);
+      this.temporarilyIncreaseAwareness(3.0); // 3 seconds heightened awareness
+    }
+    
+    // Resume normal AI processing frequency
+    this.setUpdateFrequency(this.getBaseUpdateFrequency());
+  }
+
+  private handleSetPieceState(setState: MatchState): void {
+    // Adjust strategy for set pieces
+    switch (setState) {
+      case MatchState.GOAL_KICK:
+        this.handleGoalKickAI();
+        break;
+      case MatchState.CORNER_KICK:
+        this.handleCornerKickAI();
+        break;
+      case MatchState.THROW_IN:
+        this.handleThrowInAI();
+        break;
+    }
+    
+    // Increase AI update frequency for set pieces
+    this.setUpdateFrequency(this.getBaseUpdateFrequency() * 2);
+  }
+
+  private handleGoalKickAI(): void {
+    if (this.isMyTeamKicking()) {
+      // My goal kick - coordinate distribution
+      this.currentStrategy = TeamStrategy.BUILDUP_PLAY;
+      this.instructPlayersToSpreadOut();
+    } else {
+      // Opposition goal kick - prepare to press or drop back
+      const pressingIntensity = this.calculatePressingIntensity();
+      this.currentStrategy = pressingIntensity > 0.7 ? TeamStrategy.HIGH_PRESS : TeamStrategy.MEDIUM_BLOCK;
+    }
+  }
+
+  private handleCornerKickAI(): void {
+    if (this.isMyTeamKicking()) {
+      // My corner - attacking setup
+      this.currentStrategy = TeamStrategy.SET_PIECE_ATTACK;
+      this.assignCornerKickRoles();
+    } else {
+      // Opposition corner - defensive setup
+      this.currentStrategy = TeamStrategy.SET_PIECE_DEFENSE;
+      this.organizeCornerDefense();
+    }
+  }
+
+  private handleThrowInAI(): void {
+    const fieldPosition = this.getThrowInPosition();
+    
+    if (this.isMyTeamTaking()) {
+      // Quick throw-in or organized buildup based on position
+      this.currentStrategy = fieldPosition.isAttackingThird ? 
+        TeamStrategy.ATTACKING : TeamStrategy.BALANCED;
+    } else {
+      // Mark nearby players, prepare for quick transition
+      this.currentStrategy = TeamStrategy.COMPACT_DEFENDING;
+    }
+  }
+
+  private handleGoalScoredState(): void {
+    const didMyTeamScore = this.checkIfMyTeamScored();
+    
+    if (didMyTeamScore) {
+      // We scored - celebrate briefly then prepare for restart
+      this.tacticalMemory.recordSuccess('goal_scored');
+      this.adjustConfidenceBoost(0.15); // 15% confidence boost
+      this.currentStrategy = TeamStrategy.MAINTAIN_LEAD;
+    } else {
+      // Opponent scored - need to respond
+      this.tacticalMemory.recordFailure('goal_conceded');
+      this.adjustUrgencyLevel(0.2); // Increase urgency
+      this.currentStrategy = TeamStrategy.COMEBACK_MODE;
+    }
+  }
+
+  private handleHalfTimeState(): void {
+    // Analyze first half performance
+    const firstHalfAnalysis = this.analyzeFirstHalfPerformance();
+    
+    // Adjust strategy for second half
+    this.tacticalMemory.consolidateFirstHalf();
+    this.planSecondHalfStrategy(firstHalfAnalysis);
+    
+    // Reset temporary states
+    this.resetTemporaryAdjustments();
+  }
+
+  private handleFullTimeState(): void {
+    // Match complete - final analysis
+    this.tacticalMemory.finalizeMatch();
+    this.recordMatchResults();
+    
+    // Disable AI processing
+    this.setUpdateFrequency(0);
+  }
+
+  // Helper methods for state handling
+  private isSetPieceState(state: MatchState): boolean {
+    return [MatchState.GOAL_KICK, MatchState.CORNER_KICK, MatchState.THROW_IN].includes(state);
+  }
+
+  private adjustDifficultyForSituation(situation: string): void {
+    // Temporarily adjust AI difficulty based on match situation
+    // Implementation would modify AI decision-making parameters
+  }
+
+  private setUpdateFrequency(frequency: number): void {
+    // Adjust how often AI processes decisions
+    // Higher frequency for important moments, lower for stable play
+  }
   public assignPlayerRoles(players: Player[], opponents: Player[]): RoleAssignment[];
   public updateFormationDynamics(ballPosition: Vector2, possession: TeamPossession): FormationUpdate;
   public optimizePlayerPositioning(availablePositions: Vector2[], players: Player[]): PositionAssignment[];
