@@ -1,13 +1,13 @@
 # Formation Editor Tool (FET) - Technical Design Document
 
-**Project**: Super Soccer Manager: Pro Edition  
-**Document Version**: 1.0  
-**Date**: 13 August 2025  
-**Target Phase**: Phase 2 Implementation  
+**Project**: Soccer Manager: World Cup Edition
+**Document Version**: 1.0
+**Date**: 13 August 2025
+**Target Phase**: Phase 2 Implementation
 
 ## 1. Executive Summary
 
-The Formation Editor Tool (FET) is a developer-only application for creating sophisticated AI positioning data that drives tactical player behaviour in Super Soccer Manager. This tool enables precise mapping of player positions relative to ball location across all standard football formations, creating rich datasets for intelligent player movement during matches.
+The Formation Editor Tool (FET) is a developer-only application for creating sophisticated AI positioning data that drives tactical player behaviour in Soccer Manager: World Cup Edition. This tool enables precise mapping of player positions relative to ball location across all standard football formations, creating rich datasets for intelligent player movement during matches.
 
 ## 2. System Architecture
 
@@ -34,7 +34,7 @@ graph TB
 
 #### 2.2.2 Grid System Engine
 - **Grid Density**: 20x15 grid (300 zones total)
-- **Zone Dimensions**: 5.25m x 6.8m per zone in real pitch space
+- **Zone Dimensions**: 5.5m x 4.53m per zone in real pitch space
 - **Coordinate System**: Normalised coordinates (0.0-1.0) for pitch width/length
 - **Performance**: O(1) zone lookup using spatial hashing
 
@@ -848,6 +848,6 @@ class FormationPluginManager {
 
 ## 12. Conclusion
 
-The Formation Editor Tool provides a comprehensive foundation for creating sophisticated AI behaviour in Super Soccer Manager. The architecture balances technical sophistication with performance requirements, ensuring smooth real-time gameplay whilst enabling rich tactical depth.
+The Formation Editor Tool provides a comprehensive foundation for creating sophisticated AI behaviour in Soccer Manager: World Cup Edition. The architecture balances technical sophistication with performance requirements, ensuring smooth real-time gameplay whilst enabling rich tactical depth.
 
 The phased development approach allows for iterative improvement and validation, whilst the extensible architecture supports future enhancements including machine learning and advanced analytics capabilities.

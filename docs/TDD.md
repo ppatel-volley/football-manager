@@ -1,13 +1,15 @@
-# Technical Design Document: Super Soccer Manager: Pro Edition
+# Technical Design Document: Soccer Manager: World Cup Edition
+
+> **Note**: This document references canonical definitions in [docs/CANONICAL-DEFINITIONS.md](./CANONICAL-DEFINITIONS.md) for schemas, constants, and mappings.
 
 ## 1. Executive Summary
 
-**Document Version**: 1.1
-**Date**: 13 August 2025
-**Product**: Super Soccer Manager: Pro Edition
-**Architecture**: Voice-controlled football management game with POC focus on AI evaluation
+**Document Version**: 1.2
+**Date**: 20 August 2025
+**Product**: Soccer Manager: World Cup Edition
+**Architecture**: Voice-controlled football management game with 3D ball physics in 2D presentation
 
-This Technical Design Document outlines the technical architecture and implementation details for developing Super Soccer Manager: Pro Edition. The current focus is on **Phase 1 POC** - a proof-of-concept demonstrating AI-controlled football matches for evaluation and foundation validation.
+This Technical Design Document outlines the technical architecture and implementation details for developing Soccer Manager: World Cup Edition. The game features a voice-controlled football simulation with AI-controlled teams, 3D ball physics presented in 2D, and sophisticated formation-based player positioning using a formation editing tool for tactical AI behaviour.
 
 ### 1.1 POC Scope Definition
 
@@ -15,11 +17,14 @@ This Technical Design Document outlines the technical architecture and implement
 
 **In-Scope for POC**:
 - AI vs AI autonomous match simulation
-- 2D Canvas physics (no Z-axis/height)
+- 3D ball physics with 2D visual presentation (including height simulation and landing position prediction)
 - Ball in/out detection with basic restarts (throw-ins, corners, goal kicks)
 - Half-time transitions with team switching
-- Formation-based player positioning (pre-defined 4-4-2, 4-3-3)
+- Formation-based player positioning using formation editing tool data
+- Dynamic formation templates: 4-4-2, 4-3-3, 5-3-2 (5 defenders), 3-5-2 (5 midfielders), 4-2-3-1, 3-4-3
 - Basic statistics tracking (possession, shots, corners)
+- In-game HUD with score, time, and team names
+- Player action logic and ball passing behaviours
 - FireTV Stick 4K Max optimisation (30+ FPS target)
 
 **Explicitly Out-of-Scope**:
@@ -29,7 +34,25 @@ This Technical Design Document outlines the technical architecture and implement
 - Real-time multiplayer functionality
 - Commentary and audio systems
 
-### 1.2 Deterministic Simulation Policy
+### 1.2 PRD to TDD Phase Terminology Mapping
+
+The PRD uses simplified phase names while the TDD implements a richer finite state machine. This mapping table ensures consistency:
+
+| PRD Phase | TDD Match State(s) | Description |
+|-----------|-------------------|-------------|
+| PreMatch | `INTRODUCTION`, `PLAYERS_ENTERING` | Players walk onto pitch, crowd atmosphere |
+| Kick Off | `PREPARE_FOR_KICKOFF`, `KICKOFF` | Team positioning and whistle for start |
+| First Half | `IN_PLAY`, `OUT_OF_PLAY`, `THROW_IN`, `CORNER_KICK`, `GOAL_KICK` | Active gameplay with basic restarts |
+| Half Time | `HALF_TIME_BREAK` | Statistics display and team switching |
+| Second Half | `IN_PLAY`, `OUT_OF_PLAY`, `THROW_IN`, `CORNER_KICK`, `GOAL_KICK` | Active gameplay (second 45 minutes) |
+| Full Time | `MATCH_COMPLETE`, `FINAL_STATISTICS` | End-of-match summary and cleanup |
+
+**Future Phase 2 Extensions**:
+- `FREE_KICK`, `PENALTY` states for advanced rule system
+- `OFFSIDE` state for offside detection
+- `VAR_REVIEW` for future video review system
+
+### 1.3 Deterministic Simulation Policy
 
 **Critical Requirement**: All simulation logic (AI decisions, physics, formation positioning) MUST use deterministic game time to ensure reproducible behaviour across different devices, runs, and test scenarios.
 
@@ -41,9 +64,128 @@ This Technical Design Document outlines the technical architecture and implement
 
 **Required for Simulation**:
 - Fixed timestep game loop (33.33ms steps)
-- Seeded pseudo-random number generation
+- Seeded pseudo-random number generation with shared seed for multiplayer
 - Game time passed as `deltaTime` parameter to all AI and physics systems
 - Clamped delta time to prevent "spiral of death" scenarios
+
+**VGF Deterministic Context Implementation**:
+
+VGF GameRuleset actions receive a `GameActionContext` that ensures deterministic execution across all clients:
+
+```typescript
+// VGF provides deterministic context automatically
+interface ActionContext<TGameState> {
+  gameState: TGameState;     // Current game state
+  playerId: string;          // Player who triggered the action
+  logger: Logger;            // Structured logging
+  timestamp: number;         // Server timestamp for deterministic timing
+}
+
+// Custom deterministic context for football simulation
+interface DeterministicGameContext {
+  gameTime: number;         // Accumulated game time in seconds
+  rng: SeededRandom;       // Seeded RNG for reproducible randomness
+  frameCount: number;      // Frame counter for temporal decisions
+  matchSeed: number;       // Match-specific seed from GameState
+}
+
+class SeededRandom {
+  private seed: number;
+  
+  constructor(seed: number = 12345) {
+    this.seed = seed;
+  }
+  
+  // Linear congruential generator for deterministic randomness
+  public next(): number {
+    this.seed = (this.seed * 1664525 + 1013904223) % Math.pow(2, 32);
+    return this.seed / Math.pow(2, 32);
+  }
+  
+  public uniform(min: number = 0, max: number = 1): number {
+    return min + (max - min) * this.next();
+  }
+  
+  public boolean(probability: number = 0.5): boolean {
+    return this.next() < probability;
+  }
+  
+  public choice<T>(array: T[]): T {
+    return array[Math.floor(this.next() * array.length)];
+  }
+}
+
+// Helper to create deterministic context from VGF game state
+function createDeterministicContext(gameState: GameState): DeterministicGameContext {
+  return {
+    gameTime: gameState.gameTime,
+    rng: new SeededRandom(gameState.matchSeed),
+    frameCount: Math.floor(gameState.gameTime * 30), // 30 FPS
+    matchSeed: gameState.matchSeed
+  };
+}
+```
+
+**FIFA Constants for Normalized Coordinates**:
+```typescript
+// FIFA-compliant pitch ratios for normalized coordinate system
+export const FIFA_CONSTANTS = {
+  // All ratios based on 110m × 68m FIFA maximum pitch
+  PITCH: {
+    LENGTH: 110, // metres
+    WIDTH: 68,   // metres
+  },
+  
+  // Goal specifications as ratios (0-1 normalized)
+  GOAL: {
+    WIDTH: 7.32 / 68,     // 0.1076 (10.76% of pitch width)
+    HEIGHT: 2.44 / 110,   // Not relevant for 2D top-down
+    DEPTH: 0.6 / 110,     // Behind goal line
+    POST_WIDTH: 0.12 / 68, // Visual only
+  },
+  
+  // Area specifications as ratios
+  GOAL_AREA: {
+    DEPTH: 5.5 / 110,     // 0.05 (5% of pitch length)
+    WIDTH: 18.32 / 68,    // 0.2694 (26.94% of pitch width)
+  },
+  
+  PENALTY_AREA: {
+    DEPTH: 16.5 / 110,    // 0.15 (15% of pitch length)
+    WIDTH: 40.32 / 68,    // 0.5929 (59.29% of pitch width)
+  },
+  
+  // Positioning ratios
+  PENALTY_SPOT: {
+    DISTANCE_FROM_GOAL: 11.0 / 110, // 0.1 (10% of pitch length)
+  },
+  
+  CENTER_CIRCLE: {
+    RADIUS: 9.15 / 68,    // 0.1346 (13.46% of pitch width)
+  },
+  
+  CORNER_ARC: {
+    RADIUS: 1.0 / 68,     // 0.0147 (1.47% of pitch width)
+  },
+  
+  // Player/ball sizes in normalized coordinates
+  PLAYER: {
+    RADIUS: 0.01,         // 1% of normalized space (roughly 1.1m on full pitch)
+    REACH: 0.015,         // 1.5% for ball interactions
+  },
+  
+  BALL: {
+    RADIUS: 0.007,        // 0.7% of normalized space (roughly 0.77m on full pitch)
+  },
+  
+  // Movement and positioning thresholds
+  THRESHOLDS: {
+    MIN_VELOCITY: 0.001,  // Stop movement below this speed
+    COLLISION_MARGIN: 0.005, // Margin for collision detection
+    FORMATION_TOLERANCE: 0.02, // Acceptable deviation from formation position
+  }
+} as const;
+```
 
 **Benefits**:
 - Reproducible test scenarios for AI evaluation
@@ -112,10 +254,10 @@ Future Multiplayer (Phase 2):
 
 **Backend (Server)**:
 - Node.js 22+ with Express
-- VGF Server framework
+- VGF Server framework (handles all transport and storage automatically)
 - TypeScript for type safety
-- Socket.IO for WebSocket transport
-- Redis for persistent storage
+- Deterministic game logic via Game definitions
+- Real-time multiplayer coordination
 
 **Infrastructure**:
 - pnpm workspace monorepo
@@ -178,26 +320,36 @@ class GameManager {
 
   // Game systems
   private physicsEngine: Physics2DEngine;
-  // POC: simple predefined formations; Phase 2: replace with FET adapter
+  // POC: simple predefined formations; Phase 2: replace with formation editing tool data
   private formationManager: FormationManager; // POC placeholder
   private aiControllers: Map<string, TeamAIController>;
   private matchState: MatchState;
   private statistics: MatchStatistics;
+
+  // Deterministic context for multiplayer consistency
+  private deterministicContext: DeterministicGameContext;
 
   // Performance optimization
   private positionBuffer: Float32Array;      // All player positions (44 floats)
   private lastUpdateTime: number;
   private frameTimeTarget: number = 33;      // 30 FPS target (33ms per frame as per PRD)
 
-  constructor(homeTeam: Team, awayTeam: Team) {
+  constructor(homeTeam: Team, awayTeam: Team, matchSeed?: number) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.ball = new Ball();
     this.referee = new Referee();
 
+    // Initialize deterministic context for multiplayer consistency
+    this.deterministicContext = {
+      gameTime: 0,
+      rng: new SeededRandom(matchSeed || 12345), // Same seed for both players
+      frameCount: 0
+    };
+
     // Initialize game systems
     this.physicsEngine = new Physics2DEngine();
-    // POC placeholder; Phase 2: load formations via FET export adapter
+    // POC placeholder; Phase 2: load formations via formation editing tool export
     this.formationManager = new FormationManager();
     this.aiControllers = new Map();
     this.statistics = new MatchStatistics();
@@ -225,11 +377,15 @@ class GameManager {
     // Fixed timestep approach: limit delta time to prevent non-deterministic behaviour
     const clampedDelta = Math.min(deltaTime, 1.0 / 30.0); // Fixed 30 FPS timestep (33.33ms)
 
+    // Update deterministic context
+    this.deterministicContext.gameTime += clampedDelta;
+    this.deterministicContext.frameCount++;
+
     // Update match state first
     this.updateMatchState(clampedDelta);
 
     if (this.matchState === MatchState.IN_PLAY) {
-      // CRITICAL: AI and physics MUST use clampedDelta, never raw system time
+      // CRITICAL: AI and physics MUST use clampedDelta and deterministic context
       this.updateAI(clampedDelta);        // Deterministic AI decisions
       this.updatePhysics(clampedDelta);   // Deterministic physics simulation
       this.updateStatistics(clampedDelta); // Statistics tracking
@@ -242,13 +398,13 @@ class GameManager {
   private updateAI(deltaTime: number): void {
     const gameContext = this.buildGameContext();
 
-    // Update both team AI controllers
-    this.aiControllers.get(this.homeTeam.id)?.update(gameContext, deltaTime);
-    this.aiControllers.get(this.awayTeam.id)?.update(gameContext, deltaTime);
+    // Update both team AI controllers with deterministic context
+    this.aiControllers.get(this.homeTeam.id)?.update(gameContext, deltaTime, this.deterministicContext);
+    this.aiControllers.get(this.awayTeam.id)?.update(gameContext, deltaTime, this.deterministicContext);
 
-    // Update individual player AI
-    this.homeTeam.updatePlayers(gameContext, deltaTime);
-    this.awayTeam.updatePlayers(gameContext, deltaTime);
+    // Update individual player AI with deterministic context
+    this.homeTeam.updatePlayers(gameContext, deltaTime, this.deterministicContext);
+    this.awayTeam.updatePlayers(gameContext, deltaTime, this.deterministicContext);
   }
 
   private updatePhysics(deltaTime: number): void {
@@ -330,10 +486,50 @@ interface GameContext {
 interface GameManagerState {
   homeTeam: Team;
   awayTeam: Team;
-  ball: Ball;
-  matchState: MatchState;
+  ball: Ball3D; // Updated to 3D ball
+  matchPhase: MatchPhase; // Updated to match phase system
   statistics: MatchStatistics;
   matchTime: MatchTime;
+}
+
+// Vector interfaces for 3D ball physics
+interface Vector2 {
+  x: number;
+  y: number;
+}
+
+interface Vector3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+// Ball trajectory prediction for formation positioning
+interface BallLandingPrediction {
+  isValid: boolean;
+  landingPosition: Vector2;
+  timeToLanding: number;
+  gridSquare: string;
+}
+
+// Multi-factor positioning system interfaces
+interface PositioningFactor {
+  type: 'loose_ball' | 'formation_data' | 'tactical_instruction';
+  position: Vector2;
+  priority: number;      // 0.0-1.0
+  description: string;
+}
+
+interface LooseBallFactor extends PositioningFactor {
+  type: 'loose_ball';
+  ballDistance: number;
+  chaseThreshold: number;
+}
+
+interface FormationFactor extends PositioningFactor {
+  type: 'formation_data';
+  ballGridPosition: string;
+  playerRole: string;
 }
 ```
 
@@ -380,6 +576,131 @@ class Team {
     );
   }
 
+  /**
+   * Captain Leadership System Implementation
+   * Provides team-wide bonuses and tactical influence as per PRD specifications
+   */
+  public applyCaptainLeadershipEffects(context: GameContext): void {
+    if (!this.captain) return;
+
+    const captainPosition = this.captain.position;
+    const LEADERSHIP_RADIUS = 0.15; // 15% of normalized pitch space
+    const MORALE_BONUS = 0.05; // 5% attribute effectiveness bonus
+
+    for (const player of this.players) {
+      if (player.id === this.captain.id) {
+        // Captain-specific bonuses
+        this.applyCaptainPersonalBonuses(player, context);
+        continue;
+      }
+
+      // Proximity-based morale boost
+      const distanceToCaptain = this.calculateDistance(player.position, captainPosition);
+      if (distanceToCaptain <= LEADERSHIP_RADIUS) {
+        this.applyMoraleBoost(player, MORALE_BONUS);
+      }
+
+      // Team-wide leadership effects
+      this.applyTeamwideLeadershipEffects(player, context);
+    }
+  }
+
+  private applyCaptainPersonalBonuses(captain: Player, context: GameContext): void {
+    // Pressure resistance bonus (+2.0 composure in high-pressure situations)
+    if (this.isHighPressureSituation(captain, context)) {
+      captain.attributes.composure = Math.min(10.0, captain.attributes.composure + 2.0);
+    }
+
+    // Set piece authority (priority for penalties and free kicks)
+    captain.setTakesPenalties(true);
+    captain.setTakesFreeKicks(true);
+  }
+
+  private applyMoraleBoost(player: Player, bonus: number): void {
+    // Apply 5% attribute effectiveness bonus
+    const attributes = player.attributes;
+    const boostedAttributes = {
+      ...attributes,
+      pace: Math.min(10.0, attributes.pace * (1 + bonus)),
+      shooting: Math.min(10.0, attributes.shooting * (1 + bonus)),
+      passing: Math.min(10.0, attributes.passing * (1 + bonus)),
+      ballControl: Math.min(10.0, attributes.ballControl * (1 + bonus)),
+      tackling: Math.min(10.0, attributes.tackling * (1 + bonus))
+    };
+    
+    player.setTemporaryAttributes(boostedAttributes);
+  }
+
+  private applyTeamwideLeadershipEffects(player: Player, context: GameContext): void {
+    // Comeback inspiration (+10% stamina regeneration when losing)
+    if (this.isTeamLosing(context)) {
+      const COMEBACK_STAMINA_BONUS = 0.10;
+      player.staminaRegenerationRate *= (1 + COMEBACK_STAMINA_BONUS);
+    }
+
+    // Disciplinary leadership (15% reduction in misconduct likelihood)
+    const DISCIPLINARY_REDUCTION = 0.15;
+    player.misconductLikelihood *= (1 - DISCIPLINARY_REDUCTION);
+  }
+
+  private isHighPressureSituation(player: Player, context: GameContext): boolean {
+    // High pressure: in penalty area or final 10 minutes of match
+    const inPenaltyArea = this.isInPenaltyArea(player.position, context);
+    const finalMinutes = context.matchTime.elapsed > 80 * 60; // 80+ minutes
+    const closeMatch = Math.abs(context.homeScore - context.awayScore) <= 1;
+    
+    return (inPenaltyArea || (finalMinutes && closeMatch));
+  }
+
+  private isTeamLosing(context: GameContext): boolean {
+    const myScore = this.teamColor === 'HOME' ? context.homeScore : context.awayScore;
+    const opponentScore = this.teamColor === 'HOME' ? context.awayScore : context.homeScore;
+    return myScore < opponentScore;
+  }
+
+  /**
+   * Captain Tactical Communication System
+   * Allows captain to override player positioning for tactical adjustments
+   */
+  public applyCaptainTacticalOverrides(): void {
+    if (!this.captain) return;
+
+    const TACTICAL_OVERRIDE_RADIUS = 0.20; // 20% of pitch for tactical influence
+    const MAX_POSITION_OVERRIDE = 0.10; // 10% maximum position adjustment
+
+    for (const player of this.players) {
+      if (player.id === this.captain.id) continue;
+
+      const distanceToCaptain = this.calculateDistance(player.position, this.captain.position);
+      
+      if (distanceToCaptain <= TACTICAL_OVERRIDE_RADIUS) {
+        // Captain can provide tactical positioning adjustments
+        const tacticalAdjustment = this.calculateCaptainTacticalAdjustment(player);
+        
+        if (tacticalAdjustment) {
+          const adjustedPosition = {
+            x: player.targetPosition.x + tacticalAdjustment.x * MAX_POSITION_OVERRIDE,
+            y: player.targetPosition.y + tacticalAdjustment.y * MAX_POSITION_OVERRIDE
+          };
+          
+          player.setCaptainTacticalOverride(adjustedPosition);
+        }
+      }
+    }
+  }
+
+  private calculateCaptainTacticalAdjustment(player: Player): Vector2 | null {
+    // Captain makes tactical decisions based on leadership attribute and game situation
+    if (this.captain.attributes.leadership < 7.0) return null;
+
+    // Example tactical adjustments based on game context
+    // This would be expanded with more sophisticated tactical logic
+    return {
+      x: (Math.random() - 0.5) * 0.1, // Simple random adjustment for POC
+      y: (Math.random() - 0.5) * 0.1
+    };
+  }
+
   public updatePlayers(context: GameContext, deltaTime: number): void {
     // Update each player's AI and movement
     for (const player of this.players) {
@@ -416,7 +737,7 @@ class Team {
   }
 
   private create442Positions(): Float32Array {
-    // Mirror positions for away team (attacking left instead of right)
+    // Position away team attacking left instead of right
     const baseX = this.teamColor === 'HOME' ? 0.0 : 1.0;
     const direction = this.teamColor === 'HOME' ? 1 : -1;
 
@@ -513,7 +834,7 @@ class Player {
   }
 
   private updateAI(context: GameContext, deltaTime: number): void {
-    // Basic AI decisions based on game context and player attributes
+    // Enhanced AI decisions with specific analysis from outline.md requirements
 
     if (context.ball.owner === null) {
       // Ball is loose - decide whether to chase it
@@ -528,11 +849,141 @@ class Player {
     } else if (context.ball.owner?.team === this.getTeam(context)) {
       // Team has possession - support or make runs
       this.targetPosition = this.getSupportPosition(context);
+    } else if (this.hasBall) {
+      // **Player Action Decision Tree** (from outline.md:137-140)
+      this.executePlayerActionDecisionTree(context);
     } else {
       // Opposition has possession - defend
       this.targetPosition = this.getDefensivePosition(context);
     }
   }
+
+  /**
+   * Player Action Decision Tree for Ball Possessors (from outline.md:137-140)
+   * For ball possessors who are not the goal keeper, we will run a check to determine the best course of action.
+   */
+  private executePlayerActionDecisionTree(context: GameContext): void {
+    if (this.role === 'GOALKEEPER') {
+      this.executeGoalkeeperActions(context);
+      return;
+    }
+
+    // Analysis factors from outline.md:139-140
+    const spaceAhead = this.analyzeSpaceAheadTowardsGoal(context);
+    const playerInOppositionBox = this.findPlayerInOppositionPenaltyBox(context);
+    
+    // Decision tree based on analysis
+    if (playerInOppositionBox && this.canAttemptCross(context)) {
+      // **If there is a player in the opposition penalty box we will attempt to pass to them via a cross/whipped pass**
+      this.executeCrossToPlayer(playerInOppositionBox, context);
+    }
+    else if (spaceAhead.hasSpace && spaceAhead.distanceToGoal < 0.3) { // Within 30% of pitch
+      // **If there is space ahead of the player to run towards the opposition goal**
+      this.executeRunTowardsGoal(spaceAhead, context);
+    }
+    else if (this.shouldAttemptShot(context)) {
+      this.executeShot(context);
+    }
+    else {
+      // Default: Look for best passing option or maintain possession
+      this.executeBestPassingOption(context);
+    }
+  }
+
+  private analyzeSpaceAheadTowardsGoal(context: GameContext): SpaceAnalysis {
+    const oppositionGoal = this.getOppositionGoalPosition(context);
+    const directionToGoal = this.normalizeVector({
+      x: oppositionGoal.x - this.position.x,
+      y: oppositionGoal.y - this.position.y
+    });
+
+    // Check for clear space in direction of goal
+    const spaceCheckDistance = 0.1; // 10% of pitch
+    const checkPosition = {
+      x: this.position.x + directionToGoal.x * spaceCheckDistance,
+      y: this.position.y + directionToGoal.y * spaceCheckDistance
+    };
+
+    const opponentsInPath = this.getOpponentsInArea(checkPosition, 0.05, context);
+    const teammatesInPath = this.getTeammatesInArea(checkPosition, 0.05, context);
+
+    return {
+      hasSpace: opponentsInPath.length === 0 && teammatesInPath.length === 0,
+      distanceToGoal: this.calculateDistance(this.position, oppositionGoal),
+      clearPath: this.hasCllearPathToGoal(context),
+      spaceQuality: this.calculateSpaceQuality(checkPosition, context)
+    };
+  }
+
+  private findPlayerInOppositionPenaltyBox(context: GameContext): Player | null {
+    const oppositionPenaltyArea = this.getOppositionPenaltyArea(context);
+    const teammates = this.getTeammates(context);
+    
+    // Find teammates in opposition penalty box
+    const playersInBox = teammates.filter(teammate => 
+      this.isInArea(teammate.position, oppositionPenaltyArea) &&
+      teammate.id !== this.id
+    );
+
+    if (playersInBox.length === 0) return null;
+
+    // Return best positioned player for cross
+    return playersInBox.reduce((best, current) => {
+      const bestScore = this.calculateCrossTargetScore(best, context);
+      const currentScore = this.calculateCrossTargetScore(current, context);
+      return currentScore > bestScore ? current : best;
+    });
+  }
+
+  private canAttemptCross(context: GameContext): boolean {
+    // Check if player is in good crossing position (wide areas)
+    const isInWideArea = this.position.y < 0.25 || this.position.y > 0.75; // Wide flanks
+    const hasGoodCrossingAngle = this.calculateCrossingAngle(context) > 0.3;
+    const hasSufficientCrossingSkill = this.attributes.crossing > 5.0;
+    
+    return isInWideArea && hasGoodCrossingAngle && hasSufficientCrossingSkill;
+  }
+
+  private executeCrossToPlayer(targetPlayer: Player, context: GameContext): void {
+    const crossPower = this.calculateOptimalCrossPower(targetPlayer);
+    const crossDirection = this.calculateCrossDirection(targetPlayer);
+    
+    // Execute whipped pass/cross as specified in outline.md
+    this.executeKick(crossDirection, crossPower, 'CROSS');
+    
+    // Set target position to support the cross
+    this.targetPosition = this.calculateCrossFollowUpPosition(context);
+  }
+
+  private executeRunTowardsGoal(spaceAnalysis: SpaceAnalysis, context: GameContext): void {
+    const runDirection = this.calculateOptimalRunDirection(context);
+    const runDistance = Math.min(spaceAnalysis.spaceQuality * 0.1, 0.08); // Max 8% of pitch per action
+    
+    this.targetPosition = {
+      x: this.position.x + runDirection.x * runDistance,
+      y: this.position.y + runDirection.y * runDistance
+    };
+    
+    // Keep ball with player during run
+    this.maintainBallPossession(context);
+  }
+
+  private shouldAttemptShot(context: GameContext): boolean {
+    const distanceToGoal = this.calculateDistance(this.position, this.getOppositionGoalPosition(context));
+    const shootingAngle = this.calculateShootingAngle(context);
+    const hasGoodShootingPosition = distanceToGoal < 0.25 && shootingAngle > 0.2;
+    const hasSufficientShootingSkill = this.attributes.shooting > 4.0;
+    
+    return hasGoodShootingPosition && hasSufficientShootingSkill;
+  }
+}
+
+interface SpaceAnalysis {
+  hasSpace: boolean;
+  distanceToGoal: number;
+  clearPath: boolean;
+  spaceQuality: number; // 0.0-1.0 rating of space quality
+}
 
   private calculateOverallRating(): number {
     // Calculate overall rating based on role-specific attribute weightings
@@ -627,51 +1078,17 @@ interface PlayerAttributes {
   aerialReach?: number;   // Cross claiming
   oneOnOnes?: number;     // Close-range saves
   distribution?: number;  // Ball delivery
-  shooting: number;
-  heading: number;
-  freeKickTaking: number;
-
-  // Mental attributes
-  vision: number;
-  decisions: number;
-  concentration: number;
-  composure: number;
-  anticipation: number;
-
-  // Physical attributes
-  pace: number;
-  acceleration: number;
-  stamina: number;
-  strength: number;
-  jumping: number;
-  agility: number;
-
-  // Defensive skills
-  tackling: number;
-  marking: number;
-  positioning: number;
-
-  // Mental/Social attributes
-  teamwork: number;
-  workRate: number;
-  leadership: number;
-
-  // Goalkeeper-specific (optional)
-  handling?: number;
-  reflexes?: number;
-  aerialReach?: number;
-  oneOnOnes?: number;
-  distribution?: number;
 }
 ```
 
 #### 3.2.4 Ball Class Implementation
 
 ```typescript
-// **POC ONLY** - Simplified 2D Ball (no height/3D effects)
+// **Ball with 3D Physics in 2D Presentation** - Ball uses 3D physics but presented in 2D with visual illusions
 class Ball {
   public position: Vector2;
-  public velocity: Vector2;
+  public velocity: Vector3; // 3D velocity including Z-axis
+  public height: number = 0; // Z-axis for 3D physics
   public owner: Player | null;
   public lastTouchedBy: Player | null;
   public isMoving: boolean = false;
@@ -681,7 +1098,7 @@ class Ball {
 
   constructor() {
     this.position = { x: 0.5, y: 0.5 }; // Center of pitch
-    this.velocity = { x: 0, y: 0 };
+    this.velocity = { x: 0, y: 0, z: 0 }; // 3D velocity
     this.owner = null;
     this.lastTouchedBy = null;
   }
@@ -697,13 +1114,20 @@ class Ball {
   }
 
   private updateFreeMovement(deltaTime: number): void {
-    // **POC ONLY** - Simple 2D movement
+    // 3D physics simulation for realistic ball movement
     this.position.x += this.velocity.x * deltaTime;
     this.position.y += this.velocity.y * deltaTime;
+    
+    // Height physics (gravity affects Z-axis)
+    this.height = Math.max(0, this.height + this.velocity.z * deltaTime);
+    this.velocity.z -= 9.81 * deltaTime; // Gravity
 
-    // Apply 2D friction
-    this.velocity.x *= this.friction;
-    this.velocity.y *= this.friction;
+    // Apply 2D friction when ball is on ground
+    if (this.height <= 0) {
+      this.velocity.x *= this.friction;
+      this.velocity.y *= this.friction;
+      this.velocity.z = 0; // Stop vertical movement when on ground
+    }
 
     // Stop very slow movement (performance optimization)
     const minVelocity = 0.01;
@@ -714,6 +1138,24 @@ class Ball {
     } else {
       this.isMoving = true;
     }
+  }
+  
+  // Calculate where ball will land for formation positioning
+  public predictLandingPosition(): { position: Vector2; gridSquare: string } {
+    // Calculate landing position based on current trajectory
+    const timeToLand = this.height > 0 ? Math.sqrt(2 * this.height / 9.81) : 0;
+    const landingX = this.position.x + this.velocity.x * timeToLand;
+    const landingY = this.position.y + this.velocity.y * timeToLand;
+    
+    // Convert to formation grid square
+    const gridX = Math.floor(landingX * 20); // 20 columns
+    const gridY = Math.floor(landingY * 15); // 15 rows
+    const gridSquare = `x${gridX}_y${gridY}`;
+    
+    return {
+      position: { x: landingX, y: landingY },
+      gridSquare
+    };
   }
 
   private followOwner(deltaTime: number): void {
@@ -732,10 +1174,11 @@ class Ball {
     this.velocity.y = 0;
   }
 
-  public kick(direction: Vector2, power: number, kicker: Player): void {
-    // Apply kick to ball
+  public kick(direction: Vector3, power: number, kicker: Player): void {
+    // Apply kick to ball with 3D velocity
     this.velocity.x = direction.x * power * 0.5;
     this.velocity.y = direction.y * power * 0.5;
+    this.velocity.z = direction.z * power * 0.5; // Height component
 
     // Ball is no longer owned
     this.owner = null;
@@ -752,7 +1195,7 @@ class Ball {
   }
 
   public isInGoal(): { inGoal: boolean; side?: 'home' | 'away' } {
-    const goalWidth = 0.2; // 20% of pitch width
+    const goalWidth = FIFA_CONSTANTS.GOAL.WIDTH; // Correct FIFA ratio (10.76%)
     const goalY = (1 - goalWidth) / 2;
 
     // Check if ball is in goal area and crossed goal line
@@ -762,6 +1205,24 @@ class Ball {
     }
 
     return { inGoal: false };
+  }
+
+  // Calculate where ball will land for formation positioning with standardized grid keys
+  public predictLandingPosition(): { position: Vector2; gridSquare: string } {
+    // Calculate landing position based on current trajectory
+    const timeToLand = this.height > 0 ? Math.sqrt(2 * this.height / 9.81) : 0;
+    const landingX = this.position.x + this.velocity.x * timeToLand;
+    const landingY = this.position.y + this.velocity.y * timeToLand;
+    
+    // Convert to formation grid square using standardized format
+    const gridCol = Math.floor(landingX * 20); // 20 columns
+    const gridRow = Math.floor(landingY * 15); // 15 rows
+    const gridSquare = `x${gridCol}_y${gridRow}`; // Standardized format
+    
+    return {
+      position: { x: landingX, y: landingY },
+      gridSquare
+    };
   }
 }
 ```
@@ -844,8 +1305,8 @@ class Physics2DEngine {
   private checkPlayerBallCollisions(players: Player[], ball: Ball): void {
     if (ball.owner) return; // Ball is already possessed
 
-    const ballRadius = 8; // pixels
-    const playerRadius = 15; // pixels
+    const ballRadius = FIFA_CONSTANTS.BALL.RADIUS;
+    const playerRadius = FIFA_CONSTANTS.PLAYER.RADIUS;
     const collisionDistance = ballRadius + playerRadius;
 
     for (const player of players) {
@@ -869,18 +1330,18 @@ class Physics2DEngine {
 }
 
 class FieldBounds {
-  private readonly margin = 10; // pixels from edge
+  private readonly margin = FIFA_CONSTANTS.THRESHOLDS.COLLISION_MARGIN; // Normalized margin
 
   public clampPlayerPosition(player: Player): void {
-    player.position.x = Math.max(this.margin, Math.min(POC_CONFIG.FIELD_WIDTH - this.margin, player.position.x));
-    player.position.y = Math.max(this.margin, Math.min(POC_CONFIG.FIELD_HEIGHT - this.margin, player.position.y));
+    player.position.x = Math.max(this.margin, Math.min(1.0 - this.margin, player.position.x));
+    player.position.y = Math.max(this.margin, Math.min(1.0 - this.margin, player.position.y));
   }
 
   public isBallOutOfPlay(ballPosition: Vector2): { out: boolean; side?: 'left' | 'right' | 'top' | 'bottom' } {
     if (ballPosition.x < 0) return { out: true, side: 'left' };
-    if (ballPosition.x > POC_CONFIG.FIELD_WIDTH) return { out: true, side: 'right' };
+    if (ballPosition.x > 1.0) return { out: true, side: 'right' };
     if (ballPosition.y < 0) return { out: true, side: 'top' };
-    if (ballPosition.y > POC_CONFIG.FIELD_HEIGHT) return { out: true, side: 'bottom' };
+    if (ballPosition.y > 1.0) return { out: true, side: 'bottom' };
 
     return { out: false };
   }
@@ -975,7 +1436,7 @@ interface FireTVPerformanceReport {
 }
 ```
 
-#### 3.7.2 Canvas 2D Optimization
+#### 3.7.2 Advanced Canvas 2D Optimizations
 ```typescript
 class OptimizedCanvas2DRenderer {
   private context: CanvasRenderingContext2D;
@@ -1085,13 +1546,911 @@ class OptimizedCanvas2DRenderer {
     this.drawCallCount++;
   }
 }
+
+#### 3.7.3 FireTV-Optimized Canvas Rendering System
+
+**Critical Optimizations**: FireTV Stick 4K Max requires specialized rendering optimizations due to ARM Cortex-A55 CPU and Mali-G52 GPU constraints.
+
+```typescript
+class FireTVOptimizedRenderer {
+  private offscreenCanvas: OffscreenCanvas;
+  private staticPitchCache: ImageBitmap;
+  private dirtyRectangles: DirtyRectTracker;
+  private layeredRenderer: LayeredCanvasRenderer;
+  private objectPool: RenderObjectPool;
+  
+  // Pre-allocated buffers for SIMD operations
+  private playerPositionBuffer: Float32Array = new Float32Array(44); // 22 players * 2 coords
+  private transformBuffer: Float32Array = new Float32Array(32); // 8 transforms * 4 matrix values
+  private colorBuffer: Uint8ClampedArray = new Uint8ClampedArray(88); // 22 players * 4 RGBA values
+
+  constructor(canvas: HTMLCanvasElement) {
+    this.initializeOffscreenRendering(canvas);
+    this.setupDirtyRectTracking();
+    this.createStaticAssetCache();
+    this.configureLayeredRendering();
+    this.initializeObjectPooling();
+  }
+
+  // Static asset caching to avoid redrawing pitch every frame
+  private createStaticAssetCache(): void {
+    this.offscreenCanvas = new OffscreenCanvas(1920, 1080);
+    const offCtx = this.offscreenCanvas.getContext('2d')!;
+    
+    // Render FIFA-compliant pitch once to offscreen canvas
+    this.renderStaticPitchElements(offCtx);
+    
+    // Cache as ImageBitmap for efficient blitting
+    this.staticPitchCache = this.offscreenCanvas.transferToImageBitmap();
+  }
+
+  // Dirty rectangle rendering - only redraw changed screen areas
+  public renderFrame(gameState: GameManagerState): void {
+    const dirtyRects = this.dirtyRectangles.getDirtyRegions();
+    
+    if (dirtyRects.length === 0) return; // No changes, skip frame
+
+    // Clear only dirty rectangles
+    for (const rect of dirtyRects) {
+      this.context.clearRect(rect.x, rect.y, rect.width, rect.height);
+      
+      // Blit static pitch cache for dirty regions
+      this.context.drawImage(
+        this.staticPitchCache,
+        rect.x, rect.y, rect.width, rect.height, // Source
+        rect.x, rect.y, rect.width, rect.height  // Destination
+      );
+    }
+
+    // Render dynamic objects only in dirty rectangles
+    this.renderDynamicObjects(gameState, dirtyRects);
+    
+    this.dirtyRectangles.clearDirtyRegions();
+  }
+
+  // SIMD-optimized bulk position updates
+  private updatePlayerPositions(players: Player[]): void {
+    // Fill Float32Array for SIMD-friendly operations
+    let bufferIndex = 0;
+    for (const player of players) {
+      this.playerPositionBuffer[bufferIndex++] = player.position.x;
+      this.playerPositionBuffer[bufferIndex++] = player.position.y;
+    }
+
+    // Use SIMD-optimized viewport transformations
+    this.applyViewportTransform(this.playerPositionBuffer);
+    
+    // Apply bulk color calculations for team identification
+    this.calculatePlayerColors(players, this.colorBuffer);
+  }
+
+  // Path2D object reuse for better performance
+  private playerCirclePath: Path2D = new Path2D();
+  private ballCirclePath: Path2D = new Path2D();
+  
+  private renderPlayersOptimized(players: Player[]): void {
+    // Batch similar rendering operations
+    this.context.save();
+    
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i];
+      const colorIndex = i * 4;
+      
+      // Reuse Path2D objects to avoid object creation
+      this.playerCirclePath = new Path2D();
+      this.playerCirclePath.arc(
+        this.playerPositionBuffer[i * 2],     // x from SIMD buffer
+        this.playerPositionBuffer[i * 2 + 1], // y from SIMD buffer
+        15, 0, Math.PI * 2
+      );
+      
+      // Use pre-calculated colors from SIMD buffer
+      this.context.fillStyle = `rgba(${
+        this.colorBuffer[colorIndex]}, ${
+        this.colorBuffer[colorIndex + 1]}, ${
+        this.colorBuffer[colorIndex + 2]}, ${
+        this.colorBuffer[colorIndex + 3]
+      })`;
+      
+      this.context.fill(this.playerCirclePath);
+    }
+    
+    this.context.restore();
+  }
+
+  // Transform matrix caching to avoid recalculations
+  private cachedTransforms: Map<string, DOMMatrix> = new Map();
+  
+  private getCachedTransform(scaleX: number, scaleY: number, rotation: number): DOMMatrix {
+    const key = `${scaleX}_${scaleY}_${rotation}`;
+    
+    if (!this.cachedTransforms.has(key)) {
+      const matrix = new DOMMatrix()
+        .scale(scaleX, scaleY)
+        .rotate(rotation);
+      this.cachedTransforms.set(key, matrix);
+    }
+    
+    return this.cachedTransforms.get(key)!;
+  }
+}
+
+// Dirty rectangle tracking system
+class DirtyRectTracker {
+  private dirtyRegions: Rectangle[] = [];
+  private lastPlayerPositions: Map<string, Vector2> = new Map();
+  
+  public markPlayerMoved(playerId: string, oldPos: Vector2, newPos: Vector2): void {
+    // Add old position area as dirty
+    this.dirtyRegions.push(this.createPlayerBounds(oldPos));
+    
+    // Add new position area as dirty  
+    this.dirtyRegions.push(this.createPlayerBounds(newPos));
+    
+    this.lastPlayerPositions.set(playerId, newPos);
+  }
+  
+  public getDirtyRegions(): Rectangle[] {
+    // Merge overlapping rectangles to minimize draw calls
+    return this.mergeOverlappingRectangles(this.dirtyRegions);
+  }
+  
+  private mergeOverlappingRectangles(rects: Rectangle[]): Rectangle[] {
+    // Implementation to combine overlapping dirty rectangles
+    // This reduces the number of separate draw operations
+    return rects; // Simplified for brevity
+  }
+}
 ```
 
-### 3.8 Player Abilities System
+#### 3.7.4 ARM NEON SIMD Optimizations
+
+**Target Architecture**: ARM Cortex-A55 with NEON SIMD support for vectorized floating-point operations.
+
+```typescript
+class NEONOptimizedMath {
+  // Pre-allocated SIMD-friendly buffers
+  private static readonly SIMD_PLAYER_COUNT = 22;
+  private static readonly COORDS_PER_PLAYER = 2;
+  private static readonly BUFFER_SIZE = NEONOptimizedMath.SIMD_PLAYER_COUNT * NEONOptimizedMath.COORDS_PER_PLAYER;
+  
+  // Float32Array enables potential NEON vectorization by V8's TurboFan JIT
+  private positionBuffer: Float32Array = new Float32Array(NEONOptimizedMath.BUFFER_SIZE);
+  private velocityBuffer: Float32Array = new Float32Array(NEONOptimizedMath.BUFFER_SIZE);
+  private targetBuffer: Float32Array = new Float32Array(NEONOptimizedMath.BUFFER_SIZE);
+  private distanceBuffer: Float32Array = new Float32Array(NEONOptimizedMath.SIMD_PLAYER_COUNT);
+  
+  // Temporary calculation buffers (avoid allocation in hot paths)
+  private tempBuffer: Float32Array = new Float32Array(16);
+  
+  // SIMD-optimized bulk distance calculation for all players to ball
+  public calculatePlayerBallDistances(
+    ballPosition: Float32Array, // [x, y]
+    playerPositions: Float32Array, // [x1, y1, x2, y2, ...]
+    outputDistances: Float32Array // Output buffer for distances
+  ): void {
+    const ballX = ballPosition[0];
+    const ballY = ballPosition[1];
+    
+    // Pattern optimized for ARM NEON vectorization
+    // Modern JavaScript engines can detect this pattern and generate NEON instructions
+    for (let i = 0; i < NEONOptimizedMath.SIMD_PLAYER_COUNT; i++) {
+      const playerX = playerPositions[i * 2];
+      const playerY = playerPositions[i * 2 + 1];
+      
+      const deltaX = playerX - ballX;
+      const deltaY = playerY - ballY;
+      
+      // Single sqrt operation per player (NEON can vectorize this)
+      outputDistances[i] = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+  }
+  
+  // Vectorized position interpolation for formation positioning
+  public interpolateFormationPositions(
+    currentPositions: Float32Array,
+    targetPositions: Float32Array,
+    interpolationFactors: Float32Array, // Per-player interpolation rates
+    outputPositions: Float32Array
+  ): void {
+    // SIMD-friendly interpolation loop
+    // ARM NEON can process 4 floats per instruction
+    for (let i = 0; i < NEONOptimizedMath.BUFFER_SIZE; i += 4) {
+      // Process 4 coordinates at once (2 players worth)
+      const factor1 = interpolationFactors[Math.floor(i / 2)];
+      const factor2 = interpolationFactors[Math.floor(i / 2) + 1];
+      
+      // Linear interpolation: current + (target - current) * factor
+      outputPositions[i] = currentPositions[i] + (targetPositions[i] - currentPositions[i]) * factor1;
+      outputPositions[i + 1] = currentPositions[i + 1] + (targetPositions[i + 1] - currentPositions[i + 1]) * factor1;
+      outputPositions[i + 2] = currentPositions[i + 2] + (targetPositions[i + 2] - currentPositions[i + 2]) * factor2;
+      outputPositions[i + 3] = currentPositions[i + 3] + (targetPositions[i + 3] - currentPositions[i + 3]) * factor2;
+    }
+  }
+  
+  // Bulk collision detection using SIMD patterns
+  public detectBulkCollisions(
+    positions1: Float32Array, // First set of entities
+    positions2: Float32Array, // Second set of entities
+    radii1: Float32Array,     // Collision radii for first set
+    radii2: Float32Array,     // Collision radii for second set
+    collisionFlags: Uint8Array // Output: 1 if collision, 0 if not
+  ): number {
+    let collisionCount = 0;
+    
+    // Nested loop optimized for NEON SIMD operations
+    for (let i = 0; i < positions1.length; i += 2) {
+      for (let j = 0; j < positions2.length; j += 2) {
+        const dx = positions1[i] - positions2[j];
+        const dy = positions1[i + 1] - positions2[j + 1];
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const minDistance = radii1[i / 2] + radii2[j / 2];
+        
+        const collision = distance < minDistance ? 1 : 0;
+        collisionFlags[i / 2] = collision;
+        collisionCount += collision;
+      }
+    }
+    
+    return collisionCount;
+  }
+  
+  // Matrix operations optimized for ARM NEON
+  public applyBulkTransformations(
+    positions: Float32Array,
+    transformMatrix: Float32Array, // 2D transformation matrix [a, b, c, d, tx, ty]
+    outputPositions: Float32Array
+  ): void {
+    const [a, b, c, d, tx, ty] = transformMatrix;
+    
+    // Process positions in SIMD-friendly chunks
+    for (let i = 0; i < positions.length; i += 2) {
+      const x = positions[i];
+      const y = positions[i + 1];
+      
+      // 2D transformation: [x', y'] = [a*x + c*y + tx, b*x + d*y + ty]
+      outputPositions[i] = a * x + c * y + tx;
+      outputPositions[i + 1] = b * x + d * y + ty;
+    }
+  }
+}
+```
+
+#### 3.7.5 Memory Management Optimizations
+
+**FireTV RAM Constraint**: 2GB total system RAM requires aggressive memory management to prevent browser tab eviction.
+
+```typescript
+class FireTVMemoryManager {
+  private objectPools: Map<string, ObjectPool<any>> = new Map();
+  private memoryMonitor: MemoryUsageMonitor;
+  private gcScheduler: GarbageCollectionScheduler;
+  
+  // Object pooling to avoid allocation/deallocation overhead
+  public initializeObjectPools(): void {
+    // Pool for frequently created temporary objects
+    this.objectPools.set('Vector2', new ObjectPool<Vector2>(() => ({ x: 0, y: 0 }), 100));
+    this.objectPools.set('Rectangle', new ObjectPool<Rectangle>(() => ({ x: 0, y: 0, width: 0, height: 0 }), 50));
+    this.objectPools.set('PlayerAIDecision', new ObjectPool<PlayerAIDecision>(() => new PlayerAIDecision(), 22));
+    this.objectPools.set('CollisionResult', new ObjectPool<CollisionResult>(() => new CollisionResult(), 50));
+    
+    // Pre-allocate commonly used arrays
+    this.objectPools.set('PlayerArray', new ObjectPool<Player[]>(() => new Array(22), 10));
+    this.objectPools.set('EventArray', new ObjectPool<MatchEvent[]>(() => new Array(100), 5));
+  }
+  
+  // Memory-efficient entity management
+  public createManagedEntity<T>(type: string, initializer: () => T): T {
+    const pool = this.objectPools.get(type);
+    if (pool && !pool.isEmpty()) {
+      return pool.acquire();
+    }
+    
+    // Fallback to new allocation if pool empty
+    const entity = initializer();
+    this.memoryMonitor.trackAllocation(type, this.getObjectSize(entity));
+    return entity;
+  }
+  
+  public releaseManagedEntity<T>(type: string, entity: T): void {
+    const pool = this.objectPools.get(type);
+    if (pool) {
+      this.resetObject(entity);
+      pool.release(entity);
+    }
+  }
+  
+  // Prevent memory leaks in game loops
+  private resetObject(obj: any): void {
+    if (obj && typeof obj === 'object') {
+      // Reset common properties without breaking references
+      if ('position' in obj) obj.position = { x: 0, y: 0 };
+      if ('velocity' in obj) obj.velocity = { x: 0, y: 0 };
+      if ('active' in obj) obj.active = false;
+    }
+  }
+  
+  // Proactive garbage collection scheduling
+  private scheduleGarbageCollection(): void {
+    // Trigger GC during low-activity periods (not during active gameplay)
+    if (this.memoryMonitor.getHeapUsage() > 200 * 1024 * 1024) { // 200MB threshold
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(() => {
+          // Force GC by creating and releasing large temporary objects
+          this.forceGarbageCollection();
+        });
+      }
+    }
+  }
+  
+  private forceGarbageCollection(): void {
+    // Create temporary pressure to trigger GC
+    const tempArrays = [];
+    for (let i = 0; i < 100; i++) {
+      tempArrays.push(new Array(1000).fill(0));
+    }
+    tempArrays.length = 0; // Clear references
+  }
+}
+
+class ObjectPool<T> {
+  private available: T[] = [];
+  private inUse: Set<T> = new Set();
+  
+  constructor(
+    private factory: () => T,
+    private maxSize: number
+  ) {
+    // Pre-populate pool
+    for (let i = 0; i < maxSize; i++) {
+      this.available.push(this.factory());
+    }
+  }
+  
+  public acquire(): T | null {
+    if (this.available.length === 0) {
+      return null; // Pool exhausted
+    }
+    
+    const item = this.available.pop()!;
+    this.inUse.add(item);
+    return item;
+  }
+  
+  public release(item: T): void {
+    if (this.inUse.has(item)) {
+      this.inUse.delete(item);
+      if (this.available.length < this.maxSize) {
+        this.available.push(item);
+      }
+    }
+  }
+  
+  public isEmpty(): boolean {
+    return this.available.length === 0;
+  }
+}
+```
+
+#### 3.7.6 Spatial Optimization and Level-of-Detail
+
+**Culling and LOD**: Reduce computational load by rendering only visible/relevant entities.
+
+```typescript
+class SpatialOptimizer {
+  private spatialGrid: SpatialHashGrid;
+  private viewportCuller: ViewportCuller;
+  private lodManager: LevelOfDetailManager;
+  
+  constructor(fieldWidth: number, fieldHeight: number, cellSize: number) {
+    this.spatialGrid = new SpatialHashGrid(fieldWidth, fieldHeight, cellSize);
+    this.viewportCuller = new ViewportCuller();
+    this.lodManager = new LevelOfDetailManager();
+  }
+  
+  // Spatial partitioning for efficient collision detection
+  public updateSpatialGrid(entities: Entity[]): void {
+    this.spatialGrid.clear();
+    
+    for (const entity of entities) {
+      if (entity.active) {
+        this.spatialGrid.insert(entity);
+      }
+    }
+  }
+  
+  // Only process entities within reasonable proximity
+  public getNearbyEntities(position: Vector2, radius: number): Entity[] {
+    return this.spatialGrid.query(position, radius);
+  }
+  
+  // Viewport culling - don't render off-screen entities
+  public cullOffscreenEntities(entities: Entity[], camera: Camera): Entity[] {
+    return entities.filter(entity => 
+      this.viewportCuller.isInViewport(entity.getBounds(), camera.getViewport())
+    );
+  }
+  
+  // Level-of-Detail based on distance from camera focus
+  public applyLevelOfDetail(entities: Entity[], cameraFocus: Vector2): void {
+    for (const entity of entities) {
+      const distance = this.calculateDistance(entity.position, cameraFocus);
+      const lodLevel = this.lodManager.calculateLOD(distance);
+      
+      // Reduce update frequency for distant entities
+      entity.setUpdateFrequency(lodLevel);
+      
+      // Simplify rendering for distant entities
+      entity.setRenderQuality(lodLevel);
+    }
+  }
+}
+
+class SpatialHashGrid {
+  private grid: Map<string, Entity[]> = new Map();
+  private cellSize: number;
+  private invCellSize: number;
+  
+  constructor(
+    private width: number,
+    private height: number,
+    cellSize: number
+  ) {
+    this.cellSize = cellSize;
+    this.invCellSize = 1.0 / cellSize;
+  }
+  
+  public insert(entity: Entity): void {
+    const bounds = entity.getBounds();
+    const cells = this.getCellsForBounds(bounds);
+    
+    for (const cellKey of cells) {
+      if (!this.grid.has(cellKey)) {
+        this.grid.set(cellKey, []);
+      }
+      this.grid.get(cellKey)!.push(entity);
+    }
+  }
+  
+  public query(position: Vector2, radius: number): Entity[] {
+    const queryBounds = {
+      x: position.x - radius,
+      y: position.y - radius,
+      width: radius * 2,
+      height: radius * 2
+    };
+    
+    const cells = this.getCellsForBounds(queryBounds);
+    const entities = new Set<Entity>();
+    
+    for (const cellKey of cells) {
+      const cellEntities = this.grid.get(cellKey) || [];
+      for (const entity of cellEntities) {
+        entities.add(entity);
+      }
+    }
+    
+    return Array.from(entities);
+  }
+  
+  private getCellsForBounds(bounds: Rectangle): string[] {
+    const startX = Math.floor(bounds.x * this.invCellSize);
+    const startY = Math.floor(bounds.y * this.invCellSize);
+    const endX = Math.floor((bounds.x + bounds.width) * this.invCellSize);
+    const endY = Math.floor((bounds.y + bounds.height) * this.invCellSize);
+    
+    const cells: string[] = [];
+    for (let x = startX; x <= endX; x++) {
+      for (let y = startY; y <= endY; y++) {
+        cells.push(`${x},${y}`);
+      }
+    }
+    
+    return cells;
+  }
+  
+  public clear(): void {
+    this.grid.clear();
+  }
+}
+```
+
+#### 3.7.7 Performance Monitoring and Adaptive Quality
+
+**Dynamic Quality Adjustment**: Automatically reduce rendering quality when performance drops below targets.
+
+```typescript
+class AdaptiveQualityManager {
+  private performanceHistory: PerformanceMetrics[] = [];
+  private currentQualityLevel: QualityLevel = QualityLevel.HIGH;
+  private frameTimeTarget: number = 33.33; // 30 FPS
+  private qualityLevels: QualitySettings[];
+  
+  constructor() {
+    this.initializeQualityLevels();
+  }
+  
+  private initializeQualityLevels(): void {
+    this.qualityLevels = [
+      // Ultra Low Quality - Emergency fallback
+      {
+        level: QualityLevel.ULTRA_LOW,
+        playerRenderDistance: 100,
+        particleCount: 0,
+        shadowQuality: 0,
+        antialiasing: false,
+        aiUpdateFrequency: 500, // ms
+        physicsSubsteps: 1
+      },
+      // Low Quality
+      {
+        level: QualityLevel.LOW,
+        playerRenderDistance: 200,
+        particleCount: 5,
+        shadowQuality: 1,
+        antialiasing: false,
+        aiUpdateFrequency: 200,
+        physicsSubsteps: 1
+      },
+      // Medium Quality
+      {
+        level: QualityLevel.MEDIUM,
+        playerRenderDistance: 400,
+        particleCount: 15,
+        shadowQuality: 2,
+        antialiasing: true,
+        aiUpdateFrequency: 100,
+        physicsSubsteps: 2
+      },
+      // High Quality
+      {
+        level: QualityLevel.HIGH,
+        playerRenderDistance: 600,
+        particleCount: 30,
+        shadowQuality: 3,
+        antialiasing: true,
+        aiUpdateFrequency: 50,
+        physicsSubsteps: 3
+      }
+    ];
+  }
+  
+  public updatePerformanceMetrics(frameTime: number, memoryUsage: number, context: DeterministicGameContext): void {
+    const metrics: PerformanceMetrics = {
+      frameTime,
+      memoryUsage,
+      timestamp: context.gameTime, // Use deterministic game time
+      qualityLevel: this.currentQualityLevel
+    };
+    
+    this.performanceHistory.push(metrics);
+    
+    // Keep only recent history
+    if (this.performanceHistory.length > 300) { // 10 seconds at 30 FPS
+      this.performanceHistory.shift();
+    }
+    
+    // Check if quality adjustment is needed
+    this.evaluateQualityAdjustment();
+  }
+  
+  private evaluateQualityAdjustment(): void {
+    if (this.performanceHistory.length < 60) return; // Need sufficient samples
+    
+    const recentMetrics = this.performanceHistory.slice(-60); // Last 2 seconds
+    const averageFrameTime = recentMetrics.reduce((sum, m) => sum + m.frameTime, 0) / recentMetrics.length;
+    const maxMemoryUsage = Math.max(...recentMetrics.map(m => m.memoryUsage));
+    
+    // Performance is below target - reduce quality
+    if (averageFrameTime > this.frameTimeTarget * 1.2) { // 20% above target
+      this.reduceQuality();
+    }
+    // Memory usage too high - reduce quality  
+    else if (maxMemoryUsage > 400 * 1024 * 1024) { // 400MB threshold
+      this.reduceQuality();
+    }
+    // Performance is good - try increasing quality
+    else if (averageFrameTime < this.frameTimeTarget * 0.8 && this.currentQualityLevel < QualityLevel.HIGH) {
+      this.increaseQuality();
+    }
+  }
+  
+  private reduceQuality(): void {
+    if (this.currentQualityLevel > QualityLevel.ULTRA_LOW) {
+      this.currentQualityLevel--;
+      this.applyQualitySettings();
+      console.log(`Quality reduced to level ${this.currentQualityLevel}`);
+    }
+  }
+  
+  private increaseQuality(): void {
+    if (this.currentQualityLevel < QualityLevel.HIGH) {
+      this.currentQualityLevel++;
+      this.applyQualitySettings();
+      console.log(`Quality increased to level ${this.currentQualityLevel}`);
+    }
+  }
+  
+  private applyQualitySettings(): void {
+    const settings = this.qualityLevels[this.currentQualityLevel];
+    
+    // Apply settings to game systems
+    GameManager.getInstance().setAIUpdateFrequency(settings.aiUpdateFrequency);
+    PhysicsEngine.getInstance().setSubsteps(settings.physicsSubsteps);
+    Renderer.getInstance().setPlayerRenderDistance(settings.playerRenderDistance);
+    ParticleSystem.getInstance().setMaxParticles(settings.particleCount);
+    
+    // Apply canvas rendering settings
+    const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+    const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = settings.antialiasing;
+  }
+  
+  public getCurrentQualitySettings(): QualitySettings {
+    return this.qualityLevels[this.currentQualityLevel];
+  }
+}
+
+enum QualityLevel {
+  ULTRA_LOW = 0,
+  LOW = 1,
+  MEDIUM = 2,
+  HIGH = 3
+}
+
+interface QualitySettings {
+  level: QualityLevel;
+  playerRenderDistance: number;
+  particleCount: number;
+  shadowQuality: number;
+  antialiasing: boolean;
+  aiUpdateFrequency: number; // milliseconds
+  physicsSubsteps: number;
+}
+
+interface PerformanceMetrics {
+  frameTime: number;
+  memoryUsage: number;
+  timestamp: number;
+  qualityLevel: QualityLevel;
+}
+```
+
+### 3.8 Formation Editor Tool (FET) System
+
+The Formation Editor Tool (FET) is a developer-only application for creating sophisticated AI positioning data that drives tactical player behaviour in Soccer Manager: World Cup Edition. This tool enables precise mapping of player positions relative to ball location across all standard football formations, creating rich datasets for intelligent player movement during matches.
+
+**Key Features**:
+- **Design-Time Tool**: Developer-only application for creating formation data, not used during actual gameplay
+- **FIFA-Compliant Pitch**: All pitch markings follow FIFA Laws of the Game specifications with maximum allowed dimensions (110m × 68m)
+- **20×15 Grid System**: 300 zones total, each representing 5.5m × 4.53m of real pitch space
+- **Flexible Player Roles**: Supports variable defender/midfielder/forward compositions for authentic tactical setups
+- **Single File Export**: Exports all formation data to `formations.json` for game runtime consumption
+
+**Formation System Features**:
+
+**Grid Structure**:
+- Grid: 20×15 (columns × rows) zones  
+- Saved mappings are keyed by ball grid cell key "x{col}_y{row}" format (e.g., "x12_y8") for any `col ∈ [0,20)` and `row ∈ [0,15)`
+- Role positions are normalised coordinates `x ∈ [0,1], y ∈ [0,1]` and can be placed anywhere on the pitch to capture attacking/defending contexts
+
+**Formation Flexibility**:
+- Variable defender counts: 5-3-2 formation uses 5 defenders whilst 3-5-2 uses only 3
+- Flexible midfielder numbers: 3-5-2 employs 5 midfielders (CDM_1, CDM_2, LM, RM, CAM) for midfield dominance  
+- Dynamic role naming: Players numbered by position (CB_1, CB_2, CB_3) to support multiple instances
+- Tactical authenticity: Each formation reflects real-world tactical setups without artificial limitations
+
+**Editor Workflow**:
+
+**Formation Creation Process**:
+- When the ball is moved to a new cell and any player is adjusted, those edits are staged to that ball cell; multiple cells can be staged and then committed in one operation
+- Committed cells are persisted; staged cells are visualised separately in the editor but not persisted until committed
+- Formation dropdown selection loads pre-defined formations with kick-off positions automatically applied
+
+#### 3.8.1 Formation System Architecture
+
+**Core Components**:
+- **Grid System**: 20×15 grid (300 zones total) with zones of 5.5m × 4.53m real pitch space
+- **Position Validation Engine**: Real-time validation with visual error indicators
+- **FIFA-Compliant Pitch**: All markings follow FIFA Laws of the Game specifications
+- **Formation Templates**: Dynamic support for 4-4-2, 4-3-3, 5-3-2, 3-5-2, 4-2-3-1, 3-4-3
+
+#### 3.8.2 Flexible Player Role System
+
+The formation system supports completely flexible player compositions, removing rigid constraints about formation structure:
+
+```typescript
+// Base position types for flexible formations
+type BasePosition = 
+  | "GK"      // Goalkeeper
+  | "CB"      // Centre Back
+  | "LB"      // Left Back  
+  | "RB"      // Right Back
+  | "LWB"     // Left Wing Back
+  | "RWB"     // Right Wing Back
+  | "DM"      // Defensive Midfielder
+  | "CM"      // Central Midfielder
+  | "AM"      // Attacking Midfielder
+  | "LM"      // Left Midfielder
+  | "RM"      // Right Midfielder
+  | "LW"      // Left Winger
+  | "RW"      // Right Winger
+  | "CF"      // Centre Forward
+  | "ST"      // Striker
+
+// Dynamic player role system (e.g., CB_1, CB_2, CB_3)
+type PlayerRole = string
+
+// Formation templates define exact player compositions
+const FORMATION_TEMPLATES: Record<string, PlayerRole[]> = {
+  "4-4-2": ["GK", "LB", "CB_1", "CB_2", "RB", "LM", "CM_1", "CM_2", "RM", "ST_1", "ST_2"],
+  "4-3-3": ["GK", "LB", "CB_1", "CB_2", "RB", "DM", "CM_1", "CM_2", "LW", "RW", "ST"],
+  "5-3-2": ["GK", "LWB", "CB_1", "CB_2", "CB_3", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
+  "3-5-2": ["GK", "CB_1", "CB_2", "CB_3", "LWB", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
+  "4-2-3-1": ["GK", "LB", "CB_1", "CB_2", "RB", "DM_1", "DM_2", "LW", "AM", "RW", "ST"],
+  "3-4-3": ["GK", "CB_1", "CB_2", "CB_3", "LM", "CM_1", "CM_2", "RM", "LW", "ST", "RW"],
+}
+```
+
+#### 3.8.3 Uber Formation Data Structure
+
+All formation data is contained within a single JSON file (`formations.json`) that includes all formations across all postures and phases:
+
+```typescript
+// Reference: see docs/CANONICAL-DEFINITIONS.md for canonical UberFormationData schema
+interface UberFormationData {
+  name: string;
+  players: Record<string, PlayerFormationData>; // Key format: x{col}_y{row}
+}
+
+interface PlayerFormationData {
+  role: PlayerRole;
+  posture: PlayingPosture;
+  phases: Record<GamePhase, PhasePositioning>;
+}
+
+// DEPRECATED: Use UberFormationData instead
+interface FormationDefinition {
+  formationId: string;                    // "5-3-2"
+  name: string;                          // "5-3-2 Defensive"
+  category: FormationCategory;           // "Defensive" | "Balanced" | "Attacking"
+  playerComposition: PlayerRole[];       // Defines exactly which players this formation uses
+  postures: {
+    [posture: string]: PostureData;      // "defensive", "balanced", "attacking"
+  };
+  metadata: FormationMetadata;
+}
+
+interface PostureData {
+  phases: {
+    [phase in GamePhase]: PhaseData;
+  };
+}
+
+interface PhaseData {
+  positions: {
+    [zoneId: string]: {                  // "x12_y8" format
+      players: {
+        [playerRole: string]: {          // "CB_1", "CM_2", "ST_1" etc.
+          x: number;                     // 0.0-1.0 normalised
+          y: number;                     // 0.0-1.0 normalised
+          priority: number;              // 1-10 positioning importance
+          flexibility: number;           // 0.0-1.0 deviation allowed
+          contextualModifiers: ContextualModifier[];
+        }
+      }
+    }
+  };
+}
+
+enum GamePhase {
+  ATTACK = "attack",
+  DEFEND = "defend",
+  TRANSITION_ATTACK = "transition_attack",
+  TRANSITION_DEFEND = "transition_defend",
+  SET_PIECE_FOR = "set_piece_for",
+  SET_PIECE_AGAINST = "set_piece_against"
+}
+```
+
+#### 3.8.4 Grid System Implementation
+
+```typescript
+class OptimizedGridSystem {
+  private readonly GRID_WIDTH = 20;
+  private readonly GRID_HEIGHT = 15;
+  private readonly ZONE_COUNT = 300;
+
+  // Hybrid approach: Integer indices + Float32Array positions
+  private spatialIndex: Map<number, ZoneData> = new Map();
+  private positionBuffer: Float32Array;
+
+  constructor() {
+    // Pre-allocate SIMD-optimized buffers for 22 players
+    this.positionBuffer = new Float32Array(44);        // x,y interleaved (22 * 2)
+  }
+
+  // Integer operations for exact grid calculations (cache-friendly)
+  public getZoneIndex(x: number, y: number): number {
+    const gridX = Math.floor(x * this.GRID_WIDTH);
+    const gridY = Math.floor(y * this.GRID_HEIGHT);
+    return gridY * this.GRID_WIDTH + gridX;  // Single integer index (0-299)
+  }
+
+  // Optimized zone center calculation using integer index
+  public getZoneCenter(zoneIndex: number): Float32Array {
+    const gridX = zoneIndex % this.GRID_WIDTH;
+    const gridY = Math.floor(zoneIndex / this.GRID_WIDTH);
+
+    const center = new Float32Array(2);
+    center[0] = (gridX + 0.5) / this.GRID_WIDTH;
+    center[1] = (gridY + 0.5) / this.GRID_HEIGHT;
+    return center;
+  }
+}
+```
+
+#### 3.8.5 Formation Data Storage
+
+Formation data is stored in a single `formations.json` file containing all formation definitions:
+
+```typescript
+interface FormationExport {
+  schemaVersion: string;        // "1.0.0" semantic versioning
+  formatVersion: number;        // Breaking change indicator
+  exportTimestamp: string;      // ISO 8601 timestamp
+  formations: FormationData[];
+  metadata: ExportMetadata;
+}
+```
+
+**Storage Location**: `assets/formations.json` in repository root
+**File Format**: Single JSON file containing all formation data for runtime use
+
+#### 3.8.6 Formation Runtime Integration
+
+```typescript
+class FormationEngine {
+  private formationData: Map<string, FormationData> = new Map();
+  private positionInterpolator: PositionInterpolator;
+
+  public getOptimalPosition(
+    player: Player,
+    gameState: GameState,
+    tacticalCommand?: TacticalCommand
+  ): Vector2 {
+    const formation = this.getActiveFormation(player.team);
+    const gamePhase = this.determineGamePhase(gameState, player.team);
+    const context = this.buildGameContext(gameState, tacticalCommand);
+
+    const position = this.positionInterpolator.getInterpolatedPosition(
+      player.playerType,
+      gameState.ball.position,
+      gamePhase,
+      context
+    );
+
+    return this.applyFlexibilityAndConstraints(player, position, gameState);
+  }
+
+  private determineGamePhase(gameState: GameState, team: Team): GamePhase {
+    const possession = gameState.possession;
+    const ballPosition = gameState.ball.position;
+
+    if (possession === team.id) {
+      return ballPosition.y > 0.6 ? GamePhase.ATTACK : GamePhase.TRANSITION_ATTACK;
+    } else {
+      return ballPosition.y < 0.4 ? GamePhase.DEFEND : GamePhase.TRANSITION_DEFEND;
+    }
+  }
+}
+```
+
+### 3.9 Player Abilities System
 
 **POC Constraint**: Basic attribute-driven behaviour with simplified ability execution. Complex skill animations and detailed ability mechanics are deferred to Phase 2.
 
-#### 3.8.1 Core Player Abilities
+#### 3.9.1 Core Player Abilities
 
 **Passing Abilities**:
 - **Short Passing**: Building up play through close-range distribution. Requires precision over power, quick decision-making, and accurate placement to feet or into space ahead of teammate
@@ -1124,7 +2483,7 @@ class OptimizedCanvas2DRenderer {
 - **Shoulder Charge**: Legal physical challenge using shoulder-to-shoulder contact
 - **Recovery Tackle**: Last-ditch defensive action to prevent goal-scoring opportunities
 
-#### 3.8.2 Player Attribute System
+#### 3.9.2 Player Attribute System
 
 **Note**: Uses canonical PlayerAttributes interface from section 3.2.1 (0.0-10.0 scale as per PRD specification).
 
@@ -1176,26 +2535,275 @@ class AttributeCalculator {
 }
 ```
 
-#### 3.8.3 Formation-Based Player Positioning
+#### 3.9.3 Multi-Factor Player Positioning Algorithm
+
+**Core Principle**: Each player's desired position is calculated using a weighted sum of multiple positioning factors, as specified in the original outline requirements.
+
 ```typescript
-// Integration with existing formation system from earlier sections
+interface PositioningFactor {
+  position: Vector2;           // Target position from this factor
+  weight: number;              // Importance weighting (0.0-1.0)  
+  priority: number;            // Override priority (1-10)
+  description: string;         // Factor identification
+}
+
+interface PositioningContext extends DeterministicGameContext {
+  ball: Ball;
+  teammates: Player[];
+  opponents: Player[];
+  teamPosture: 'DEFENDING' | 'BALANCED' | 'ATTACKING';
+  gamePhase: GamePhase;
+}
+
+class MultiFactorPositioning {
+  private factors: PositioningFactor[] = [];
+  private weights: PositioningWeights;
+
+  constructor(private player: Player, private role: PlayerRole) {
+    this.weights = this.getPositioningWeights(role);
+  }
+
+  public calculateDesiredPosition(context: PositioningContext): Vector2 {
+    this.factors = [];
+
+    // **Factor 0: Loose Ball Priority** (from outline.md:133)
+    this.addLooseBallFactor(context);
+
+    // **Factor 1: Formation Data Priority** (from outline.md:135) 
+    this.addFormationDataFactor(context);
+
+    // **Factor 2: Tactical Instruction Factor**
+    this.addTacticalInstructionFactor(context);
+
+    // **Factor 3: Role-Specific Behaviour Factor**
+    this.addRoleSpecificFactor(context);
+
+    // Calculate weighted sum of all factors
+    return this.calculateWeightedPosition();
+  }
+
+  private addLooseBallFactor(context: PositioningContext): void {
+    if (!context.ball.owner) {
+      const distanceToBall = this.calculateDistance(this.player.position, context.ball.position);
+      const isClosestTeammate = this.isClosestTeammateToLooseBall(context);
+
+      if (isClosestTeammate && distanceToBall < this.weights.looseBallChaseThreshold) {
+        // Chase loose ball with high priority
+        this.factors.push({
+          position: context.ball.position,
+          weight: this.weights.looseBallWeight,
+          priority: 10, // Highest priority
+          description: "Loose Ball Chase"
+        });
+      } 
+      else {
+        // Support position for loose ball scenario
+        const supportPosition = this.calculateLooseBallSupportPosition(context);
+        this.factors.push({
+          position: supportPosition,
+          weight: this.weights.looseBallSupportWeight,
+          priority: 6,
+          description: "Loose Ball Support"
+        });
+      }
+    }
+  }
+
+  private addFormationDataFactor(context: PositioningContext): void {
+    // Get formation position based on ball location (grid square calculation)
+    const ballGridPosition = this.calculateBallGridSquare(context.ball.position);
+    const formationPosition = this.getFormationPositionForBallLocation(ballGridPosition, context.gamePhase);
+
+    this.factors.push({
+      position: formationPosition,
+      weight: this.weights.formationWeight,
+      priority: 8, // High priority for formation shape
+      description: `Formation Position (Ball: ${ballGridPosition})`
+    });
+  }
+
+  private addTacticalInstructionFactor(context: PositioningContext): void {
+    let tacticalPosition: Vector2;
+    let weight: number;
+
+    switch (context.teamPosture) {
+      case 'DEFENDING':
+        tacticalPosition = this.calculateDefensivePosition(context);
+        weight = this.weights.defensiveTacticalWeight;
+        break;
+      case 'ATTACKING':
+        tacticalPosition = this.calculateAttackingPosition(context);
+        weight = this.weights.attackingTacticalWeight;
+        break;
+      case 'BALANCED':
+      default:
+        tacticalPosition = this.calculateBalancedPosition(context);
+        weight = this.weights.balancedTacticalWeight;
+        break;
+    }
+
+    this.factors.push({
+      position: tacticalPosition,
+      weight,
+      priority: 7,
+      description: `Tactical: ${context.teamPosture}`
+    });
+  }
+
+  private addRoleSpecificFactor(context: PositioningContext): void {
+    const rolePosition = this.calculateRoleSpecificPosition(context);
+    
+    this.factors.push({
+      position: rolePosition,
+      weight: this.weights.roleSpecificWeight,
+      priority: 5,
+      description: `Role: ${this.role}`
+    });
+  }
+
+  private calculateWeightedPosition(): Vector2 {
+    if (this.factors.length === 0) {
+      return this.player.position; // No factors, stay put
+    }
+
+    // Sort by priority (highest first)
+    const sortedFactors = this.factors.sort((a, b) => b.priority - a.priority);
+
+    // Check for high-priority overrides
+    const highestPriority = sortedFactors[0].priority;
+    if (highestPriority >= 9) {
+      // High priority factor overrides weighted calculation
+      return sortedFactors[0].position;
+    }
+
+    // Calculate weighted average position
+    let totalWeightedX = 0;
+    let totalWeightedY = 0;
+    let totalWeight = 0;
+
+    for (const factor of this.factors) {
+      totalWeightedX += factor.position.x * factor.weight;
+      totalWeightedY += factor.position.y * factor.weight;
+      totalWeight += factor.weight;
+    }
+
+    if (totalWeight === 0) {
+      return this.player.position;
+    }
+
+    return {
+      x: totalWeightedX / totalWeight,
+      y: totalWeightedY / totalWeight
+    };
+  }
+
+  private isClosestTeammateToLooseBall(context: PositioningContext): boolean {
+    const myDistance = this.calculateDistance(this.player.position, context.ball.position);
+    
+    return context.teammates.every(teammate => {
+      if (teammate.id === this.player.id) return true;
+      const teammateDistance = this.calculateDistance(teammate.position, context.ball.position);
+      return myDistance <= teammateDistance;
+    });
+  }
+
+  private calculateBallGridSquare(ballPosition: Vector2): string {
+    const gridCol = Math.floor(ballPosition.x * 20); // 20 columns
+    const gridRow = Math.floor(ballPosition.y * 15); // 15 rows
+    return `x${gridCol}_y${gridRow}`;
+  }
+
+  private getPositioningWeights(role: PlayerRole): PositioningWeights {
+    const baseWeights: PositioningWeights = {
+      looseBallWeight: 0.3,
+      looseBallSupportWeight: 0.1,
+      looseBallChaseThreshold: 0.15, // 15% of pitch
+      formationWeight: 0.4,
+      defensiveTacticalWeight: 0.2,
+      attackingTacticalWeight: 0.2,
+      balancedTacticalWeight: 0.15,
+      roleSpecificWeight: 0.1
+    };
+
+    // Role-specific weight adjustments
+    switch (role) {
+      case 'GOALKEEPER':
+        return {
+          ...baseWeights,
+          looseBallWeight: 0.1,      // Goalkeepers rarely chase loose balls
+          formationWeight: 0.6,      // Strong formation adherence
+          looseBallChaseThreshold: 0.05 // Only chase very close balls
+        };
+
+      case 'CENTRE_BACK':
+        return {
+          ...baseWeights,
+          looseBallWeight: 0.25,
+          formationWeight: 0.5,      // High formation discipline
+          defensiveTacticalWeight: 0.3
+        };
+
+      case 'CENTRAL_MIDFIELDER':
+        return {
+          ...baseWeights,
+          looseBallWeight: 0.4,      // Most involved in loose ball situations
+          formationWeight: 0.3,
+          balancedTacticalWeight: 0.25
+        };
+
+      case 'STRIKER':
+        return {
+          ...baseWeights,
+          looseBallWeight: 0.35,
+          formationWeight: 0.25,     // More flexible positioning
+          attackingTacticalWeight: 0.35,
+          roleSpecificWeight: 0.2    // Strong role-specific behaviour
+        };
+
+      default:
+        return baseWeights;
+    }
+  }
+}
+
+interface PositioningWeights {
+  looseBallWeight: number;
+  looseBallSupportWeight: number;
+  looseBallChaseThreshold: number;
+  formationWeight: number;
+  defensiveTacticalWeight: number;
+  attackingTacticalWeight: number;
+  balancedTacticalWeight: number;
+  roleSpecificWeight: number;
+}
+
+// Integration with existing formation system
 class FormationAwarePlayer extends Player {
-  private formationPosition: Vector2;
+  private multiFactorPositioning: MultiFactorPositioning;
   private roleSpecificBehaviour: RoleSpecificBehaviour;
 
   constructor(basePlayer: Player, formation: FormationData, role: string) {
     super(basePlayer);
-    this.formationPosition = formation.getPositionForRole(role);
+    this.multiFactorPositioning = new MultiFactorPositioning(this, role as PlayerRole);
     this.roleSpecificBehaviour = new RoleSpecificBehaviour(role);
   }
 
   public update(gameContext: GameContext, deltaTime: number): void {
-    // Get formation target from Float32Array optimized system
-    const formationTarget = this.getFormationTarget(gameContext);
+    // Build positioning context
+    const positioningContext: PositioningContext = {
+      ...gameContext,
+      gameTime: gameContext.matchTime.elapsed,
+      rng: new SeededRandom(gameContext.matchSeed || 12345),
+      frameCount: Math.floor(gameContext.matchTime.elapsed * 30),
+      matchSeed: gameContext.matchSeed || 12345
+    };
 
-    // Apply role-specific adjustments
-    const adjustedTarget = this.roleSpecificBehaviour.adjustPosition(
-      formationTarget,
+    // Calculate desired position using multi-factor algorithm
+    const desiredPosition = this.multiFactorPositioning.calculateDesiredPosition(positioningContext);
+
+    // Apply role-specific adjustments  
+    this.targetPosition = this.roleSpecificBehaviour.adjustPosition(
+      desiredPosition,
       gameContext,
       this.attributes
     );
@@ -1405,35 +3013,45 @@ enum MatchPhase
   FULL_TIME = 'full_time'              // Match completed
 }
 
-interface GameState
+// shared/types.ts - VGF-compatible shared types
+import type { BaseGameState } from '@volley/vgf/types';
+
+interface GameState extends BaseGameState
 {
-  matchId: string;
-  phase: MatchPhase;
-  previousPhase: MatchPhase;           // For returning from stoppages
-  time: MatchTime;
+  // VGF handles phase management automatically
+  phase: 'lobby' | 'pre_match' | 'kick_off' | 'first_half' | 'half_time' | 'second_half' | 'full_time';
+  
+  // Match participants (multiplayer managers)
+  teams: Team[];
+  
+  // Core game objects  
+  ball: Ball3D;                        // 3D ball with physics
+  players: Player[];                   // All players from both teams
+  
+  // Match state
   score: Score;
-  teams: [Team, Team];
-  ball: Ball;
-  referee: Referee;
-  weather: WeatherConditions;
-  events: MatchEvent[];
-  statistics: MatchStatistics;
-
-  // Kickoff management
-  kickoffTeam: 'HOME' | 'AWAY';
-  initialKickoffTeam: 'HOME' | 'AWAY';
-  restartPosition: Vector2 | null;     // Position for restarts (throw-ins, etc.)
-  restartTeam: 'HOME' | 'AWAY' | null;
-
-  // Match state timing
-  phaseStartTime: number;              // When current phase started
-  phaseElapsedTime: number;            // Time in current phase
-
-  // Advanced match context
+  gameTime: number;                    // Accumulated game time in seconds
+  matchSeed: number;                   // Deterministic seed for this match
+  
+  // Current match context
   possession: 'HOME' | 'AWAY' | null;  // Current team in possession
-  lastTouch: Player | null;            // Last player to touch ball
+  lastTouch: string | null;            // Player ID who last touched ball
   pressureLevel: number;               // 0-1, attacking pressure intensity
   tempo: number;                       // 0-1, pace of play
+<<<<<<< Updated upstream
+=======
+  
+  // Events and match tracking
+  events: MatchEvent[];
+  
+  // Match timing (derived from VGF phase system)
+  phaseStartTime: number;              // When current phase started
+  phaseElapsedTime: number;            // Time in current phase
+  
+  // Team tactical postures (FET integration)
+  homeTeamPosture: TeamPosture;        // HOME team's current tactical posture
+  awayTeamPosture: TeamPosture;        // AWAY team's current tactical posture
+>>>>>>> Stashed changes
 }
 
 interface MatchTime
@@ -1607,7 +3225,7 @@ class GoalKickController {
   
   private calculateKickDirection(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): Vector2 {
     // Simple POC implementation - kick toward center field
-    const fieldCenter = { x: POC_CONFIG.FIELD_WIDTH / 2, y: POC_CONFIG.FIELD_HEIGHT / 2 };
+    const fieldCenter = { x: 0.5, y: 0.5 }; // Normalized center
     const ballPos = gameState.ball.position;
     
     const direction = {
@@ -1645,8 +3263,8 @@ class GoalKickAIBehavior {
       // Must attempt to leave penalty area
       const exitDirection = this.calculateExitDirection(player.position, goalKickState.kickingTeam);
       player.targetPosition = {
-        x: player.position.x + exitDirection.x * 50, // Move 50 pixels toward exit
-        y: player.position.y + exitDirection.y * 50
+        x: player.position.x + exitDirection.x * 0.05, // Move 5% of pitch toward exit
+        y: player.position.y + exitDirection.y * 0.05
       };
       
       player.state = PlayerState.MAINTAINING_POSITION; // Don't interfere with other AI
@@ -1777,7 +3395,7 @@ class GoalkeeperController {
     } else {
       // Safe to distribute short
       return {
-        method: Math.random() > 0.5 ? 'throw' : 'roll',
+        method: context.rng.boolean(0.5) ? 'throw' : 'roll', // Use deterministic RNG
         target: this.findShortDistributionTarget(nearbyTeammates),
         power: 0.4, // Moderate power for accuracy
         reason: 'maintain_possession'
@@ -1861,14 +3479,19 @@ class GoalkeeperController {
     // Opposing players retreat toward own half to defend counter-attack
     opposingPlayers.forEach(player => {
       if (player.playerType !== 'GOALKEEPER') {
+<<<<<<< Updated upstream
         const ownHalfX = opposingTeam === 'HOME' ? 
           POC_CONFIG.FIELD_WIDTH * 0.25 : 
           POC_CONFIG.FIELD_WIDTH * 0.75;
         
+=======
+        const ownHalfX = opposingTeam === 'HOME' ? 0.25 : 0.75; // Normalized coordinates
+
+>>>>>>> Stashed changes
         // Move toward own half, maintaining some width
         player.targetPosition = {
           x: ownHalfX,
-          y: player.basePosition.y + (Math.random() - 0.5) * 100
+          y: player.basePosition.y + context.rng.uniform(-0.05, 0.05) // Use deterministic RNG (5% variation)
         };
         
         player.state = PlayerState.DEFENDING; // Switch to defensive mindset
@@ -1931,7 +3554,7 @@ class EnhancedBall extends Ball {
   
   public isWithinGoalkeeperReach(goalkeeper: Player): boolean {
     const distance = this.calculateDistance(this.position, goalkeeper.position);
-    return distance < 15; // 15 pixels reach for POC
+    return distance < FIFA_CONSTANTS.PLAYER.REACH; // Normalized reach distance
   }
 }
 ```
@@ -1955,10 +3578,15 @@ class TacticalAIResponse {
   }
   
   private setRetreatBehavior(player: Player, team: 'HOME' | 'AWAY'): void {
+<<<<<<< Updated upstream
     const ownHalfCenterX = team === 'HOME' ? 
       POC_CONFIG.FIELD_WIDTH * 0.25 : 
       POC_CONFIG.FIELD_WIDTH * 0.75;
     
+=======
+    const ownHalfCenterX = team === 'HOME' ? 0.25 : 0.75; // Normalized coordinates
+
+>>>>>>> Stashed changes
     // Players retreat but maintain some attacking potential
     const retreatIntensity = player.attributes?.positioning || 0.5; // Use positioning attribute
     
@@ -2025,10 +3653,15 @@ class FIFALaw12GoalkeeperController extends GoalkeeperController {
     // Deliberate passes typically have controlled speed
     return wasInPassingAction && ballSpeed > 50 && ballSpeed < 200;
   }
+<<<<<<< Updated upstream
   
   private recordPassBackViolation(goalkeeper: Player, passer: Player): void {
+=======
+
+  private recordPassBackViolation(goalkeeper: Player, passer: Player, context: DeterministicGameContext): void {
+>>>>>>> Stashed changes
     const violation: PassBackViolation = {
-      timestamp: Date.now(),
+      timestamp: context.gameTime, // Use deterministic game time
       goalkeeper: goalkeeper.id,
       passer: passer.id,
       penaltyAwarded: 'indirect_free_kick'
@@ -2253,25 +3886,7 @@ interface WeatherConditions
   pitchCondition: number;             // 0-1, pitch quality (dry to waterlogged)
 }
 
-interface MatchStatistics
-{
-  possession: [number, number];        // Possession percentage [home, away]
-  shots: [number, number];
-  shotsOnTarget: [number, number];
-  corners: [number, number];
-  fouls: [number, number];             // **PHASE 2 ONLY**
-  cards: [CardEvent[], CardEvent[]];   // **PHASE 2 ONLY**
-  passes: [number, number];            // **PHASE 2 ONLY** - Total passes attempted
-  passAccuracy: [number, number];     // **PHASE 2 ONLY** - Pass completion percentage
-  tackles: [number, number];          // **PHASE 2 ONLY** - Successful tackles
-  interceptions: [number, number];    // Ball interceptions
-  offside: [number, number];          // **PHASE 2 ONLY** - Offside calls
-
-  // **PHASE 2 ONLY** - Advanced statistics
-  heatmaps: PlayerHeatmap[];          // **PHASE 2 ONLY** - Player position data
-  touchMap: BallTouchData[];          // **PHASE 2 ONLY** - Ball touch locations
-  pressureMap: PressureData[];        // **PHASE 2 ONLY** - Defensive pressure zones
-}
+// Reference: see docs/CANONICAL-DEFINITIONS.md for canonical MatchStatistics schema
 ```
 
 #### 3.2.3 Half-Time System Implementation
@@ -3680,23 +5295,265 @@ class Referee
 {
   position: Vector2;
   lineOfSight: Vision;
+  currentWhistle: WhistleState | null;
 
+  // Rule enforcement
   public detectFouls(players: Player[], ball: Ball): Foul[];
   public checkOffside(attackingTeam: Team, ball: Ball): boolean;
   public manageAdvantage(foul: Foul, gameState: GameState): AdvantageDecision;
   public updatePosition(ball: Ball, players: Player[]): void;
+
+  // Whistle mechanics (called by Game Manager)
+  public blowWhistle(type: WhistleType, reason: WhistleReason, context: DeterministicGameContext): WhistleEvent;
+  public updateWhistleState(deltaTime: number): void;
+  public isWhistleActive(): boolean;
+}
+
+interface WhistleState {
+  type: WhistleType;
+  startTime: number;
+  duration: number;
+  isActive: boolean;
+}
+
+enum WhistleType {
+  BRIEF = 'brief',           // 0.5 seconds - restarts, fouls, out of play
+  EXTENDED = 'extended'      // 1.25 seconds - half-time, full-time
+}
+
+interface WhistleEvent {
+  type: WhistleType;
+  timestamp: number;
+  reason: WhistleReason;
+  duration: number;
+}
+
+enum WhistleReason {
+  KICK_OFF = 'kick_off',
+  RESTART_AFTER_GOAL = 'restart_after_goal',
+  BALL_OUT_OF_PLAY = 'ball_out_of_play',
+  FOUL = 'foul',
+  HALF_TIME = 'half_time',
+  FULL_TIME = 'full_time',
+  ADVANTAGE = 'advantage'
+}
+
+interface OutOfPlayEvent {
+  ballPosition: NormalizedPosition;
+  crossingPoint: NormalizedPosition;
+  restartType: 'throw_in' | 'corner_kick' | 'goal_kick';
+  lastTouch: string; // Player ID
 }
 ```
 
-#### 3.5.2 Match Events
+#### 3.5.2 Game Manager Ball Boundary System
+
+The Game Manager acts as the central authority for ball boundary detection and event coordination:
+
+```typescript
+class GameManager {
+  private ball: Ball3D;
+  private referee: Referee;
+  private audioSystem: AudioSystem;
+  private eventBus: GameEventBus;
+  private ballBoundaryDetector: BallBoundaryDetector;
+
+  constructor(gameState: GameState, context: DeterministicGameContext) {
+    this.ballBoundaryDetector = new BallBoundaryDetector();
+    this.eventBus = new GameEventBus();
+    
+    // Subscribe systems to events
+    this.setupEventListeners();
+  }
+
+  public updateGameFrame(deltaTime: number, context: DeterministicGameContext): GameState {
+    // Store previous position for boundary crossing calculation
+    const previousBallPosition = { ...this.ball.position };
+    
+    // Update ball physics
+    this.ball.update(deltaTime);
+    
+    // Check for boundary crossing
+    const outOfPlayEvent = this.ballBoundaryDetector.checkBoundaries(
+      this.ball.position,
+      previousBallPosition,
+      this.ball.lastTouchedBy
+    );
+    
+    if (outOfPlayEvent) {
+      return this.handleBallOutOfPlay(outOfPlayEvent, context);
+    }
+    
+    return this.getCurrentGameState();
+  }
+
+  private handleBallOutOfPlay(event: OutOfPlayEvent, context: DeterministicGameContext): GameState {
+    // 1. Stop ball immediately at boundary
+    this.ball.inPlay = false;
+    this.ball.velocity = { x: 0, y: 0, z: 0 };
+    this.ball.position = event.crossingPoint;
+    
+    // 2. Referee blows whistle
+    const whistleEvent = this.referee.blowWhistle(WhistleType.BRIEF, WhistleReason.BALL_OUT_OF_PLAY, context);
+    
+    // 3. Coordinate system responses via event bus
+    this.eventBus.emit('ballOutOfPlay', event);
+    this.eventBus.emit('whistleBlow', whistleEvent);
+    
+    // 4. Update game state with events
+    return {
+      ...this.getCurrentGameState(),
+      ball: this.ball,
+      events: [...this.events, 
+        { type: 'BALL_OUT_OF_PLAY', timestamp: context.gameTime, data: event },
+        { type: 'WHISTLE', timestamp: context.gameTime, data: whistleEvent }
+      ]
+    };
+  }
+
+  private setupEventListeners(): void {
+    // AI system responds to ball out of play
+    this.eventBus.on('ballOutOfPlay', (event: OutOfPlayEvent) => {
+      this.aiController.handleBallOutOfPlay(event);
+    });
+    
+    // Audio system plays whistle sound
+    this.eventBus.on('whistleBlow', (event: WhistleEvent) => {
+      this.audioSystem.playWhistle(event.type, event.duration);
+    });
+    
+    // UI system shows restart indicators
+    this.eventBus.on('ballOutOfPlay', (event: OutOfPlayEvent) => {
+      this.uiSystem.showRestartIndicator(event.restartType, event.crossingPoint);
+    });
+  }
+}
+
+// Simplified boundary detector as a utility class
+class BallBoundaryDetector {
+  public checkBoundaries(
+    currentPos: NormalizedPosition,
+    previousPos: NormalizedPosition,
+    lastTouchedBy: string
+  ): OutOfPlayEvent | null {
+    
+    // Check touchline boundaries (sides)
+    if (currentPos.x <= 0 || currentPos.x >= 1) {
+      return {
+        ballPosition: currentPos,
+        crossingPoint: this.calculateCrossingPoint(previousPos, currentPos),
+        restartType: 'throw_in',
+        lastTouch: lastTouchedBy
+      };
+    }
+    
+    // Check goal line boundaries (ends)
+    if (currentPos.y <= 0 || currentPos.y >= 1) {
+      const restartType = this.determineGoalLineRestart(currentPos, lastTouchedBy);
+      return {
+        ballPosition: currentPos,
+        crossingPoint: this.calculateCrossingPoint(previousPos, currentPos),
+        restartType,
+        lastTouch: lastTouchedBy
+      };
+    }
+    
+    return null; // Ball still in play
+  }
+
+  private calculateCrossingPoint(previous: NormalizedPosition, current: NormalizedPosition): NormalizedPosition {
+    // Calculate exact point where ball crossed boundary line
+    // Implementation details for line intersection
+    return current; // Simplified for now
+  }
+
+  private determineGoalLineRestart(position: NormalizedPosition, lastTouch: string): 'corner_kick' | 'goal_kick' {
+    // Logic to determine restart type based on which team last touched ball
+    return lastTouch.includes('attacking') ? 'goal_kick' : 'corner_kick';
+  }
+}
+```
+
+#### 3.5.3 Game Event Bus System
+
+The Game Manager uses an event bus to coordinate system responses to ball out of play events:
+
+```typescript
+class GameEventBus {
+  private eventListeners: Map<string, Function[]> = new Map();
+
+  public on(eventType: string, callback: Function): void {
+    if (!this.eventListeners.has(eventType)) {
+      this.eventListeners.set(eventType, []);
+    }
+    this.eventListeners.get(eventType)!.push(callback);
+  }
+
+  public emit(eventType: string, data: any): void {
+    const listeners = this.eventListeners.get(eventType) || [];
+    listeners.forEach(callback => callback(data));
+  }
+
+  public off(eventType: string, callback: Function): void {
+    const listeners = this.eventListeners.get(eventType) || [];
+    const index = listeners.indexOf(callback);
+    if (index > -1) {
+      listeners.splice(index, 1);
+    }
+  }
+}
+
+// System responses to ball out of play events
+class AIController {
+  public handleBallOutOfPlay(event: OutOfPlayEvent): void {
+    // Stop player movement immediately
+    this.stopAllPlayerMovement();
+    
+    // Position players for restart based on type
+    switch (event.restartType) {
+      case 'throw_in':
+        this.positionForThrowIn(event.crossingPoint);
+        break;
+      case 'corner_kick':
+        this.positionForCorner(event.crossingPoint);
+        break;
+      case 'goal_kick':
+        this.positionForGoalKick(event.crossingPoint);
+        break;
+    }
+  }
+}
+
+class AudioSystem {
+  public playWhistle(type: WhistleType, duration: number): void {
+    const audioFile = type === WhistleType.BRIEF ? 'whistle-brief.ogg' : 'whistle-extended.ogg';
+    this.playSound(audioFile, { duration, volume: 0.8 });
+  }
+}
+
+class UISystem {
+  public showRestartIndicator(restartType: string, position: NormalizedPosition): void {
+    // Show UI indicator for restart type at boundary crossing point
+    this.displayIndicator({
+      type: restartType,
+      position: this.convertToPixelCoords(position),
+      duration: 3000 // Show for 3 seconds
+    });
+  }
+}
+```
+
+#### 3.5.4 Match Events
 ```typescript
 enum EventType
 {
   GOAL = 'goal',
-  FOUL = 'foul',                       // **PHASE 2 ONLY**
-  CARD = 'card',                       // **PHASE 2 ONLY**
-  SUBSTITUTION = 'substitution',       // **PHASE 2 ONLY**
-  OFFSIDE = 'offside'                  // **PHASE 2 ONLY**
+  BALL_OUT_OF_PLAY = 'ball_out_of_play',   // Ball crosses boundary
+  WHISTLE = 'whistle',                     // Referee whistle events
+  FOUL = 'foul',                          // **PHASE 2 ONLY**
+  CARD = 'card',                          // **PHASE 2 ONLY**
+  SUBSTITUTION = 'substitution',          // **PHASE 2 ONLY**
+  OFFSIDE = 'offside'                     // **PHASE 2 ONLY**
 }
 
 interface MatchEvent
@@ -3716,62 +5573,352 @@ interface MatchEvent
 
 #### 4.1.1 Server Setup
 ```typescript
-// apps/server/src/VGFServer.ts
-import { VGFServer } from '@vgf/server';
+// apps/server/src/index.ts
+import { Server } from '@volley/vgf/server';
+import { createLogger } from '@volley/logger';
+import express from 'express';
+import { createServer } from 'http';
+import { Redis } from 'ioredis';
+import cors from 'cors';
+import { soccerWorldCupGame } from './game';
 
-const server = new VGFServer(
-{
-  port: process.env.PORT || 3001,
-  storage:
-  {
-    type: 'redis',
-    url: process.env.REDIS_URL
-  },
-  transport:
-  {
-    type: 'socket.io',
-    cors: { origin: process.env.CLIENT_URL }
-  }
+const app = express();
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+
+const httpServer = createServer(app);
+
+const redisClient = new Redis({
+  host: 'localhost',
+  port: 6379,
+  lazyConnect: true,
 });
 
-server.addRuleset(new FootballGameRuleset());
+// VGF handles storage and transport internally
+
+const logger = createLogger({
+  type: 'node',
+  level: 'info',
+  base: { service: 'soccer-manager-world-cup' },
+});
+
+const server = new Server({
+  port: 3000,
+  game: soccerWorldCupGame,
+  // VGF automatically configures Redis storage and Socket.IO transport
+});
+
+server.start();
 ```
 
-#### 4.1.2 Client Integration
+#### 4.1.2 GameRuleset Implementation
 ```typescript
-// apps/client/src/hooks/useVGF.ts
-import { useVGFClient } from '@vgf/client-react';
+// apps/server/src/game.ts
+import type { Game, GameAction } from '@volley/vgf/server';
+import type { GameState } from '../shared/types';
 
-export function useFootballGame()
-{
-  const { state, dispatch, phase } = useVGFClient<GameState, GameAction>();
+const joinMatch: GameAction<GameState> = (ctx, teamName: string) => {
+  // Check if player already joined
+  const existingTeam = ctx.gameState.teams.find(
+    (team) => team.managerId === ctx.playerId
+  );
+  if (existingTeam) return ctx.gameState;
+
+  // Add new team to match
+  return {
+    ...ctx.gameState,
+    teams: [
+      ...ctx.gameState.teams,
+      { 
+        id: ctx.playerId, 
+        name: teamName, 
+        managerId: ctx.playerId,
+        formation: DEFAULT_FORMATION 
+      },
+    ],
+  };
+};
+
+const voiceCommand: GameAction<GameState> = (ctx, command: VoiceCommand) => {
+  const team = ctx.gameState.teams.find(
+    (team) => team.managerId === ctx.playerId
+  );
+  if (!team) return ctx.gameState;
+
+  // Process tactical voice command
+  return {
+    ...ctx.gameState,
+    teams: ctx.gameState.teams.map(t => 
+      t.id === team.id ? { ...t, tacticStyle: command.tacticStyle } : t
+    ),
+  };
+};
+
+export const soccerWorldCupGame = {
+  setup: (): GameState => ({
+    phase: 'lobby',
+    teams: [],
+    match: null,
+    ball: { position: { x: 0.5, y: 0.5, z: 0 }, velocity: { x: 0, y: 0, z: 0 } },
+    gameTime: 0,
+    matchSeed: Math.floor(Math.random() * 1000000),
+  }),
+
+  actions: {
+    joinMatch: { action: joinMatch },
+    voiceCommand: { action: voiceCommand },
+  },
+
+  phases: {
+    lobby: {
+      actions: {
+        startMatch: {
+          action: (ctx) => ({ ...ctx.gameState, phase: 'pre_match' })
+        },
+      },
+      endIf: (ctx) => ctx.gameState.phase === 'pre_match',
+      next: 'pre_match',
+    },
+
+    pre_match: {
+      endIf: (ctx) => ctx.gameState.gameTime >= 30, // 30 seconds pre-match
+      next: 'kick_off',
+      onEnd: (ctx) => {
+        // Initialize match with deterministic context
+        return {
+          ...ctx.gameState,
+          phase: 'kick_off',
+          gameTime: 0,
+          match: initializeMatch(ctx.gameState.teams, ctx.gameState.matchSeed),
+        };
+      },
+    },
+
+    kick_off: {
+      endIf: (ctx) => ctx.gameState.gameTime >= 5,
+      next: 'first_half',
+    },
+
+    first_half: {
+      actions: {
+        // Game Manager processes the game frame and handles ball boundaries automatically
+        processGameFrame: {
+          action: (ctx) => {
+            // Create Game Manager instance from current state
+            const gameManager = GameManager.fromGameState(ctx.gameState);
+            const deterministicContext = createDeterministicContext(ctx.gameState);
+            
+            // Game Manager handles ball physics and boundary detection internally
+            const updatedState = gameManager.updateGameFrame(0.033, deterministicContext); // 30 FPS
+            
+            return updatedState; // Includes any ball out of play events and whistle triggers
+          }
+        },
+        restartPlay: {
+          action: (ctx, restartType: 'throw_in' | 'corner_kick' | 'goal_kick') => {
+            const gameManager = GameManager.fromGameState(ctx.gameState);
+            const deterministicContext = createDeterministicContext(ctx.gameState);
+            
+            // Game Manager coordinates the restart
+            return gameManager.restartPlay(restartType, deterministicContext);
+          }
+        }
+      },
+      endIf: (ctx) => ctx.gameState.gameTime >= 150, // 2.5 minutes = 45 min game time
+      next: 'half_time',
+      onEnd: (ctx) => {
+        // Blow extended whistle for half-time and calculate statistics
+        const whistleEvent: WhistleEvent = {
+          type: WhistleType.EXTENDED,
+          timestamp: ctx.gameState.gameTime,
+          reason: WhistleReason.HALF_TIME,
+          duration: 1.25
+        };
+        
+        return {
+          ...calculateHalfTimeStats(ctx.gameState),
+          events: [...ctx.gameState.events, {
+            type: 'WHISTLE',
+            timestamp: ctx.gameState.gameTime,
+            data: whistleEvent
+          }]
+        };
+      },
+    },
+
+    half_time: {
+      endIf: (ctx) => ctx.gameState.gameTime >= 60, // 1 minute break
+      next: 'second_half',
+    },
+
+    second_half: {
+      actions: {
+        // Real-time gameplay actions
+      },
+      endIf: (ctx) => ctx.gameState.gameTime >= 150, // Another 2.5 minutes
+      next: 'full_time',
+      onEnd: (ctx) => {
+        // Blow extended whistle for full-time
+        const whistleEvent: WhistleEvent = {
+          type: WhistleType.EXTENDED,
+          timestamp: ctx.gameState.gameTime,
+          reason: WhistleReason.FULL_TIME,
+          duration: 1.25
+        };
+        
+        return {
+          ...ctx.gameState,
+          events: [...ctx.gameState.events, {
+            type: 'WHISTLE',
+            timestamp: ctx.gameState.gameTime,
+            data: whistleEvent
+          }]
+        };
+      },
+    },
+
+    full_time: {
+      actions: {
+        newMatch: { 
+          action: (ctx) => ({ ...ctx.gameState, phase: 'lobby' })
+        },
+      },
+      endIf: (ctx) => ctx.gameState.phase === 'lobby',
+      next: 'lobby',
+    },
+  },
+} as const satisfies Game<GameState>;
+```
+
+#### 4.1.3 Client Integration
+```typescript
+// apps/client/src/hooks/VGF.ts - Generated type-safe hooks
+import { getVGFHooks } from '@volley/vgf/client';
+import type { GameState } from '../../shared/types';
+import type { soccerWorldCupGame } from '../../server/game';
+
+// Generate type-safe hooks based on game definition
+export const { useGameState, useDispatchAction, useCurrentPhase } = getVGFHooks<
+  typeof soccerWorldCupGame,
+  GameState
+>();
+
+// Custom hooks for football-specific functionality
+export function useSoccerWorldCup() {
+  const gameState = useGameState();
+  const dispatchAction = useDispatchAction();
+  const currentPhase = useCurrentPhase();
 
   return {
-    gameState: state,
-    sendVoiceCommand: (command: VoiceCommand) => dispatch({ type: 'VOICE_COMMAND', command }),
-    matchPhase: phase
+    gameState,
+    currentPhase,
+    sendVoiceCommand: (command: VoiceCommand) => 
+      dispatchAction('voiceCommand', command),
+    joinMatch: (teamName: string) => 
+      dispatchAction('joinMatch', teamName),
+    startMatch: () => 
+      dispatchAction('startMatch'),
   };
 }
 ```
 
-### 4.2 State Synchronisation
-
-#### 4.2.1 Delta Updates
+#### 4.1.4 VGF Client Setup
 ```typescript
-interface GameStateDelta
-{
-  timestamp: number;
-  playerPositions?: Map<string, Vector2>;
-  ballPosition?: Vector2;
-  score?: Score;
-  events?: MatchEvent[];
+// apps/client/src/App.tsx
+import React from 'react';
+import { VGFClient } from '@volley/vgf/client';
+import type { GameState } from '../shared/types';
+import { GameComponent } from './GameComponent';
+
+const client = new VGFClient({
+  serverUrl: 'http://localhost:3000',
+  userId: `manager-${Math.random().toString(36).substr(2, 9)}`,
+});
+
+function App() {
+  return (
+    <VGFClient.Provider client={client}>
+      <GameComponent />
+    </VGFClient.Provider>
+  );
 }
+
+export default App;
 ```
 
-#### 4.2.2 Conflict Resolution
-- Server-authoritative game state
-- Client prediction with server reconciliation
-- Rollback for incorrect predictions
+### 4.2 VGF State Synchronisation
+
+#### 4.2.1 Automatic State Broadcasting
+
+VGF handles state synchronisation automatically:
+
+1. **Action Dispatch**: Client calls `dispatchAction('actionName', ...args)`
+2. **Server Processing**: VGF calls your GameAction function with current state
+3. **State Update**: Your action returns new state (immutable update)
+4. **Broadcasting**: VGF broadcasts updated state to all connected clients
+5. **Client Updates**: React components re-render with new state via `useGameState()`
+
+```typescript
+// No manual synchronisation required - VGF handles it automatically
+const voiceCommand: GameAction<GameState> = (ctx, command: VoiceCommand) => {
+  // Process command and return new state
+  return {
+    ...ctx.gameState,
+    teams: ctx.gameState.teams.map(team => 
+      team.managerId === ctx.playerId 
+        ? { ...team, tacticStyle: command.tacticStyle }
+        : team
+    ),
+  };
+  // VGF automatically broadcasts this new state to all clients
+};
+```
+
+#### 4.2.2 Real-Time Game Loop Integration
+
+For continuous gameplay (ball movement, player AI), we integrate with VGF phases:
+
+```typescript
+// Real-time updates handled in phase onEnd lifecycle
+first_half: {
+  endIf: (ctx) => ctx.gameState.gameTime >= 150, // 2.5 minutes
+  next: 'half_time',
+  onEnd: (ctx) => {
+    // Update game state with latest positions, events, etc.
+    const updatedState = processGameFrame(ctx.gameState);
+    return updatedState; // Automatically synced to all clients
+  },
+},
+```
+
+#### 4.2.3 VGF Architecture Principles
+
+VGF provides a complete multiplayer framework with these guarantees:
+
+- **Server-authoritative**: All game state changes happen on the VGF server
+- **Deterministic execution**: Actions execute in deterministic order with server timestamps
+- **Automatic synchronization**: State changes automatically broadcast to all clients
+- **Phase-based lifecycle**: Game progresses through defined phases with clear transitions
+- **Built-in persistence**: Game state automatically persists across sessions
+- **Real-time updates**: Sub-100ms action processing and state synchronization
+
+#### 4.2.4 VGF Game Definition Structure
+
+```typescript
+interface Game<TGameState> {
+  setup(): TGameState;                    // Initial game state factory
+  actions: Record<string, GameAction>;   // Global actions available in any phase
+  phases: Record<string, Phase>;         // Phase-specific logic and transitions
+}
+
+interface Phase {
+  actions?: Record<string, GameAction>;  // Phase-specific actions
+  endIf?: (ctx: ActionContext) => boolean; // Auto-transition condition
+  next?: string | ((ctx: ActionContext) => string); // Next phase
+  onStart?: (ctx: ActionContext) => GameState; // Phase entry logic
+  onEnd?: (ctx: ActionContext) => GameState;   // Phase exit logic
+}
+```
 
 ## 5. Audio System Architecture
 
@@ -4043,15 +6190,7 @@ interface Match
   statistics: MatchStatistics;
 }
 
-interface MatchStatistics
-{
-  possession: [number, number];
-  shots: [number, number];
-  shotsOnTarget: [number, number];
-  corners: [number, number];
-  fouls: [number, number];
-  cards: [CardEvent[], CardEvent[]];
-}
+// Reference: see docs/CANONICAL-DEFINITIONS.md for canonical MatchStatistics schema
 ```
 
 ## 9. Security and Performance
@@ -4084,7 +6223,41 @@ interface PerformanceMetrics
 
 ## 10. Testing Strategy
 
-### 10.1 POC Acceptance Tests (Priority 1 - Critical)
+### 10.1 Testing Architecture Overview
+
+**Testing Framework Stack:**
+- **Server**: Jest with VGF testing utilities
+- **Client**: Vitest with React Testing Library
+- **Integration**: Custom VGF test harness for multiplayer scenarios
+- **E2E**: Playwright for full game flow testing
+- **Performance**: Custom benchmarking with deterministic timing
+
+**VGF-Specific Testing Patterns:**
+```typescript
+// VGF Game Testing Utilities
+import { createTestGame, TestGameClient } from '@volley/vgf/test';
+
+class SoccerTestHarness {
+  private testGame: TestGameClient<GameState>;
+  
+  constructor() {
+    this.testGame = createTestGame(soccerWorldCupGame);
+  }
+  
+  // Simulate multiplayer actions deterministically
+  async simulatePlayerAction(playerId: string, action: string, ...args: any[]) {
+    return this.testGame.dispatchAction(playerId, action, ...args);
+  }
+  
+  // Verify state synchronization across clients
+  assertStateSynchronization(expectedState: Partial<GameState>) {
+    const actualState = this.testGame.getGameState();
+    expect(actualState).toMatchObject(expectedState);
+  }
+}
+```
+
+### 10.2 POC Acceptance Tests (Priority 1 - Critical)
 
 **These tests validate PRD POC acceptance criteria and must pass for POC success.**
 
@@ -4264,7 +6437,150 @@ describe('POC FireTV Performance', () => {
 });
 ```
 
-### 10.2 Advanced Testing Strategy (Phase 2+)
+#### 10.2.4 VGF Multiplayer Integration Tests
+
+```typescript
+describe('VGF Multiplayer Scenarios', () => {
+  let testHarness: SoccerTestHarness;
+  
+  beforeEach(() => {
+    testHarness = new SoccerTestHarness();
+  });
+  
+  test('should synchronize game state between two players', async () => {
+    // Player 1 joins and creates team
+    await testHarness.simulatePlayerAction('player1', 'joinMatch', 'Arsenal FC');
+    
+    // Player 2 joins
+    await testHarness.simulatePlayerAction('player2', 'joinMatch', 'Barcelona FC');
+    
+    // Verify both players see the same game state
+    const gameState = testHarness.testGame.getGameState();
+    expect(gameState.teams).toHaveLength(2);
+    expect(gameState.teams[0].name).toBe('Arsenal FC');
+    expect(gameState.teams[1].name).toBe('Barcelona FC');
+    
+    // Start match from player 1
+    await testHarness.simulatePlayerAction('player1', 'startMatch');
+    
+    // Verify phase transition for both players
+    testHarness.assertStateSynchronization({ phase: 'pre_match' });
+  });
+  
+  test('should handle simultaneous voice commands deterministically', async () => {
+    // Set up match with two players
+    await testHarness.simulatePlayerAction('player1', 'joinMatch', 'Team A');
+    await testHarness.simulatePlayerAction('player2', 'joinMatch', 'Team B');
+    await testHarness.simulatePlayerAction('player1', 'startMatch');
+    
+    // Simulate simultaneous voice commands
+    const command1 = testHarness.simulatePlayerAction('player1', 'voiceCommand', { tacticStyle: 'ATTACKING' });
+    const command2 = testHarness.simulatePlayerAction('player2', 'voiceCommand', { tacticStyle: 'DEFENSIVE' });
+    
+    await Promise.all([command1, command2]);
+    
+    // Verify deterministic execution order
+    const gameState = testHarness.testGame.getGameState();
+    const team1 = gameState.teams.find(t => t.managerId === 'player1');
+    const team2 = gameState.teams.find(t => t.managerId === 'player2');
+    
+    expect(team1?.tacticStyle).toBe('ATTACKING');
+    expect(team2?.tacticStyle).toBe('DEFENSIVE');
+  });
+  
+  test('should maintain determinism with seeded match', async () => {
+    // Create multiple test runs with same seed
+    const results = [];
+    
+    for (let run = 0; run < 5; run++) {
+      const harness = new SoccerTestHarness();
+      
+      // Set up identical match conditions
+      await harness.simulatePlayerAction('player1', 'joinMatch', 'Team A');
+      await harness.simulatePlayerAction('player2', 'joinMatch', 'Team B');
+      
+      // Use same match seed
+      const gameState = harness.testGame.getGameState();
+      gameState.matchSeed = 12345;
+      
+      // Simulate game frame
+      await harness.simulatePlayerAction('player1', 'processGameFrame');
+      
+      results.push(harness.testGame.getGameState());
+    }
+    
+    // All results should be identical
+    for (let i = 1; i < results.length; i++) {
+      expect(results[i]).toEqual(results[0]);
+    }
+  });
+  
+  test('should handle player disconnection gracefully', async () => {
+    await testHarness.simulatePlayerAction('player1', 'joinMatch', 'Team A');
+    await testHarness.simulatePlayerAction('player2', 'joinMatch', 'Team B');
+    
+    // Start match
+    await testHarness.simulatePlayerAction('player1', 'startMatch');
+    
+    // Simulate player 2 disconnection
+    testHarness.testGame.disconnectPlayer('player2');
+    
+    // Player 1 should still be able to continue
+    await testHarness.simulatePlayerAction('player1', 'voiceCommand', { tacticStyle: 'BALANCED' });
+    
+    // Game should continue in single-player mode or pause
+    const gameState = testHarness.testGame.getGameState();
+    expect(gameState.teams[0].tacticStyle).toBe('BALANCED');
+  });
+});
+
+describe('VGF Phase Lifecycle Tests', () => {
+  let testHarness: SoccerTestHarness;
+  
+  beforeEach(() => {
+    testHarness = new SoccerTestHarness();
+  });
+  
+  test('should transition through all match phases correctly', async () => {
+    // Set up players
+    await testHarness.simulatePlayerAction('player1', 'joinMatch', 'Team A');
+    await testHarness.simulatePlayerAction('player2', 'joinMatch', 'Team B');
+    
+    // Start match and verify phase progression
+    testHarness.assertStateSynchronization({ phase: 'lobby' });
+    
+    await testHarness.simulatePlayerAction('player1', 'startMatch');
+    testHarness.assertStateSynchronization({ phase: 'pre_match' });
+    
+    // Simulate time progression through phases
+    const gameState = testHarness.testGame.getGameState();
+    gameState.gameTime = 35; // Should trigger kick_off phase
+    
+    // VGF should automatically transition based on endIf conditions
+    expect(gameState.phase).toBe('kick_off');
+  });
+  
+  test('should execute onEnd lifecycle hooks correctly', async () => {
+    await testHarness.simulatePlayerAction('player1', 'joinMatch', 'Team A');
+    await testHarness.simulatePlayerAction('player2', 'joinMatch', 'Team B');
+    
+    // Progress to first half and simulate end
+    const gameState = testHarness.testGame.getGameState();
+    gameState.phase = 'first_half';
+    gameState.gameTime = 150; // Should trigger half-time
+    
+    // Verify whistle event was created in onEnd
+    const events = gameState.events.filter(e => e.type === 'WHISTLE');
+    expect(events.length).toBeGreaterThan(0);
+    
+    const halfTimeWhistle = events.find(e => e.data?.reason === 'HALF_TIME');
+    expect(halfTimeWhistle).toBeDefined();
+    expect(halfTimeWhistle?.data?.duration).toBe(1.25);
+  });
+});
+```
+
+### 10.3 Advanced Testing Strategy (Phase 2+)
 
 #### 10.2.1 AI System Tests
 ```typescript
@@ -4581,6 +6897,131 @@ describe('Physics-AI Integration', () =>
     expect(bestPlayer.aiState.hasBestPossession).toBe(true);
   });
 });
+```
+
+### 10.4 Testing Commands and Scripts
+
+**Package.json Test Scripts:**
+```json
+{
+  "scripts": {
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "pnpm --filter \"*\" test:unit",
+    "test:integration": "pnpm --filter @game/server test:integration",
+    "test:e2e": "pnpm --filter @game/client test:e2e", 
+    "test:performance": "pnpm --filter @game/server test:performance",
+    "test:coverage": "pnpm --filter \"*\" test:coverage",
+    "test:vgf": "pnpm --filter @game/server test:vgf-multiplayer",
+    "test:watch": "pnpm --filter \"*\" test --watch",
+    "test:ci": "pnpm test && pnpm test:e2e && pnpm test:performance"
+  }
+}
+```
+
+**Server Test Configuration (Jest):**
+```javascript
+// apps/server/jest.config.js
+export default {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src', '<rootDir>/tests'],
+  testMatch: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/types/**/*.ts'
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80
+    }
+  },
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts']
+};
+```
+
+**Client Test Configuration (Vitest):**
+```javascript
+// apps/client/vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+    coverage: {
+      reporter: ['text', 'html', 'lcov'],
+      threshold: {
+        global: {
+          branches: 80,
+          functions: 80,
+          lines: 80,
+          statements: 80
+        }
+      }
+    }
+  }
+});
+```
+
+**E2E Test Configuration (Playwright):**
+```typescript
+// apps/client/playwright.config.ts
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './e2e',
+  timeout: 30 * 1000,
+  expect: { timeout: 5000 },
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
+  use: {
+    baseURL: 'http://localhost:3001',
+    trace: 'on-first-retry',
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
+  webServer: {
+    command: 'pnpm dev',
+    url: 'http://localhost:3001',
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
+**Test Execution Examples:**
+```bash
+# Run all tests
+pnpm test
+
+# Run tests with coverage
+pnpm test:coverage
+
+# Run only VGF multiplayer tests
+pnpm test:vgf
+
+# Run performance tests
+pnpm test:performance
+
+# Run E2E tests against local development server
+pnpm test:e2e
+
+# Run tests in watch mode during development
+pnpm test:watch
+
+# CI pipeline test execution
+pnpm test:ci
 ```
 
 ## 11. Asset Requirements and AI Prompts
@@ -5026,4 +7467,4 @@ interface HealthStatus
 - [ ] Beta testing and user feedback integration
 - [ ] Production deployment and launch
 
-This Technical Design Document provides the comprehensive technical foundation for implementing Super Soccer Manager: Pro Edition, covering all aspects from system architecture to asset creation prompts for AI tools.
+This Technical Design Document provides the comprehensive technical foundation for implementing Soccer Manager: World Cup Edition, covering all aspects from system architecture to asset creation prompts for AI tools.

@@ -1,8 +1,10 @@
-# Product Requirements Document: Super Soccer Manager: Pro Edition
+# Product Requirements Document: Soccer Manager: World Cup Edition
+
+> **Note**: This document references canonical definitions in [docs/CANONICAL-DEFINITIONS.md](./CANONICAL-DEFINITIONS.md) for schemas, constants, and mappings.
 
 ## 1. Executive Summary
 
-**Product Name**: Super Soccer Manager: Pro Edition
+**Product Name**: Soccer Manager: World Cup Edition
 **Version**: 1.0
 **Date**: 12 August 2025
 
@@ -18,7 +20,33 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 ## 2. Product Overview
 
-### 2.1 Target Audience
+### 2.1 System Architecture Overview
+
+**Top-Level Architecture**: The application follows a hierarchical architecture with three main components:
+
+```
+App Manager (Top Level)
+├── FrontEnd Manager
+│   ├── Title Screen
+│   ├── Game Selection
+│   ├── Team Customisation
+│   └── Settings & Options
+└── Game Manager
+    ├── PreMatch Phase
+    ├── Kick Off Phase 
+    ├── First Half Phase
+    ├── Half Time Phase
+    ├── Second Half Phase
+    └── Full Time Phase
+```
+
+**App Manager**: Handles the current global state such as showing the front end or playing the game, or something else we will add later. This is the top level of the application.
+
+**FrontEnd Manager**: This major class will show things like the title screen and also allow users to select what type of game they want to play, team customisation, etc.
+
+**Game Manager**: This is what will run the game of football. There are multiple states it will need to handle, managing game state transitions, player positioning, and real-time match events.
+
+### 2.2 Target Audience
 - **Primary**: Football enthusiasts aged 16-45 who enjoy tactical gameplay
 - **Secondary**: Accessibility gaming community seeking voice-controlled experiences
 - **Tertiary**: Casual sports game players looking for innovative mechanics
@@ -97,7 +125,127 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Distribution Speed**: Quick distribution (throw/roll) maintains attacking momentum, long distribution (drop kick/punt) creates counter-attack opportunities
 - **Defensive Leadership**: Goalkeeper organises defensive line and communicates tactical adjustments
 
-### 3.1 Formation System (Phase 2)
+### 3.1 Match Phase System
+
+#### 3.1.1 Game Manager States
+
+The Game Manager orchestrates matches through six distinct phases, each with specific behaviours and transition conditions:
+
+**PreMatch Phase**:
+- Players walk onto pitch and take their positions
+- Crowd from both teams will be cheering on their teams
+- Commentary will be talking about both teams and hoping for a good game
+- The side of the pitch the teams will be on is selected at random
+- Duration: 30-45 seconds real-time
+
+**Kick Off Phase**:
+- One team selected randomly for initial kick-off
+- All players positioned in regulation kick-off formation
+- Ball placed at centre spot, players await referee whistle
+- Transition trigger: Referee whistle blow
+
+**First Half Phase**:
+- Active gameplay for 45 minutes game time (2.25 minutes real-time)
+- Kicking-off team initiates play with first ball touch
+- Full football rules active (throw-ins, corners, goal kicks)
+- Stoppage time added for significant interruptions
+
+**Half Time Phase**:
+- Triggered after 45 minutes + stoppage time
+- Players walk off pitch (brief transition animation)
+- Statistics display for first half performance
+- Duration: Maximum 1 minute real-time
+- Teams switch sides for second half
+
+**Second Half Phase**:
+- Team that didn't kick-off first half now kicks off
+- Active gameplay for second 45 minutes game time
+- Identical rules and mechanics to first half
+- Additional stoppage time calculated independently
+
+**Full Time Phase**:
+- Final whistle after 90 minutes + total stoppage time
+- Match statistics and final score display
+- Player ratings and key match events summary
+- Transition back to Frontend Manager for next action
+
+### 3.2 FIFA-Compliant Pitch System
+
+#### 3.2.1 Official FIFA Pitch Standards
+
+Soccer Manager: World Cup Edition implements FIFA-compliant pitch markings to ensure authentic football simulation. All dimensions are based on FIFA Laws of the Game for professional football.
+
+**Standard Pitch Dimensions**:
+- **Length**: 110 metres (FIFA maximum allowed, range: 100-110m)
+- **Width**: 68 metres (FIFA standard, range: 64-75m)
+
+**Goal Specifications**:
+- **Width**: 7.32 metres (8 yards)
+- **Height**: 2.44 metres (8 feet) 
+- **Post Width**: Maximum 12 centimetres (5 inches)
+
+**Penalty Area (18-yard box)**:
+- **Depth**: 16.5 metres (18 yards from goal line)
+- **Width**: 40.32 metres (44 yards total width)
+
+**Goal Area (6-yard box)**:
+- **Depth**: 5.5 metres (6 yards from goal line)
+- **Width**: 18.32 metres (20 yards total width)
+
+**Circle and Arc Specifications**:
+- **Center Circle**: 9.15 metres radius (10 yards)
+- **Penalty Arc**: 9.15 metres radius (10 yards, extends outside penalty area)
+- **Corner Arc**: 1 metre radius (1 yard)
+
+**Spot Positioning**:
+- **Penalty Spot**: 11 metres from goal line (12 yards)
+- **Center Spot**: Pitch center for kick-off
+
+#### 3.1.2 Visual Implementation Standards
+
+**Proportional Accuracy**: All pitch markings maintain accurate proportions regardless of screen size or resolution, ensuring consistent gameplay experience across devices.
+
+**Quality Standards**:
+- Line markings use FIFA-compliant white colour (#FFFFFF)
+- Consistent line width throughout all markings
+- Accurate measurement ratios maintained at all zoom levels
+- Smooth rendering of curved elements (circles, arcs)
+
+**Formation Editor Tool Integration**: The Formation Editor Tool uses identical FIFA specifications, ensuring formations designed in the editor translate accurately to match simulation.
+
+### 3.3 Ball Physics System
+
+#### 3.3.1 3D Physics with 2D Presentation
+
+**Core Approach**: The ball uses full 3D physics simulation while maintaining 2D top-down visual presentation through clever visual techniques.
+
+**3D Physics Properties**:
+- **Height (Z-axis)**: Ball maintains altitude value for realistic trajectory simulation
+- **Gravity**: Constant downward acceleration affects ball height
+- **Air Resistance**: Height-dependent drag affects horizontal velocity
+- **Bounce Physics**: Realistic bounce behaviour when ball contacts ground
+- **Spin Effects**: Ball rotation affects trajectory and bounce characteristics
+
+**2D Visual Presentation**:
+- **Scaling Illusion**: Ball sprite scales larger when at higher altitudes (up to 130% max size)
+- **Drop Shadow**: Dynamic shadow beneath ball indicates height and creates depth perception
+- **Shadow Properties**: Shadow grows larger and becomes more diffuse with increased height
+- **Colour Variation**: Ball becomes slightly brighter at higher altitudes
+
+**Landing Position Calculation**:
+```typescript
+interface BallTrajectory {
+  currentPosition: Vector3;  // x, y, height
+  velocity: Vector3;         // velocity in all three dimensions
+  landingPosition: Vector2;  // predicted ground contact point
+  timeToLanding: number;     // seconds until ball hits ground
+  gridSquare: string;        // formation grid cell ("x12_y8") where ball will land
+}
+```
+
+**Formation Integration**: When the ball is kicked, we will calculate the landing position. This position will let us compute the grid square (from the formation editing tool) that the ball will land in. The players from both teams will use that square (or cell) to determine what position they should be in according to the formation data.
+
+### 3.4 Formation System (Phase 2)
 
 **Future Implementation**: A developer-only Formation Editor Tool will be delivered in Phase 2 to enable sophisticated tactical AI positioning. See `docs/FET-TDD.md` for complete technical specifications.
 
@@ -157,12 +305,46 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 - **Starting XI**: 11 players in chosen formation
 - **Substitutes**: 5 substitute players available
 - **Player Roles**: Goalkeeper, Defenders, Midfielders, Attackers
-- **Sub-roles**: Centre-back, full-back, wing-back, defensive midfielder, attacking midfielder, winger, striker
+
+**Detailed Sub-Role Taxonomy**:
+
+**Defensive Sub-Roles**:
+- **Centre-Back (CB)**: Central defensive positioning, aerial dominance, last line of defence
+- **Sweeper (SW)**: Deep-lying defender who covers behind defensive line, rare in modern football
+- **Full-Back (FB)**: Wide defensive positions (left-back/right-back), defensive stability with occasional attacking support
+- **Wing-Back (WB)**: Advanced full-backs with significant attacking responsibilities, operate as wide midfielders in possession
+- **Attacking Wing-Back**: Modern full-back variant prioritising overlapping runs and crossing delivery
+
+**Midfield Sub-Roles**:
+- **Defensive Midfielder (DM/CDM)**: Shield defence, break up play, simple distribution
+- **Central Midfielder (CM)**: Box-to-box play, balanced attacking and defensive contribution
+- **Attacking Midfielder (AM/CAM)**: Creative hub, through balls, support for strikers
+- **Wide Midfielder (LM/RM)**: Patrol flanks, crossing, tracking opposing full-backs
+- **Winger**: Pace-based wide players focusing on dribbling, crossing, and cutting inside
+- **Inside Forward**: Wingers who cut inside to central areas for shooting opportunities
+- **Playmaker**: Deep-lying creative midfielder dictating tempo and long-range passing
+
+**Attacking Sub-Roles**:
+- **Striker (ST)**: Primary goal threat, penalty area positioning, clinical finishing
+- **Target Man**: Physical striker holding up play, aerial ability, bringing others into play
+- **Poacher**: Instinctive finisher specialising in goal-scoring opportunities in the box
+- **False 9**: Dropping deep from striker position to create space and link play
+- **Supporting Striker (SS)**: Secondary striker supporting main striker, creative contribution
+- **Attacking Winger**: Wide attackers primarily focused on pace, dribbling, and goal-scoring from wide areas
 
 #### 3.2.2 Player Attributes System
 **Rating Scale**: 0.0-10.0 scale for all attributes
 **Overall Rating**: Comprehensive player rating summarising overall ability
-**Team Captain**: Designated captain (typically highest-rated player) with leadership bonuses
+
+**Team Captain Leadership System**:
+- **Captain Selection**: Designated captain (typically highest-rated player) with leadership bonuses
+- **Leadership Influence**: Captain provides team-wide bonuses during match situations
+- **Morale Boost**: +5% attribute effectiveness for all teammates within 0.15 normalized distance of captain
+- **Pressure Resistance**: Captain receives +2.0 composure bonus in high-pressure situations (penalty area, final minutes)
+- **Tactical Communication**: Captain can override individual player positioning by up to 10% for tactical adjustments
+- **Comeback Inspiration**: When team is losing, captain provides +10% stamina regeneration to all teammates
+- **Set Piece Authority**: Captain takes priority for penalty kicks and free kicks when in range
+- **Disciplinary Leadership**: Captain's presence reduces likelihood of teammate misconduct by 15%
 
 **Physical Attributes**:
 - Pace (sprint speed)
@@ -245,57 +427,165 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 ### 3.3 Voice Command System (Out of Scope for POC)
 
-**Future Implementation**: Voice commands will be the primary interface for tactical control in the full game. Commands will include tactical adjustments ("Defend", "Attack"), positional instructions ("Push up", "Drop back"), and action commands ("Shoot", "Cross").
+**Future Implementation**: Voice commands will be the primary interface for tactical control in the full game, allowing natural language tactical instructions during live gameplay.
 
-**POC Approach**: AI teams will operate autonomously without voice input. Basic tactical behaviours will be pre-programmed to demonstrate the foundation for voice-controlled gameplay.
+#### 3.3.1 Core Command Categories
 
-*Note: Voice command specification and implementation details will be documented in Phase 2 planning.*
+**Tactical Style Commands**:
+- **"Defend"**: Team adopts defensive posture, players rarely venture out of own half, making it difficult for opposition to score but also difficult for user's team to score
+- **"Balance"**: Team maintains balanced approach, searching for scoring opportunities without leaving defense vulnerable
+- **"Attack"**: Team adopts aggressive attacking posture, players venture into opposition half to score but become vulnerable defensively
 
-### 3.4 AI Behaviour System
+**Positional Awareness Commands**:
+- **"Watch the left!"**: Team increases defensive attention to left flank, adjusting formation to cover left-side attacks
+- **"Watch the right!"**: Team increases defensive attention to right flank, adjusting formation to cover right-side attacks
 
-#### 3.4.1 Player Intelligence (All Players)
-- **Attribute-Based Decision Making**: Actions influenced by player statistics
-- **Role-Specific Behaviour**: Position-appropriate default actions
-- **Team Cohesion**: Coordinated movement and positioning
-- **Fatigue Management**: Performance degradation over match duration
+**Immediate Action Commands**:
+- **"Shoot!"**: Ball possessor attempts immediate shot on goal regardless of position or angle
+- **"Close him down!"**: Nearest appropriate player aggressively pressures opponent ball carrier
+- **"Get it up the pitch!"**: Ball possessor kicks ball upfield (potentially out of bounds) to relieve pressure or run down clock
 
-#### 3.4.2 Formation AI (All Players)
-- **Dynamic Positioning**: Players maintain formation structure
-- **Defensive Shape**: Organised defensive lines and covering
-- **Attacking Movement**: Coordinated forward runs and support play
-- **Transition Play**: Swift changes between attacking and defending phases
+#### 3.3.2 Command Processing Pipeline
 
-#### 3.4.3 AI Opponent System (Single-Player Mode)
-- **Difficulty Levels**: Beginner, Amateur, Professional, World Class
-- **Tactical Awareness**: AI responds to player's tactical changes
-- **Adaptive Behaviour**: AI learns from player patterns during match
-- **Realistic Decision Making**: AI makes mistakes based on difficulty level
-- **Counter-Tactics**: AI adjusts formation and style to counter player strategy
+```typescript
+interface VoiceCommand {
+  phrase: string;           // Raw speech input
+  confidence: number;       // 0.0-1.0 recognition confidence
+  commandType: CommandType; // Tactical, Positional, Action
+  gameContext: GameContext; // When command was issued
+  validationResult: boolean; // Whether command is contextually appropriate
+}
 
-### 3.5 Match Officiating System
+enum CommandType {
+  TACTICAL_STYLE = 'tactical_style',     // "Defend", "Attack", "Balance"
+  POSITIONAL_ALERT = 'positional_alert', // "Watch the left/right"
+  IMMEDIATE_ACTION = 'immediate_action',  // "Shoot", "Close him down", "Get it up the pitch"
+}
+```
 
-#### 3.5.1 Referee Implementation
+**Command Context Validation**: Commands are validated against current game state. For example:
+- "Shoot!" only valid when user's team has ball possession
+- "Close him down!" only valid when opposition has ball possession
+- Tactical style changes valid at any time but may take time to implement
+
+**Natural Language Processing**: System interprets variations and similar phrases:
+- "Defend" variations: "Fall back", "Defend deep", "Protect the goal"
+- "Attack" variations: "Push forward", "Go on the attack", "Get forward"
+- "Shoot" variations: "Take the shot", "Have a go", "Strike it"
+
+**POC Approach**: AI teams will operate autonomously without voice input. Basic tactical behaviours corresponding to "Defend", "Balance", and "Attack" styles will be pre-programmed to demonstrate the foundation for voice-controlled gameplay.
+
+*Note: Complete voice command specification and natural language processing details will be documented in Phase 2 planning.*
+
+### 3.5 Player Positioning Algorithm
+
+#### 3.5.1 Multi-Factor Positioning System
+
+The players will use a number of factors to determine their *desired* position. The AI will calculate each factor and each factor will be weighted and then summed to determine the final desired position. Here are the factors:
+
+**Factor 0: Loose Ball Priority**
+Any time the ball is not in possession, the closest player to it from a team will aim to take possession. The actions the player takes once taking possession will depend on the circumstances. If a defender takes possession in his teams goal area, he will try and pass to a team mate further up the pitch or he will just try and launch it upfield so the opposition can't score. An attacking player will aim to take possession in the opposition teams goal area to try a shot on goal or pass to an onside team mate to try and score a goal.
+
+**Factor 1: Formation Data Priority**
+Based on the position of the ball on the pitch, every player will have a position that they should be in. The exception is for the ball possessor who, according to their characteristics, will try to run upfield or pass to a team mate in a better position. Note: we need to calculate the 'betterness' of team mates we can pass to and determine the best one.
+
+
+#### 3.5.2 Goal Keeper Positioning
+
+The goal keeper position should be calculated by drawing a line from the centre point of the goal to the ball. The distance from the mouth of the goal that the keeper should position himself along this line is computed by the characteristics of the player (from his stats).
+
+### 3.6 AI Behaviour System
+
+#### 3.6.1 Ball Passing
+
+Football is a team sport and players will try and pass to team mates who are in a better position.
+
+Intelligent players will try and make through balls for their team mates who are in or running towards the opposition goal area.
+
+Defensive players will try and tackle opponents and pass the ball away to another team mate or into space as quickly as possible when they are close to their own goal. Mostly they will do medium to long range passes or head the ball away from goal. They may join in an attack and try to score goals too when their team is in an attacking posture.
+
+Midfield players are good mix of defending and attacking. They will typically try and stop the opposition getting too close to the defence and will also try and set up attacks by passing the ball upfield unless there are no options in which case they may play the ball sideways or back to their defence. They are usually good at heading the ball too.
+
+Wingers will patrol the flanks of the pitch and be involved in defence or attack. Once in possession they will run up and try a cross into the area or a shot on goal.
+
+Strikers will aim to get into goal scoring positions and score goals whenever they can. They are shit at defending most of the time. They will take shots on goal, cross the ball into the opposition area, head the ball towards goal etc.
+
+#### 3.6.2 Player Action
+
+For ball possessors who are not the goal keeper, we will run a check to determine the best course of action. We will analyse the following:
+- If there is space ahead of the player to run towards the opposition goal
+- If there is a player in the opposition penalty box we will attempt to pass to them via a cross/whipped pass
+
+### 3.7 Player Kick Types
+
+- Regular Pass: The most basic pass to a teammate. This is along the ground and can be long or short.
+- Lobbed Pass: Sends the ball through the air to a target player.
+- Through Ball: Threads the ball through the defense for a teammate to run onto.
+- Driven Pass: Used to connect plays from defense to attack or to find a striker in the box from the wing. Requires a good angle toward the receiver.
+- Cross also known as a whipped pass: A type of cross with added curve. Most often completed successfully by players with high stats and are attacking minded. Usually carried out from the wing to send the ball towards the goal area for a waiting striker to attempt a shot on goal.
+
+### 3.8 The Ball
+
+While the game will be presented in 2D, the ball will be using 3D physics of sorts. It will use 2D scaling for the sprite so it appears bigger when in the air to give the illusion it's above the ground. A drop shadow will add to this illusion.
+
+When the ball is kicked, we will calculate the landing position. This position will let us compute the grid square (from the formation editing tool) that the ball will land in. The players from both teams will use that square (or cell) to determine what position they should be in according to the formation data.
+
+### 3.9 In Game Head Up Display (HUD)
+
+This displays the current score, the names of the teams and the current time. It will also bring up text in very large letters saying "GOAL!" when a goal is scored. It will display text in not-so-large letters for kick off (with text for 1st or second half), free kicks, throw ins and penalties.
+
+### 3.10 Match Officiating System
+
+#### 3.10.1 Referee Implementation
 - **Positioned Referee**: Virtual referee with line-of-sight mechanics
 - **Foul Detection**: Automatic recognition of illegal challenges
 - **Advantage Rule**: Allow play to continue when beneficial
 - **Card System**: Yellow and red card disciplinary actions
 
-#### 3.5.2 Assistant Referees
+#### 3.10.2 Assistant Referees
 - **Offside Detection**: Automated offside violation recognition
 - **Ball Out of Play**: Touchline and goal line decisions
 - **Foul Flag**: Secondary official input for referee decisions
 
-#### 3.5.3 Match Flow Control
-**Whistle Usage**:
-- Match start and restart after goals
-- Half-time and full-time
-- Fouls and misconduct
-- Ball out of play (when required)
-- Advantage situations
+#### 3.10.3 Match Flow Control
+**Comprehensive Whistle Usage Situations**:
 
-### 3.6 Match Rules Implementation
+**Brief Whistle (0.5 seconds)**:
+- **Match Start**: Initial kick-off and second half kick-off
+- **Goal Scored**: Immediate whistle when ball completely crosses goal line
+- **Ball Out of Play**: Touchline crossings (throw-ins), goal line crossings (corners/goal kicks)
+- **Restart Signals**: Resuming play after throw-ins, corner kicks, goal kicks
+- **Foul Committed**: Stopping play for direct/indirect free kicks (Phase 2)
+- **Offside Violation**: Flagged offside situations (Phase 2)
+- **Misconduct**: Yellow card and red card incidents (Phase 2)
+- **Substitution Complete**: Player replacement finalised (Phase 2)
+- **Equipment Issues**: Player equipment adjustments or injuries (Phase 2)
 
-#### 3.6.1 POC Minimal Ruleset
+**Extended Whistle (1.25 seconds)**:
+- **Half-Time**: End of first 45 minutes plus stoppage time
+- **Full-Time**: End of second 45 minutes plus stoppage time
+- **Extra Time Periods**: End of additional periods if implemented (Future)
+
+**No Whistle Situations**:
+- **Advantage Play**: When fouled team maintains beneficial possession
+- **Play Continuation**: Ball remains in active play during normal gameplay
+- **Goalkeeper Distribution**: When goalkeeper releases ball normally
+
+**Ball Out of Play Protocol**:
+- **Immediate Response**: Referee blows whistle within 0.2 seconds of ball crossing boundary
+- **Play Suspension**: All players must stop active play immediately upon whistle
+- **Restart Determination**: Referee determines appropriate restart method based on last touch
+- **Player Positioning**: Players move to required positions for restart
+- **Restart Signal**: Brief whistle blow to resume active play once all players positioned correctly
+
+**Advanced Whistle Mechanics (Phase 2)**:
+- **Triple Whistle**: Serious misconduct requiring immediate attention
+- **Prolonged Whistle**: Medical emergency or serious injury
+- **Short Sharp Whistles**: Multiple quick blasts to gain player attention during disputes
+
+### 3.11 Match Rules Implementation
+
+#### 3.11.1 POC Minimal Ruleset
 **Core Rules**:
 - **Ball In/Out**: Complete ball crossing boundary lines
 - **Goal Scoring**: Ball completely crossing goal line
@@ -309,13 +599,13 @@ A voice-controlled football (soccer) simulation game featuring AI-controlled pla
 
 **POC Focus**: Ensure smooth gameplay flow without complex rule interruptions that would hinder AI evaluation
 
-#### 3.6.2 Half-Time Procedures
+#### 3.11.2 Half-Time Procedures
 - **Automatic Transition**: Brief pause at 45 minutes, automatic progression to second half
 - **Team Switch**: Team that didn't kick off first half kicks off second half  
 - **Formation Reset**: Players return to kick-off positions
 - **Simple UI**: Minimal "Half Time" notification (brief, non-blocking)
 
-#### 3.6.3 POC Simplifications
+#### 3.11.3 POC Simplifications
 - **No Stoppage Time Calculation**: Fixed 30-second addition per half
 - **No Advantage Rule**: Immediate whistle for all infractions (when implemented)
 - **Simplified Offside**: Deferred to Phase 2
@@ -577,4 +867,4 @@ These questions will help refine the PRD and ensure all stakeholder requirements
 - Tutorial and onboarding systems
 - Beta testing and user feedback integration
 
-This PRD provides a comprehensive foundation for developing Super Soccer Manager: Pro Edition, an innovative voice-controlled football management game that combines authentic football rules with accessible voice-driven gameplay mechanics, league progression, and long-term team development.
+This PRD provides a comprehensive foundation for developing Soccer Manager: World Cup Edition, an innovative voice-controlled football management game that combines authentic football rules with accessible voice-driven gameplay mechanics, league progression, and long-term team development.
