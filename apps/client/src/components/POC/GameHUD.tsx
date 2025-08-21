@@ -6,9 +6,14 @@ interface GameHUDProps
     footballHalf: 1 | 2   // Current half based on football time
     score: { home: number; away: number }
     isActive: boolean
+    ballPossessor?: {
+        name: string
+        squadNumber: number
+        team: "RED" | "BLUE"
+    }
 }
 
-export const GameHUD = ({ footballTime, footballHalf, score, isActive }: GameHUDProps): ReactNode => 
+export const GameHUD = ({ footballTime, footballHalf, score, isActive, ballPossessor }: GameHUDProps): ReactNode => 
 {
     const getHalf = (half: 1 | 2): string => 
     {
@@ -44,6 +49,32 @@ export const GameHUD = ({ footballTime, footballHalf, score, isActive }: GameHUD
                 </span>
                 <span style={{ color: '#4444ff' }}>Team Blue</span>
             </div>
+
+            {/* Ball Possession Info */}
+            {ballPossessor && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    backgroundColor: '#333',
+                    padding: '10px 16px',
+                    borderRadius: '8px',
+                    fontSize: '18px'
+                }}>
+                    <div style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: ballPossessor.team === 'RED' ? '#ff4444' : '#4444ff'
+                    }}></div>
+                    <span style={{
+                        color: '#ffffff',
+                        fontWeight: 'bold'
+                    }}>
+                        #{ballPossessor.squadNumber} {ballPossessor.name}
+                    </span>
+                </div>
+            )}
 
             {/* Match Time and Status */}
             <div style={{

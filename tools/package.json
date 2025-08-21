@@ -1,0 +1,24 @@
+{
+  "name": "football-manager-tools",
+  "version": "1.0.0",
+  "description": "Data scraping and processing tools for Football Manager",
+  "type": "module",
+  "scripts": {
+    "scrape:fifa": "tsx fifa-scraper/index.ts",
+    "scrape:fifa:test": "tsx fifa-scraper/index.ts --test --limit=10",
+    "process:players": "tsx player-processor/index.ts",
+    "validate:data": "tsx validator/index.ts"
+  },
+  "dependencies": {
+    "puppeteer": "^21.1.1",
+    "cheerio": "^1.0.0-rc.12",
+    "axios": "^1.5.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.0",
+    "@types/uuid": "^9.0.0",
+    "tsx": "^3.12.8",
+    "typescript": "^5.1.6"
+  }
+}

@@ -17,6 +17,7 @@ export const POCApp = (): ReactNode =>
     const [footballTime, setFootballTime] = useState("00:00")
     const [footballHalf, setFootballHalf] = useState<1 | 2>(1)
     const [score, setScore] = useState({ home: 0, away: 0 })
+    const [ballPossessor, setBallPossessor] = useState<{ name: string; squadNumber: number; team: "RED" | "BLUE" } | null>(null)
     const animationFrameRef = useRef<number>(0)
     const lastUIUpdateRef = useRef<number>(0)
 
@@ -64,6 +65,7 @@ export const POCApp = (): ReactNode =>
                     const newFootballTime = matchEngine.getFootballTime()
                     const newFootballHalf = matchEngine.getCurrentFootballHalf()
                     const newScore = matchEngine.getScore()
+                    const newBallPossessor = matchEngine.getBallPossessor()
                     
                     // Only update if values actually changed
                     if (newTime !== gameTime) {
@@ -77,6 +79,19 @@ export const POCApp = (): ReactNode =>
                     }
                     if (newScore.home !== score.home || newScore.away !== score.away) {
                         setScore(newScore)
+                    }
+                    
+                    // Check if ball possessor changed
+                    const possessorChanged = 
+                        (!ballPossessor && newBallPossessor) ||
+                        (ballPossessor && !newBallPossessor) ||
+                        (ballPossessor && newBallPossessor && 
+                         (ballPossessor.name !== newBallPossessor.name || 
+                          ballPossessor.squadNumber !== newBallPossessor.squadNumber ||
+                          ballPossessor.team !== newBallPossessor.team))
+                    
+                    if (possessorChanged) {
+                        setBallPossessor(newBallPossessor)
                     }
                     
                     lastUIUpdateRef.current = currentTime
@@ -132,6 +147,7 @@ export const POCApp = (): ReactNode =>
         setFootballTime("00:00")
         setFootballHalf(1)
         setScore({ home: 0, away: 0 })
+        setBallPossessor(null)
         if (matchEngine) 
         {
             matchEngine.initializeMatch()
@@ -159,6 +175,7 @@ export const POCApp = (): ReactNode =>
                 footballHalf={footballHalf}
                 score={score}
                 isActive={isMatchActive}
+                ballPossessor={ballPossessor}
             />
             
             {/* Main Game Area */}
