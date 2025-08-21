@@ -1,10 +1,12 @@
 export const envVarAsString = (
     envVar: string,
     defaultValue: string
-): string => {
+): string =>
+{
     const value = process.env[envVar]
 
-    if (!value) {
+    if (!value)
+    {
         return defaultValue
     }
 

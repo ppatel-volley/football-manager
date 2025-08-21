@@ -11,13 +11,16 @@ interface UseSessionCreationProps {
 export const useSessionCreation = ({
     setSessionId,
     sessionId,
-}: UseSessionCreationProps): SocketIOTransportClient | undefined => {
+}: UseSessionCreationProps): SocketIOTransportClient | undefined =>
+{
     const [ready, setReady] = useState(false)
 
     const userId = useUserId()
 
-    const createGameAndSetSessionId = useCallback(async (): Promise<void> => {
-        try {
+    const createGameAndSetSessionId = useCallback(async (): Promise<void> =>
+    {
+        try
+        {
             const response = await fetch(
                 `${import.meta.env.VITE_BACKEND_SERVER_ENDPOINT}/api/session`,
                 {
@@ -32,7 +35,9 @@ export const useSessionCreation = ({
             window.history.replaceState({}, "", url.toString())
 
             setSessionId(session.sessionId)
-        } catch (error: unknown) {
+        }
+        catch (error: unknown)
+        {
             const errorToLog =
                 error instanceof Error ? error : new Error(String(error))
             console.error("Unable to create game and set party ID", {
@@ -41,19 +46,23 @@ export const useSessionCreation = ({
         }
     }, [setSessionId])
 
-    useEffect(() => {
+    useEffect(() =>
+    {
         const urlParams = new URLSearchParams(window.location.search)
         const sessionIdParam = urlParams.get("sessionId")
-        if (sessionIdParam) {
+        if (sessionIdParam)
+        {
             setSessionId(sessionIdParam)
         }
-        if (import.meta.env.VITE_STAGE === "local" && !sessionId) {
+        if (import.meta.env.VITE_STAGE === "local" && !sessionId)
+        {
             console.info("Creating game and setting sessionId")
             void createGameAndSetSessionId()
         }
     }, [createGameAndSetSessionId, sessionId, ready, setSessionId])
 
-    const transport = useMemo(() => {
+    const transport = useMemo(() =>
+    {
         if (!sessionId || !userId) return
 
         const transport = new SocketIOTransportClient({

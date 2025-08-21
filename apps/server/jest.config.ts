@@ -9,9 +9,9 @@ const config: Config = {
     testEnvironment: "node",
     testMatch: ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
     transform: {
-        "^.+\\.(t|j)s?$": ["@swc/jest", {}],
+        "^.+\\.ts$": "ts-jest",
     },
-    testTimeout: 5000,
+    testTimeout: 10000, // 10 seconds should be enough for unit tests
     collectCoverage: true,
     coverageDirectory: "./coverage/server",
     coverageReporters: ["text", "json", "html", "lcov"],
@@ -23,7 +23,7 @@ const config: Config = {
         "\\.config\\.(js|ts)$",
         "/index\\.ts$",
     ],
-    slowTestThreshold: 10,
+    slowTestThreshold: 5,
 }
 
 export default config

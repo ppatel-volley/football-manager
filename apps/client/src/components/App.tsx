@@ -10,11 +10,7 @@ import { PhaseRouter } from "./PhaseRouter"
 export const App: React.FC = () => {
     console.log("App rendering...")
     
-    // For POC development, bypass VGF completely
-    if (import.meta.env.DEV) {
-        console.log("DEV mode - rendering POC directly")
-        return <PhaseRouter />
-    }
+    // Now using full VGF - POC mode removed
     
     try {
         const [sessionId, setSessionId] = useState<string | undefined | null>(

@@ -1,3 +1,10 @@
-import type { DemoGameRuleset } from "../../GameRuleset"
+import type { GameRuleset as VGFGameRuleset } from "@volley/vgf/server"
 
-export type GameRuleset = typeof DemoGameRuleset
+import type { GameState } from "./GameState"
+import type { PhaseName } from "./PhaseName"
+
+// Re-export the actual ruleset for runtime use
+export { FootballManagerRuleset } from "../../GameRuleset"
+
+// Define the TypeScript type for the ruleset
+export type GameRuleset = VGFGameRuleset<GameState, PhaseName>

@@ -1,40 +1,74 @@
-import { RedisStorage, SocketIOTransport, VGFServer } from "@volley/vgf/server"
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-misused-promises */
+import { VGFServer } from "@volley/vgf/server"
 import cors from "cors"
-import type { Express } from "express"
 import express from "express"
 import { createServer } from "http"
-import Redis from "ioredis"
 
-import { PORT, REDIS_HOST, REDIS_PORT } from "./constants/Environment"
-import { DemoGameRuleset } from "./GameRuleset"
+import { FootballManagerRuleset } from "./GameRuleset"
+import { redisClient } from "./shared/config/redisConfig"
+import { HEALTH_CHECK_CONFIG, serverConfig, socketIOConfig } from "./shared/config/serverConfig"
+import { SocketIOTransport, storage } from "./shared/config/vgfConfig"
 
-export const redisClient = new Redis({
-    host: REDIS_HOST,
-    port: REDIS_PORT,
-})
+// Express app setup
+export const app = express()
 
-redisClient.on("error", (error) => console.error("Redis client error:", error))
+// Middleware
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
-const storage = new RedisStorage({ redisClient })
+// CORS setup
+app.use(cors({
+    origin: serverConfig.cors.origin,
+    credentials: serverConfig.cors.credentials
+}))
 
-export const app: Express = express()
+// Health check endpoint
+if (HEALTH_CHECK_CONFIG.enabled)
+{
+    app.get(HEALTH_CHECK_CONFIG.endpoint, (_req, res) =>
+    {
+        const health = {
+            status: "healthy",
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            environment: serverConfig.stage,
+            checks: {} as Record<string, boolean | string>
+        }
 
-app.use(cors({ origin: "*" }))
+        // Memory check
+        if (HEALTH_CHECK_CONFIG.checks.memory)
+        {
+            const memUsage = process.memoryUsage()
+            health.checks.memory = `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+        }
 
-// eslint-disable-next-line @typescript-eslint/no-misused-promises
+        // VGF check
+        if (HEALTH_CHECK_CONFIG.checks.vgf)
+        {
+            health.checks.vgf = "operational"
+        }
+
+        res.json(health)
+    })
+}
+
+// Create HTTP server
 export const httpServer = createServer(app)
 
+// Create VGF transport with configuration
 const transport = new SocketIOTransport({
     httpServer,
     redisClient,
     storage,
+    socketIOConfig
 })
 
+// Create VGF server with configuration
 export const server = new VGFServer({
-    port: PORT,
+    port: serverConfig.port,
     httpServer,
     app,
     transport,
     storage,
-    game: DemoGameRuleset,
+    game: FootballManagerRuleset,
 })

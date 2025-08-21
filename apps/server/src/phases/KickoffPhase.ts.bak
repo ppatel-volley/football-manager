@@ -11,10 +11,8 @@ export const KickoffPhase = {
             console.info("KickoffPhase.takeKickoff - Ball is in play")
             
             return {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ...ctx.session.state as GameState,
+                ...ctx.session.state as GameState,
                 ball: {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                     ...(ctx.session.state as GameState).ball,
                     isMoving: true,
                     possessor: null // Ball is loose after kickoff
@@ -31,7 +29,6 @@ export const KickoffPhase = {
         
         // Set up kickoff positions
         return {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             ...ctx.session.state as GameState,
             ball: {
                 position: { x: 0.5, y: 0.5 }, // Center of pitch
@@ -47,7 +44,6 @@ export const KickoffPhase = {
     onEnd: (ctx: any): GameState => 
 {
         console.info("KickoffPhase.onEnd - First half begins")
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state as GameState
     },
     
@@ -55,7 +51,6 @@ export const KickoffPhase = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     endIf: (ctx: any): boolean => 
 {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
         return ctx.session.state.ball.isMoving || ctx.session.state.gameTime >= 35
     },
     

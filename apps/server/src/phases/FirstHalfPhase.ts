@@ -1,3 +1,4 @@
+ 
 import type { Phase } from "@volley/vgf/server"
 
 import type { GameState } from "../shared/types/GameState"
@@ -6,13 +7,15 @@ import { PhaseName } from "../shared/types/PhaseName"
 export const FirstHalfPhase = {
     actions: {
         // Actions specific to active gameplay
-        shootBall: (ctx, team: 'HOME' | 'AWAY') => {
+        shootBall: (ctx: { session: { state: GameState } }, team: 'HOME' | 'AWAY') => 
+{
             console.info(`FirstHalfPhase.shootBall - ${team} team shoots`)
             
             // Simulate shot attempt
             const isGoal = Math.random() < 0.1 // 10% chance of goal for simplicity
             
-            if (isGoal) {
+            if (isGoal) 
+{
                 return {
                     ...ctx.session.state,
                     score: {
@@ -38,7 +41,8 @@ export const FirstHalfPhase = {
     
     reducers: {
         // Phase-specific reducers for match simulation
-        simulateGameplay: (state) => {
+        simulateGameplay: (state: GameState) => 
+{
             // Increment game time
             const newGameTime = state.gameTime + 1
             
@@ -61,23 +65,26 @@ export const FirstHalfPhase = {
         }
     },
     
-    onBegin: (ctx) => {
+    onBegin: (ctx: { session: { state: GameState } }) => 
+{
         console.info("FirstHalfPhase.onBegin - First half active gameplay")
         
         return {
             ...ctx.session.state,
-            matchPhase: 'first_half' as any,
+            matchPhase: 'first_half' as const,
             ballPossession: 'HOME' // Home team gets first possession after kickoff
         }
     },
     
-    onEnd: (ctx) => {
+    onEnd: (ctx: { session: { state: GameState } }) => 
+{
         console.info("FirstHalfPhase.onEnd - Half time break")
         return ctx.session.state
     },
     
     // End after 45 minutes (2.25 minutes real time in PRD)
-    endIf: (ctx) => {
+    endIf: (ctx: { session: { state: GameState } }) => 
+{
         return ctx.session.state.gameTime >= 2700 // 45 minutes * 60 seconds
     },
     
@@ -85,13 +92,17 @@ export const FirstHalfPhase = {
 } as const satisfies Phase<GameState>
 
 // Helper function for first half time formatting
-function formatFirstHalfTime(gameTimeSeconds: number): string {
+function formatFirstHalfTime(gameTimeSeconds: number): string 
+{
     const minutes = Math.floor(gameTimeSeconds / 60)
     const seconds = Math.floor(gameTimeSeconds % 60)
     
-    if (minutes <= 45) {
+    if (minutes <= 45) 
+{
         return `${minutes}:${seconds.toString().padStart(2, '0')}`
-    } else {
+    }
+ else 
+{
         return `45+${minutes - 45}`
     }
 }

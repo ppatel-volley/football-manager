@@ -5,18 +5,21 @@ import { PhaseName } from "../shared/types/PhaseName"
 
 export const FullTimePhase = {
     actions: {
-        restartMatch: (ctx) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        restartMatch: (ctx: any): GameState => 
+{
             console.info("FullTimePhase.restartMatch - Starting new match")
             
             // Reset to pre-match phase
             return {
-                ...ctx.session.state,
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                ...ctx.session.state as GameState,
                 gameTime: 0,
                 footballTime: "00:00",
                 footballHalf: 1,
                 score: { home: 0, away: 0 },
                 ballPossession: null,
-                matchPhase: 'pre_match' as any,
+                matchPhase: 'pre_match' as GameState['matchPhase'],
                 stats: {
                     possessionSeconds: { HOME: 0, AWAY: 0 },
                     shots: { HOME: 0, AWAY: 0 },
@@ -26,12 +29,15 @@ export const FullTimePhase = {
         }
     },
     
-    onBegin: (ctx) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onBegin: (ctx: any): GameState => 
+{
         console.info("FullTimePhase.onBegin - Match finished, showing final statistics")
         
         const finalState = {
-            ...ctx.session.state,
-            matchPhase: 'full_time' as any,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            ...ctx.session.state as GameState,
+            matchPhase: 'full_time' as GameState['matchPhase'],
             ballPossession: null
         }
         
@@ -42,9 +48,12 @@ export const FullTimePhase = {
         return finalState
     },
     
-    onEnd: (ctx) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onEnd: (ctx: any): GameState => 
+{
         console.info("FullTimePhase.onEnd")
-        return ctx.session.state
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        return ctx.session.state as GameState
     },
     
     // Terminal phase - no automatic transitions
