@@ -9,6 +9,7 @@ import { SecondHalfPhase } from "./phases/SecondHalfPhase"
 import type { GameState } from "./shared/types/GameState"
 import { PhaseName } from "./shared/types/PhaseName"
 import { setupGameState } from "./utils/setupGame"
+import { processMatchSimulation, setupTacticalChange, processAdvancedShoot, setupMatchRestart, processSubstitution, updateMatchStatistics } from "./thunks/MatchThunks"
 
 export const FootballManagerRuleset = {
     setup: setupGameState,
@@ -42,7 +43,77 @@ export const FootballManagerRuleset = {
             }
             
             return updatedState
+        },
+
+        // Start match action
+        startMatch: (ctx) => {
+            console.log('Starting match')
+            return {
+                ...ctx.session.state,
+                matchPhase: 'kickoff' as any
+            }
+        },
+
+        // Take kickoff action  
+        takeKickoff: (ctx) => {
+            console.log('Taking kickoff')
+            return {
+                ...ctx.session.state,
+                matchPhase: 'first_half' as any
+            }
+        },
+
+        // Shoot ball action
+        shootBall: (ctx, team: 'HOME' | 'AWAY') => {
+            console.log(`${team} team shoots`)
+            
+            // Simple goal simulation - 10% chance
+            const isGoal = Math.random() < 0.1
+            
+            if (isGoal) {
+                return {
+                    ...ctx.session.state,
+                    score: {
+                        ...ctx.session.state.score,
+                        [team === 'HOME' ? 'home' : 'away']: ctx.session.state.score[team === 'HOME' ? 'home' : 'away'] + 1
+                    }
+                }
+            }
+            
+            return {
+                ...ctx.session.state,
+                stats: {
+                    ...ctx.session.state.stats,
+                    shots: {
+                        ...ctx.session.state.stats.shots,
+                        [team]: ctx.session.state.stats.shots[team] + 1
+                    }
+                }
+            }
+        },
+
+        // Restart match action
+        restartMatch: (ctx) => {
+            console.log('Restarting match')
+            return {
+                ...ctx.session.state,
+                matchPhase: 'pre_match' as any,
+                score: { home: 0, away: 0 },
+                gameTime: 0,
+                footballTime: "00:00",
+                footballHalf: 1
+            }
         }
+    },
+    
+    // Thunks for complex async operations
+    thunks: {
+        processMatchSimulation,
+        setupTacticalChange,
+        processAdvancedShoot,
+        setupMatchRestart,
+        processSubstitution,
+        updateMatchStatistics
     },
     
     // Reducers for simple state updates

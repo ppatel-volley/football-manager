@@ -4,16 +4,11 @@ import type { ReactNode } from "react"
 import { usePhase, useStateSync } from "../hooks/VGF"
 import { FootballMatch } from "./Football/FootballMatch"
 import { Home } from "./Home/Home"
-import { POCApp } from "./POC/POCApp"
 
 export const PhaseRouter = (): ReactNode => {
     console.log("PhaseRouter rendering...")
     
-    // For POC development, bypass VGF and render POCApp directly
-    if (import.meta.env.DEV) {
-        console.log("DEV mode - rendering POCApp directly")
-        return <POCApp />
-    }
+    // Now using full VGF - POC mode removed
     
     try {
         const phase = usePhase()
@@ -24,22 +19,22 @@ export const PhaseRouter = (): ReactNode => {
         
         // Route to appropriate component based on VGF phase
         switch (phase) {
-            case PhaseName.PreMatch:
+            case "PRE_MATCH":
                 return <FootballMatch phase="pre_match" />
                 
-            case PhaseName.Kickoff:
+            case "KICKOFF":
                 return <FootballMatch phase="kickoff" />
                 
-            case PhaseName.FirstHalf:
+            case "FIRST_HALF":
                 return <FootballMatch phase="first_half" />
                 
-            case PhaseName.HalfTime:
+            case "HALF_TIME":
                 return <FootballMatch phase="half_time" />
                 
-            case PhaseName.SecondHalf:
+            case "SECOND_HALF":
                 return <FootballMatch phase="second_half" />
                 
-            case PhaseName.FullTime:
+            case "FULL_TIME":
                 return <FootballMatch phase="full_time" />
                 
             default:

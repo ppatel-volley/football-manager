@@ -1,10 +1,16 @@
 import { type GameState, PhaseName } from "../shared"
+import { PlayerDatabaseManager } from "../database/PlayerDatabaseManager"
 
 export const setupGameState = (
     setupData: Partial<GameState> = {}
 ): GameState => {
     // Generate a match seed for deterministic simulation
     const matchSeed = Math.floor(Math.random() * 1000000)
+    
+    // Initialize player database with match seed for deterministic generation
+    const playerDB = new PlayerDatabaseManager(matchSeed)
+    const homeTeamPlayers = playerDB.generateTeam('Team Red', 'HOME', '4-4-2')
+    const awayTeamPlayers = playerDB.generateTeam('Team Blue', 'AWAY', '4-4-2')
     
     const defaultState: GameState = {
         // Match metadata
@@ -14,14 +20,26 @@ export const setupGameState = (
         footballTime: "00:00",
         footballHalf: 1,
         
-        // Team setup (basic default teams)
-        homeTeam: createDefaultTeam('HOME', 'Team Red'),
-        awayTeam: createDefaultTeam('AWAY', 'Team Blue'),
+        // Team setup using player database
+        homeTeam: {
+            id: 'home',
+            name: 'Team Red',
+            players: homeTeamPlayers,
+            formation: '4-4-2',
+            tacticalStyle: 'BALANCE'
+        },
+        awayTeam: {
+            id: 'away', 
+            name: 'Team Blue',
+            players: awayTeamPlayers,
+            formation: '4-4-2',
+            tacticalStyle: 'BALANCE'
+        },
         score: { home: 0, away: 0 },
         
-        // Ball state
+        // Ball state using FIFA coordinates
         ball: {
-            position: { x: 0.5, y: 0.5 },
+            position: { x: 0.5, y: 0.5 }, // Centre spot
             velocity: { x: 0, y: 0 },
             isMoving: false,
             possessor: null
@@ -46,35 +64,4 @@ export const setupGameState = (
     }
 }
 
-// Helper function to create default teams
-function createDefaultTeam(side: 'HOME' | 'AWAY', name: string) {
-    const players = []
-    
-    // Create 11 players with basic setup
-    for (let i = 1; i <= 11; i++) {
-        players.push({
-            id: `${side}_player_${i}`,
-            name: `Player ${i}`,
-            squadNumber: i,
-            position: { x: side === 'HOME' ? 0.3 : 0.7, y: 0.1 + (i - 1) * 0.08 },
-            targetPosition: { x: side === 'HOME' ? 0.3 : 0.7, y: 0.1 + (i - 1) * 0.08 },
-            team: side,
-            playerType: i === 1 ? 'GOALKEEPER' : 'OUTFIELD',
-            hasBall: false,
-            attributes: {
-                pace: 7.0,
-                passing: 7.0,
-                shooting: 7.0,
-                positioning: 7.0
-            }
-        })
-    }
-    
-    return {
-        id: side.toLowerCase(),
-        name,
-        players,
-        formation: '4-4-2',
-        tacticalStyle: 'BALANCE' as const
-    }
-}
+// Note: createDefaultTeam function removed - now using PlayerDatabaseManager
