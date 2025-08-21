@@ -1140,14 +1140,31 @@ interface PlayerDatabase {
   playerIndex: Map<string, Player>; // For fast player lookups
 }
 
+// Normalized data structures
+interface TeamDefinition {
+  id: string;              // "ENG", "USA", etc.
+  name: string;            // "England", "USA"
+  tier: TeamTier;          // Performance tier
+  confederation: string;   // "UEFA", "CONCACAF", etc.
+  playerIds: string[];     // Array of 23 player IDs (references players.json)
+  captainId: string;       // Player ID of captain
+  defaultFormation: string; // "4-4-2", "4-3-3", etc.
+  kitColors: KitColors;
+  metadata?: {
+    fifaRanking?: number;
+    lastUpdated?: string;
+    worldCupAppearances?: number;
+  };
+}
+
 interface NationalTeam {
-  id: string;              // "ENG", "FRA", "BRA", etc.
-  name: string;            // "England", "France", "Brazil"
+  id: string;              // "ENG", "USA", etc.
+  name: string;            // "England", "USA"
   tier: TeamTier;          // Performance tier classification
-  confederation: string;   // "UEFA", "CONMEBOL", "AFC", etc.
-  players: Player[];       // 23-man squad
+  confederation: string;   // "UEFA", "CONCACAF", etc.
+  players: Player[];       // 23-man squad (resolved from playerIds)
   captain: string;         // Player ID of team captain
-  formation: FormationID;  // Default formation
+  formation: string;       // Default formation
   kitColors: KitColors;
 }
 
@@ -1357,8 +1374,178 @@ class PlayerDatabaseManager {
     };
   }
   
+  // Normalized Data Structure
+  private players: Map<string, Player> = new Map(); // Master player table
+  private teams: Map<string, TeamDefinition> = new Map(); // Team squad lists
+  
+  public async loadPlayerDatabase(): Promise<void> {
+    try {
+      // Load master player table (~2-3MB JSON file)
+      const playersData = await this.loadJSON('./data/players/players.json');
+      playersData.players.forEach((player: Player) => {
+        this.players.set(player.id, player);
+      });
+      
+      // Load team definitions (small files with player ID references)
+      await this.loadTeamDefinitions();
+      
+      console.log(`Loaded ${this.players.size} players and ${this.teams.size} teams`);
+    } catch (error) {
+      console.error('Failed to load player database:', error);
+      await this.generateFallbackData();
+    }
+  }
+
+  // Team Selection System
+  public getDefaultTeams(): { home: NationalTeam, away: NationalTeam } {
+    return {
+      home: this.buildTeamFromDefinition("ENG") || this.createDefaultTeam("ENG", "England"),
+      away: this.buildTeamFromDefinition("USA") || this.createDefaultTeam("USA", "USA")
+    };
+  }
+  
+  private buildTeamFromDefinition(teamId: string): NationalTeam | null {
+    const teamDef = this.teams.get(teamId);
+    if (!teamDef) return null;
+    
+    // Resolve player IDs to full player objects
+    const players = teamDef.playerIds.map(id => this.players.get(id)).filter(Boolean) as Player[];
+    
+    return {
+      id: teamDef.id,
+      name: teamDef.name,
+      tier: teamDef.tier,
+      confederation: teamDef.confederation,
+      players,
+      captain: players.find(p => p.id === teamDef.captainId)?.id || players[0]?.id || '',
+      formation: teamDef.defaultFormation,
+      kitColors: teamDef.kitColors
+    };
+  }
+  
+  public createCustomTeam(name?: string): NationalTeam {
+    const teamName = name || "Volley FC"; // Default name for user-generated teams
+    const customId = `CUSTOM_${Date.now()}`;
+    
+    return {
+      id: customId,
+      name: teamName,
+      tier: TeamTier.TIER_2, // Custom teams start at Tier 2
+      confederation: "CUSTOM",
+      players: this.generateTeamPlayers(customId, TeamTier.TIER_2),
+      captain: `${customId}_001`,
+      formation: "4-4-2",
+      kitColors: { primary: "#FF6B6B", secondary: "#4ECDC4" } // Volley brand colors
+    };
+  }
+  
+  private createDefaultTeam(id: string, name: string): NationalTeam {
+    return {
+      id,
+      name,
+      tier: id === "ENG" ? TeamTier.TIER_1 : TeamTier.TIER_2,
+      confederation: id === "ENG" ? "UEFA" : "CONCACAF",
+      players: this.generateTeamPlayers(id, id === "ENG" ? TeamTier.TIER_1 : TeamTier.TIER_2),
+      captain: `${id}_001`,
+      formation: "4-4-2",
+      kitColors: id === "ENG" ? 
+        { primary: "#FFFFFF", secondary: "#003366" } : 
+        { primary: "#002868", secondary: "#BF0A30" } // USA colors
+    };
+  }
+
+  private async loadTeamDefinitions(): Promise<void> {
+    const teamFiles = ['england.json', 'usa.json'];
+    
+    for (const filename of teamFiles) {
+      try {
+        const teamData = await this.loadJSON(`./data/teams/${filename}`);
+        this.teams.set(teamData.id, teamData);
+      } catch (error) {
+        console.warn(`Failed to load team file ${filename}:`, error);
+      }
+    }
+  }
+  
+  private async loadJSON(filePath: string): Promise<any> {
+    const fs = await import('fs/promises');
+    const data = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(data);
+  }
+
+  private async generateFallbackData(): Promise<void> {
+    // Generate fallback data if main files fail to load
+    console.log('Generating fallback player and team data...');
+    
+    // Generate basic players
+    const fallbackPlayers = this.generateFallbackPlayers();
+    fallbackPlayers.forEach(player => {
+      this.players.set(player.id, player);
+    });
+    
+    // Generate basic team definitions
+    const fallbackTeams = this.generateFallbackTeamDefinitions();
+    fallbackTeams.forEach(team => {
+      this.teams.set(team.id, team);
+    });
+  }
+
+  private generateFallbackTeamDefinitions(): TeamDefinition[] {
+    // Create basic team definitions using fallback players
+    const engPlayerIds = Array.from(this.players.keys()).filter(id => id.startsWith('ENG_')).slice(0, 23);
+    const usaPlayerIds = Array.from(this.players.keys()).filter(id => id.startsWith('USA_')).slice(0, 23);
+    
+    return [
+      {
+        id: "ENG",
+        name: "England",
+        tier: TeamTier.TIER_1,
+        confederation: "UEFA",
+        playerIds: engPlayerIds,
+        captainId: engPlayerIds[0] || 'ENG_001',
+        defaultFormation: "4-4-2",
+        kitColors: { primary: "#FFFFFF", secondary: "#003366" },
+        metadata: {
+          fifaRanking: 5,
+          worldCupAppearances: 16
+        }
+      },
+      {
+        id: "USA",
+        name: "USA",
+        tier: TeamTier.TIER_2,
+        confederation: "CONCACAF",
+        playerIds: usaPlayerIds,
+        captainId: usaPlayerIds[0] || 'USA_001',
+        defaultFormation: "4-3-3",
+        kitColors: { primary: "#002868", secondary: "#BF0A30" },
+        metadata: {
+          fifaRanking: 11,
+          worldCupAppearances: 11
+        }
+      }
+    ];
+  }
+
+  private generateFallbackPlayers(): Player[] {
+    // Generate basic players for both teams if main player.json fails
+    const players: Player[] = [];
+    
+    // England players
+    for (let i = 1; i <= 23; i++) {
+      players.push(this.createFallbackPlayer(`ENG_${i.toString().padStart(3, '0')}`, 'England'));
+    }
+    
+    // USA players  
+    for (let i = 1; i <= 23; i++) {
+      players.push(this.createFallbackPlayer(`USA_${i.toString().padStart(3, '0')}`, 'USA'));
+    }
+    
+    return players;
+  }
+
   private generateFallbackTeams(): Map<string, NationalTeam> {
-    // Generate basic England and France teams for development
+    // This method now builds from the normalized data structure
     const teams = new Map<string, NationalTeam>();
     
     teams.set("ENG", {
@@ -1370,6 +1557,17 @@ class PlayerDatabaseManager {
       captain: "ENG_001",
       formation: "4-4-2",
       kitColors: { primary: "#FFFFFF", secondary: "#003366" }
+    });
+    
+    teams.set("USA", {
+      id: "USA",
+      name: "USA", 
+      tier: TeamTier.TIER_2,
+      confederation: "CONCACAF",
+      players: this.generateTeamPlayers("USA", TeamTier.TIER_2),
+      captain: "USA_001",
+      formation: "4-3-3",
+      kitColors: { primary: "#002868", secondary: "#BF0A30" }
     });
     
     return teams;
@@ -1518,6 +1716,446 @@ interface ContractInfo {
   releaseClause?: number;
 }
 ```
+
+## 5. Code Architecture & File Structure
+
+### 5.1 Repository Structure
+
+```
+football-manager/
+├── apps/
+│   ├── client/                          # React client application
+│   │   ├── src/
+│   │   │   ├── components/              # React components
+│   │   │   │   ├── game/                # Game-specific components
+│   │   │   │   │   ├── MatchView.tsx    # Main match display
+│   │   │   │   │   ├── TacticalButtons.tsx # Desktop development buttons
+│   │   │   │   │   ├── ScoreDisplay.tsx # Score and time display
+│   │   │   │   │   └── CommentaryDisplay.tsx # Commentary text
+│   │   │   │   ├── ui/                  # Shared UI components
+│   │   │   │   │   ├── Button.tsx
+│   │   │   │   │   ├── Modal.tsx
+│   │   │   │   │   └── LoadingSpinner.tsx
+│   │   │   │   └── setup/               # Game setup components
+│   │   │   │       ├── TeamSelection.tsx # Team picker
+│   │   │   │       ├── QRCodeDisplay.tsx # Mobile connection
+│   │   │   │       └── SessionSetup.tsx  # Game configuration
+│   │   │   ├── hooks/                   # React hooks
+│   │   │   │   ├── useVGF.ts           # VGF state synchronization
+│   │   │   │   ├── useSessionCreation.ts # Session management
+│   │   │   │   └── useTacticalCommands.ts # Command handling
+│   │   │   ├── services/                # Client services
+│   │   │   │   ├── VGFClient.ts         # VGF client wrapper
+│   │   │   │   ├── AudioProcessor.ts    # Voice recognition
+│   │   │   │   └── CommandParser.ts     # Voice command parsing
+│   │   │   ├── types/                   # TypeScript definitions
+│   │   │   │   ├── game.ts             # Game state types
+│   │   │   │   ├── player.ts           # Player types
+│   │   │   │   └── vgf.ts              # VGF integration types
+│   │   │   ├── utils/                   # Utility functions
+│   │   │   │   ├── deterministic.ts     # GameRNG, GameClock
+│   │   │   │   ├── constants.ts         # FIFA_CONSTANTS, etc.
+│   │   │   │   └── validation.ts        # Input validation
+│   │   │   ├── App.tsx                  # Root component
+│   │   │   ├── main.tsx                 # Application entry
+│   │   │   └── vite-env.d.ts           # Vite type definitions
+│   │   ├── public/                      # Static assets
+│   │   ├── package.json
+│   │   └── vite.config.ts
+│   │
+│   └── server/                          # Node.js server application  
+│       ├── src/
+│       │   ├── game/                    # Game logic (authoritative)
+│       │   │   ├── GameManager.ts       # Main game controller
+│       │   │   ├── GameRuleset.ts       # VGF game rules implementation
+│       │   │   ├── MatchSimulation.ts   # Core match simulation
+│       │   │   └── phases/              # Game phase implementations
+│       │   │       ├── HomePhase.ts     # Pre-match setup
+│       │   │       ├── MatchPhase.ts    # Active gameplay
+│       │   │       └── PostMatchPhase.ts # Results phase
+│       │   ├── systems/                 # Game subsystems
+│       │   │   ├── PhysicsEngine.ts     # Ball and player physics
+│       │   │   ├── FormationEngine.ts   # Player positioning (integrates with FET)
+│       │   │   ├── FormationLoader.ts   # Loads uber-formation.formation file
+│       │   │   ├── CommentaryManager.ts # Reactive commentary
+│       │   │   └── PlayerDatabase.ts    # Team and player data
+│       │   ├── networking/              # VGF networking layer
+│       │   │   ├── VGFServer.ts         # VGF server setup
+│       │   │   ├── SessionManager.ts    # Session lifecycle
+│       │   │   └── SecurityManager.ts   # QR codes, tokens
+│       │   ├── data/                    # Static game data
+│       │   │   ├── players/             # Master player database
+│       │   │   │   └── players.json     # Single huge table of all players (~2-3MB)
+│       │   │   ├── teams/               # Team definitions (reference player IDs)
+│       │   │   │   ├── england.json     # ENG squad (23 player IDs + metadata)
+│       │   │   │   ├── usa.json         # USA squad (23 player IDs + metadata)  
+│       │   │   │   └── custom-templates.json # Custom team creation templates
+│       │   │   ├── formations/          # Formation data (from FET)
+│       │   │   │   ├── uber-formation.formation  # Single comprehensive formation file
+│       │   │   │   └── formation-metadata.json  # Formation schemas and versioning
+│       │   │   └── commentary/          # Commentary scripts
+│       │   │       ├── tactical.json    # Tactical comments
+│       │   │       ├── profanity.json   # Profanity responses
+│       │   │       └── goals.json       # Goal celebration lines
+│       │   ├── utils/                   # Server utilities
+│       │   │   ├── deterministic.ts     # Shared RNG utilities
+│       │   │   ├── validation.ts        # Input validation
+│       │   │   └── constants.ts         # Shared constants
+│       │   ├── types/                   # Shared TypeScript types
+│       │   │   └── index.ts            # Re-exported types
+│       │   ├── index.ts                 # Server entry point
+│       │   └── config/                  # Configuration
+│       │       ├── redis.ts            # Redis connection
+│       │       └── environment.ts       # Environment variables
+│       ├── package.json
+│       └── tsconfig.json
+│
+└── packages/                            # Shared packages
+    ├── shared/                          # Shared code between client/server
+    │   ├── types/                       # Common TypeScript definitions
+    │   │   ├── game.ts                 # Game state interfaces
+    │   │   ├── player.ts               # Player interfaces  
+    │   │   ├── team.ts                 # Team interfaces
+    │   │   └── vgf.ts                  # VGF integration types
+    │   ├── constants/                   # Shared constants
+    │   │   ├── fifa.ts                 # FIFA_CONSTANTS
+    │   │   ├── phase.ts                # PHASE_THRESHOLDS
+    │   │   └── teams.ts                # DEFAULT_TEAMS
+    │   ├── utils/                       # Shared utilities
+    │   │   ├── deterministic.ts         # GameRNG, GameClock classes
+    │   │   └── validation.ts            # Shared validation logic
+    │   └── package.json
+    │
+    └── eslint-config/                   # Shared linting configuration
+        ├── index.js
+        └── package.json
+```
+
+### 5.2 VGF Simulation Architecture
+
+**CRITICAL DECISION**: Simulation runs **server-authoritative** with client-side prediction for responsive UI.
+
+#### 5.2.1 Server-Authoritative Simulation
+
+```typescript
+// apps/server/src/game/MatchSimulation.ts
+class MatchSimulation {
+  private gameContext: GameContext;
+  private gameState: GameState;
+  private physicsEngine: Physics2DEngine;
+  
+  // SERVER IS AUTHORITY - all game logic here
+  public update(deltaTime: number): GameState {
+    // Update game time (deterministic)
+    this.gameContext.clock.tick();
+    
+    // Process all player commands in deterministic order
+    this.processPlayerCommands();
+    
+    // Run physics simulation
+    this.physicsEngine.updatePlayers(this.gameState.players, this.gameState.ball, deltaTime);
+    this.physicsEngine.updateBall(this.gameState.ball, deltaTime);
+    
+    // Update formations and AI decisions
+    this.updateFormations();
+    this.updateAIDecisions();
+    
+    // Check win conditions, score changes, etc.
+    this.checkGameEvents();
+    
+    // Return authoritative state
+    return this.gameState;
+  }
+}
+```
+
+#### 5.2.2 Client-Side Prediction
+
+```typescript
+// apps/client/src/hooks/useVGF.ts
+export function useVGF() {
+  const [gameState, setGameState] = useState<GameState>();
+  const [predictedState, setPredictedState] = useState<GameState>();
+  
+  // Receive authoritative updates from server
+  const vgfClient = useVGFClient();
+  
+  useEffect(() => {
+    vgfClient.onStateUpdate((authoritativeState) => {
+      setGameState(authoritativeState);
+      // Reconcile any prediction differences
+      reconcilePrediction(predictedState, authoritativeState);
+    });
+  }, []);
+  
+  // Predict local changes for responsiveness
+  const sendCommand = (command: TacticalCommand) => {
+    // Send to server
+    vgfClient.dispatchAction('tactical_command', command);
+    
+    // Predict locally for immediate UI feedback
+    const predicted = simulateCommandEffect(gameState, command);
+    setPredictedState(predicted);
+  };
+  
+  return { gameState: predictedState || gameState, sendCommand };
+}
+```
+
+#### 5.2.3 Synchronization Flow
+
+```
+┌─────────────┐    Commands     ┌─────────────┐
+│   Client    │ ───────────────▶│   Server    │
+│ (Prediction)│                 │(Authority)  │
+│             │    Game State   │             │
+│             │◀─────────────── │             │
+└─────────────┘   (60Hz sync)   └─────────────┘
+       │                               │
+       ▼                               ▼
+ UI Prediction                   Game Simulation
+ (Immediate)                     (Deterministic)
+       │                               │
+       ▼                               ▼
+ Button Response              Physics + AI Updates
+ Commentary                   Score Changes
+ Visual Effects              Match Events
+```
+
+**Key Principles**:
+1. **Server Authority**: All game state changes originate on server
+2. **Client Prediction**: UI responds immediately to player input
+3. **State Reconciliation**: Client corrects predictions when server state arrives
+4. **Deterministic Core**: Server simulation is reproducible for testing/replay
+5. **60Hz Sync**: Server broadcasts game state 60 times per second via VGF
+
+#### 5.2.4 VGF Integration Points
+
+```typescript
+// apps/server/src/networking/VGFServer.ts
+const vgfServer = new VGFServer({
+  storage: new RedisStorage(redisConfig),
+  transport: new SocketIOTransport(io),
+  tickRate: 60 // 60Hz authoritative updates
+});
+
+// Game state synchronization
+vgfServer.onTick((session) => {
+  const gameState = matchSimulation.update(1/60); // Fixed timestep
+  session.setState(gameState); // Broadcast to all clients
+});
+
+// Command processing  
+vgfServer.onAction('tactical_command', (playerId, command) => {
+  matchSimulation.queuePlayerCommand(playerId, command);
+});
+```
+
+This architecture ensures:
+- **Responsive UI**: Players see immediate feedback
+- **Fair Gameplay**: Server authority prevents cheating
+- **Smooth Multiplayer**: VGF handles networking complexity
+- **Testable Logic**: Deterministic server simulation
+- **Scalable**: Clear separation of concerns
+
+### 5.3 Formation Data Integration (FET Integration)
+
+**Formation Storage**: Single uber-formation file from Formation Editor Tool (FET)
+
+```typescript
+// apps/server/src/systems/FormationLoader.ts
+class FormationLoader {
+  private formationCache: Map<string, UberFormationData> = new Map();
+  private readonly FORMATION_FILE_PATH = './data/formations/uber-formation.formation';
+  
+  public async loadFormations(): Promise<Map<string, UberFormationData>> {
+    try {
+      const formationFile = await fs.readFile(this.FORMATION_FILE_PATH, 'utf-8');
+      const compactData: CompactFormationData = JSON.parse(formationFile);
+      
+      // Convert from FET compact format to runtime format
+      const uberFormation = this.deserializeFormation(compactData);
+      this.formationCache.set(uberFormation.id, uberFormation);
+      
+      console.log(`Loaded formation data: ${uberFormation.name} with ${Object.keys(uberFormation.phases).length} phases`);
+      return this.formationCache;
+    } catch (error) {
+      console.error('Failed to load formation data:', error);
+      return this.getFallbackFormations();
+    }
+  }
+  
+  private deserializeFormation(compactData: CompactFormationData): UberFormationData {
+    const phases: Record<string, RuntimePhaseData> = {};
+    
+    // Convert each phase from compact JSON format to runtime TypedArrays
+    Object.entries(compactData.phases).forEach(([phaseName, phaseData]) => {
+      phases[phaseName] = FormationSerializer.fromJSON(phaseData);
+    });
+    
+    return {
+      id: compactData.id,
+      name: compactData.name || compactData.id,
+      phases,
+      metadata: {
+        formatVersion: compactData.formatVersion || 1,
+        exportTimestamp: compactData.exportTimestamp || new Date().toISOString(),
+        author: 'FET',
+        compatibilityFlags: compactData.compatibilityFlags || ['Initial']
+      }
+    };
+  }
+  
+  private getFallbackFormations(): Map<string, UberFormationData> {
+    // Basic 4-4-2 formation as fallback
+    const fallback = this.createBasicFormation('4-4-2-basic');
+    this.formationCache.set(fallback.id, fallback);
+    return this.formationCache;
+  }
+  
+  private createBasicFormation(id: string): UberFormationData {
+    // Create minimal formation data for when FET file is unavailable
+    const basicPositions = this.generateBasicPositions();
+    
+    return {
+      id,
+      name: 'Basic 4-4-2 (Fallback)',
+      phases: {
+        ATTACK: this.createPhaseData(basicPositions, 'attack'),
+        DEFEND: this.createPhaseData(basicPositions, 'defend'),
+        NEUTRAL: this.createPhaseData(basicPositions, 'neutral')
+      },
+      metadata: {
+        formatVersion: 1,
+        exportTimestamp: new Date().toISOString(),
+        author: 'Fallback Generator',
+        compatibilityFlags: ['Initial']
+      }
+    };
+  }
+}
+
+// Integration with match simulation
+class MatchSimulation {
+  private formationLoader: FormationLoader;
+  private formationData: Map<string, UberFormationData>;
+  
+  constructor() {
+    this.formationLoader = new FormationLoader();
+  }
+  
+  public async initialize(): Promise<void> {
+    // Load FET formation data at startup
+    this.formationData = await this.formationLoader.loadFormations();
+    console.log(`Match simulation initialized with ${this.formationData.size} formations`);
+  }
+  
+  public getFormationData(formationId: string): UberFormationData | null {
+    return this.formationData.get(formationId) || null;
+  }
+}
+```
+
+**FET File Format Integration**:
+- Server loads `uber-formation.formation` (JSON with serialized TypedArrays)
+- Runtime converts to optimized data structures using `FormationSerializer`  
+- Fallback to basic formations if FET file missing/corrupt
+- Formation data cached in memory for performance
+- Supports hot-reloading during development
+
+### 5.4 Data File Examples
+
+**Master Player Database**: `apps/server/data/players/players.json` (~2-3MB)
+```json
+{
+  "version": "1.0",
+  "lastUpdated": "2025-08-21T12:00:00Z",
+  "totalPlayers": 736,
+  "players": [
+    {
+      "id": "ENG_001",
+      "name": "Harry Kane", 
+      "nationality": "England",
+      "age": 30,
+      "position": "ST",
+      "primaryPosition": "ST",
+      "secondaryPositions": ["CF"],
+      "overall": 8.9,
+      "marketValue": 89000000,
+      "teamRole": "KEY_PLAYER",
+      "attributes": {
+        "pace": 7.2,
+        "shooting": 9.3,
+        "passing": 8.1,
+        "dribbling": 7.8,
+        "defending": 2.1,
+        "physical": 8.4
+      },
+      "injuryStatus": { "injured": false, "daysRemaining": 0 },
+      "formRating": 8.7
+    },
+    {
+      "id": "ENG_002", 
+      "name": "Jude Bellingham",
+      "nationality": "England",
+      "age": 21,
+      "position": "CM",
+      "primaryPosition": "CM",
+      "secondaryPositions": ["CAM", "CDM"],
+      "overall": 8.6,
+      "marketValue": 86000000,
+      "teamRole": "KEY_PLAYER",
+      "attributes": {
+        "pace": 7.8,
+        "shooting": 7.9,
+        "passing": 8.7,
+        "dribbling": 8.3,
+        "defending": 7.2,
+        "physical": 8.1
+      },
+      "injuryStatus": { "injured": false, "daysRemaining": 0 },
+      "formRating": 8.8
+    }
+  ]
+}
+```
+
+**Team Definition**: `apps/server/data/teams/england.json` (small, ~2KB)
+```json
+{
+  "id": "ENG",
+  "name": "England",
+  "tier": 1,
+  "confederation": "UEFA", 
+  "playerIds": [
+    "ENG_001", "ENG_002", "ENG_003", "ENG_004", "ENG_005",
+    "ENG_006", "ENG_007", "ENG_008", "ENG_009", "ENG_010",
+    "ENG_011", "ENG_012", "ENG_013", "ENG_014", "ENG_015",
+    "ENG_016", "ENG_017", "ENG_018", "ENG_019", "ENG_020",
+    "ENG_021", "ENG_022", "ENG_023"
+  ],
+  "captainId": "ENG_001",
+  "defaultFormation": "4-4-2",
+  "kitColors": {
+    "primary": "#FFFFFF",
+    "secondary": "#003366"
+  },
+  "metadata": {
+    "fifaRanking": 5,
+    "lastUpdated": "2025-08-21",
+    "worldCupAppearances": 16,
+    "coachName": "Gareth Southgate"
+  }
+}
+```
+
+**Benefits of Normalized Structure**:
+- **Efficient Storage**: Players defined once, referenced by ID
+- **Easy Updates**: Change player stats in one place
+- **Flexible Teams**: Teams can share players (club vs country)
+- **Custom Teams**: Reference existing players or create new ones
+- **Memory Efficient**: Load all players once, teams are just ID arrays
+- **Transfer System Ready**: Easy to move players between teams
 
 #### 4.4.3 Custom Team Creation System
 

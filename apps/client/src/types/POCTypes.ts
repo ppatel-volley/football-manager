@@ -28,6 +28,7 @@ export enum PlayerState {
 export interface Player {
     id: string
     name: string
+    squadNumber: number
     position: Vector2
     targetPosition: Vector2
     team: "RED" | "BLUE"

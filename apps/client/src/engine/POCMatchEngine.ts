@@ -70,6 +70,23 @@ export class POCMatchEngine {
         return this.gameState.score
     }
 
+    public getBallPossessor(): { name: string; squadNumber: number; team: "RED" | "BLUE" } | null {
+        if (!this.gameState.ball.possessor) {
+            return null
+        }
+        
+        const player = this.findPlayerById(this.gameState.ball.possessor)
+        if (!player) {
+            return null
+        }
+        
+        return {
+            name: player.name,
+            squadNumber: player.squadNumber,
+            team: player.team
+        }
+    }
+
     public handleButtonCommand(
         command: ButtonCommand,
         team: "HUMAN" | "AI"
@@ -465,6 +482,7 @@ export class POCMatchEngine {
             players.push({
                 id: `${color.toLowerCase()}_player_${i}`,
                 name: `${color} ${i + 1}`,
+                squadNumber: i + 1,
                 position: { ...basePosition },
                 targetPosition: { ...basePosition },
                 team: color,

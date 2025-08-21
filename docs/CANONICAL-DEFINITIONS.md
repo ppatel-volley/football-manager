@@ -154,6 +154,27 @@ export const PHASE_THRESHOLDS = {
 // if (ballPosition.y > PHASE_THRESHOLDS.ATTACKING_THIRD) { ... }
 ```
 
+## Team Selection System
+
+```typescript
+// CANONICAL: Default team configuration
+export const DEFAULT_TEAMS = {
+  HOME: "ENG",    // England (HOME team)
+  AWAY: "USA",    // USA (AWAY team)
+} as const;
+
+export const CUSTOM_TEAM_DEFAULTS = {
+  NAME: "Volley FC",           // Default name for user-created teams
+  TIER: TeamTier.TIER_2,       // Custom teams start at Tier 2
+  FORMATION: "4-4-2",          // Default formation
+  CONFEDERATION: "CUSTOM",      // Custom confederation
+  COLORS: {
+    PRIMARY: "#FF6B6B",        // Volley brand red
+    SECONDARY: "#4ECDC4"       // Volley brand teal
+  }
+} as const;
+```
+
 ## FIFA Constants
 
 All measurements normalized to 0-1 coordinate system based on FIFA specifications.
