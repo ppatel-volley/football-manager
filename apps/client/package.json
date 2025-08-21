@@ -18,7 +18,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@volley/vgf": "1.31.0",
+        "@volley/vgf": "2.2.4",
         "@volley/platform-sdk": "4.12.0",
         "@noriginmedia/norigin-spatial-navigation": "^2.3.0",
         "react": "^19.0.0",

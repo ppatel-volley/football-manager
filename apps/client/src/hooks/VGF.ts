@@ -4,26 +4,15 @@ import { getVGFHooks } from "@volley/vgf/client"
 
 /**
  * VGF Hooks for Football Manager
- * Using runtime-focused approach to bypass TypeScript inference issues
+ * Properly wrapped VGF hooks that maintain React context
  */
 
-// Create VGF hooks - using any to bypass type inference problems
-const vgfHooks = getVGFHooks<any, any, any>()
+// Get VGF hooks instance
+const vgfHooks = getVGFHooks<any, GameState, PhaseName>()
 
-// Export hooks with proper runtime functionality
-export const useDispatchAction = () => {
-    const dispatch = vgfHooks.useDispatchAction as any
-    return (action: string, payload?: any) => dispatch(action, payload)
-}
-
-export const useStateSync = () => {
-    const sync = vgfHooks.useStateSync as any
-    return sync() || {}
-}
-
-export const usePhase = () => {
-    const phase = vgfHooks.usePhase as any
-    return phase() || "PRE_MATCH"
-}
-
+// Export hooks as proper React hooks using the same pattern as VGF example
+export const useStateSync = vgfHooks.useStateSync
+export const useDispatchAction = vgfHooks.useDispatchAction  
+export const useDispatch = vgfHooks.useDispatch
+export const usePhase = vgfHooks.usePhase
 export const useEvents = vgfHooks.useEvents

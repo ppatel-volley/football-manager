@@ -3,7 +3,7 @@ import dotenv from "dotenv"
 import { envVarAsNumber } from "../utils/environment/envVarAsNumber"
 import { envVarAsString } from "../utils/environment/envVarAsString"
 
-dotenv.config({ path: ".env" })
+dotenv.config({ path: ".env.development" })
 
 export const STAGE = envVarAsString("STAGE", "local")
 

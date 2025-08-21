@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 
-import { useDispatchAction, useStateSync } from "../../hooks/VGF"
+import { useDispatch, useDispatchAction, useStateSync } from "../../hooks/VGF"
+import { PitchCanvas } from "./PitchCanvas"
 
 interface FootballMatchProps {
     phase: string
@@ -9,21 +10,23 @@ interface FootballMatchProps {
 
 export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => {
     const gameState = useStateSync()
+    const dispatch = useDispatch()
     const dispatchAction = useDispatchAction()
     const [autoProgress, setAutoProgress] = useState(true)
     
     // Auto-progress through phases for demo purposes
     useEffect(() => {
-        if (!autoProgress) return
-        
+        // Always auto-progress for testing - ignore checkbox
         let timeout: NodeJS.Timeout
         
         switch (phase) {
             case 'pre_match':
-                // Auto-start match after 5 seconds
+                // Auto-start match after 3 seconds for quick testing
+                console.log('Pre-match phase detected, setting auto-start timer')
                 timeout = setTimeout(() => {
-                    dispatchAction('startMatch')
-                }, 5000)
+                    console.log('Auto-progress timeout triggered - dispatching START_MATCH reducer')
+                    dispatch('START_MATCH')
+                }, 3000)
                 break
                 
             case 'kickoff':
@@ -35,9 +38,12 @@ export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => {
         }
         
         return () => {
-            if (timeout) clearTimeout(timeout)
+            if (timeout) {
+                console.log('Cleaning up timeout')
+                clearTimeout(timeout)
+            }
         }
-    }, [phase, autoProgress, dispatchAction])
+    }, [phase, dispatchAction])
     
     // Handle tactical commands
     const handleTacticalCommand = (commandType: string) => {
@@ -106,14 +112,30 @@ export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => {
                 </div>
             </div>
             
+            {/* Pitch Canvas - shown during active gameplay phases */}
+            {(phase === 'first_half' || phase === 'second_half' || phase === 'kickoff') && gameState && (
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }}>
+                    <PitchCanvas gameState={gameState} width={800} height={512} />
+                </div>
+            )}
+
             {/* Phase-specific content */}
             <div style={{ textAlign: 'center', margin: '20px' }}>
                 {phase === 'pre_match' && (
                     <div>
                         <h1>Pre-Match</h1>
                         <p>Teams entering the pitch...</p>
-                        <button onClick={() => dispatchAction('startMatch')}>
+                        <button onClick={() => {
+                            console.log('Button clicked - dispatching START_MATCH reducer')
+                            dispatch('START_MATCH')
+                        }}>
                             Start Match
+                        </button>
+                        <button onClick={() => {
+                            console.log('Test button clicked - dispatching testAction')
+                            dispatchAction('testAction')
+                        }}>
+                            Test Action
                         </button>
                     </div>
                 )}

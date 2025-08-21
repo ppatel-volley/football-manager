@@ -2,9 +2,19 @@ import "./constants/Environment"
 
 import { server } from "./VGFServer"
 
-server.start()
+async function startServer() {
+    console.log("🚀 Starting VGF server...")
+    try {
+        await server.start()
+        console.log("🚀 VGF server started successfully!")
+        console.log("Node version:", process.version)
+    } catch (error) {
+        console.error("🚨 VGF server failed to start:", error)
+        process.exit(1)
+    }
+}
 
-console.log("Node version:", process.version)
+startServer()
 
 process.on("uncaughtException", (err) => 
 {

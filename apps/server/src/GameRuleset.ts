@@ -1,4 +1,4 @@
-import type { GameRuleset } from "@volley/vgf/server"
+import type { GameRuleset, IGameActionContext } from "@volley/vgf/server"
 
 import { FirstHalfPhase } from "./phases/FirstHalfPhase"
 import { FullTimePhase } from "./phases/FullTimePhase"
@@ -18,13 +18,50 @@ import {
 } from "./thunks/MatchThunks"
 import { setupGameState } from "./utils/setupGame"
 
+console.log("🏈 GameRuleset.ts being loaded...")
+
 export const FootballManagerRuleset = {
     setup: setupGameState,
     
     // Actions that can be called during any phase
     actions: {
+        // Simple test action to verify VGF processing
+        testAction: (ctx: IGameActionContext<GameState>): GameState => {
+            console.log("🧪 TEST ACTION CALLED - VGF processing works!")
+            console.log("🧪 Context:", ctx)
+            console.log("🧪 State:", ctx?.session?.state ? "has state" : "no state")
+            return ctx.session.state
+        },
+        
+        // Start match action - transitions from pre-match to kickoff
+        startMatch: (ctx: IGameActionContext<GameState>): GameState => {
+            console.log("🚀🚀 GLOBAL startMatch action called!")
+            console.log("🚀🚀 Context:", ctx)
+            console.log("🚀🚀 Session:", ctx?.session)
+            console.log("🚀🚀 State:", ctx?.session?.state ? "has state" : "no state")
+            console.log("🚀🚀 Current phase:", ctx?.session?.state?.phase)
+            console.log("🚀🚀 Current matchPhase:", ctx?.session?.state?.matchPhase)
+            
+            if (!ctx?.session?.state) {
+                console.log("🚀🚀 ERROR: No state in context!")
+                throw new Error("No state provided to startMatch action")
+            }
+            
+            const state = ctx.session.state
+            const updatedState = {
+                ...state,
+                phase: PhaseName.Kickoff,
+                matchPhase: 'kickoff' as GameState['matchPhase']
+            }
+            
+            console.log("🚀🚀 Updated state phase:", updatedState.phase)
+            console.log("🚀🚀 Updated state matchPhase:", updatedState.matchPhase)
+            
+            return updatedState
+        },
+
         // Tactical commands from voice/button input
-        tacticalCommand: (ctx: { session: { state: GameState } }, command: { type: string; team: 'HOME' | 'AWAY' }): GameState =>
+        tacticalCommand: (ctx: IGameActionContext<GameState>, command: { type: string; team: 'HOME' | 'AWAY' }): GameState =>
         {
             console.log(`Tactical command: ${command.type} for ${command.team}`)
             
@@ -56,18 +93,9 @@ export const FootballManagerRuleset = {
             return updatedState
         },
 
-        // Start match action
-        startMatch: (ctx: { session: { state: GameState } }): GameState =>
-        {
-            console.log('Starting match')
-            return {
-                ...ctx.session.state,
-                matchPhase: 'kickoff' as 'pre_match' | 'kickoff' | 'first_half' | 'half_time' | 'second_half' | 'full_time'
-            }
-        },
 
         // Take kickoff action  
-        takeKickoff: (ctx: { session: { state: GameState } }): GameState =>
+        takeKickoff: (ctx: IGameActionContext<GameState>): GameState =>
         {
             console.log('Taking kickoff')
             return {
@@ -77,7 +105,7 @@ export const FootballManagerRuleset = {
         },
 
         // Shoot ball action
-        shootBall: (ctx: { session: { state: GameState } }, team: 'HOME' | 'AWAY'): GameState =>
+        shootBall: (ctx: IGameActionContext<GameState>, team: 'HOME' | 'AWAY'): GameState =>
         {
             console.log(`${team} team shoots`)
             
@@ -110,7 +138,7 @@ export const FootballManagerRuleset = {
         },
 
         // Restart match action
-        restartMatch: (ctx: { session: { state: GameState } }): GameState =>
+        restartMatch: (ctx: IGameActionContext<GameState>): GameState =>
         {
             console.log('Restarting match')
             return {
@@ -136,6 +164,30 @@ export const FootballManagerRuleset = {
     
     // Reducers for simple state updates
     reducers: {
+        // Start match reducer - transitions from pre-match to kickoff
+        START_MATCH: (state: GameState): GameState => {
+            console.log("🚀🚀 START_MATCH reducer called!")
+            console.log("🚀🚀 Current phase:", state?.phase)
+            console.log("🚀🚀 Current matchPhase:", state?.matchPhase)
+            
+            const updatedState = {
+                ...state,
+                phase: PhaseName.Kickoff,
+                matchPhase: 'kickoff' as GameState['matchPhase']
+            }
+            
+            console.log("🚀🚀 Updated state phase:", updatedState.phase)
+            console.log("🚀🚀 Updated state matchPhase:", updatedState.matchPhase)
+            
+            return updatedState
+        },
+        
+        // Test reducer
+        TEST_REDUCER: (state: GameState): GameState => {
+            console.log("🧪 TEST_REDUCER called - VGF reducer processing works!")
+            return state
+        },
+        
         updateGameTime: (state: GameState, newTime: number): GameState => ({
             ...state,
             gameTime: newTime,

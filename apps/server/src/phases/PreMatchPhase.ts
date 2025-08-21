@@ -6,14 +6,28 @@ import { PhaseName } from "../shared/types/PhaseName"
 export const PreMatchPhase = {
     actions: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        startMatch: (ctx: any): GameState => 
+        startMatch: (...args: any[]): GameState => 
 {
-            console.info("PreMatchPhase.startMatch - transitioning to kickoff")
+            console.log("🚀 PreMatchPhase.startMatch - transitioning to kickoff")
+            console.log("🚀 Arguments received:", args)
+            console.log("🚀 Args length:", args.length)
             
-            return {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ...ctx.session.state as GameState,
-                matchPhase: 'kickoff' as GameState['matchPhase']
+            const ctx = args[0]
+            console.log("🚀 Context:", ctx)
+            console.log("🚀 Context type:", typeof ctx)
+            console.log("🚀 Context keys:", Object.keys(ctx || {}))
+            
+            if (ctx?.session?.state) {
+                console.log("🚀 Session state found:", JSON.stringify(ctx.session.state, null, 2))
+                
+                return {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                ...ctx.session.state as GameState,
+                    matchPhase: 'kickoff' as GameState['matchPhase']
+                }
+            } else {
+                console.log("🚀 ERROR: No valid context in PreMatchPhase!")
+                throw new Error("Invalid context provided to PreMatchPhase.startMatch")
             }
         }
     },
