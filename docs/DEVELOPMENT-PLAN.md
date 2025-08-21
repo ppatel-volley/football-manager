@@ -225,13 +225,13 @@ App Manager
 class SoccerWorldCupGame extends GameRuleset {
   private deterministicContext: DeterministicGameContext;
   private formationEngine: FormationEngine;
-  private ballPhysics: Ball3DPhysics;
+  private ballPhysics: BallPhysics;
 
   constructor(matchSeed: number) {
     super();
     this.deterministicContext = new DeterministicGameContext(matchSeed);
     this.formationEngine = new FormationEngine();
-    this.ballPhysics = new Ball3DPhysics();
+    this.ballPhysics = new BallPhysics();
   }
 
   protected getPhases(): Record<string, PhaseHandler> {

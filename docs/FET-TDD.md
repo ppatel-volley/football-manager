@@ -108,12 +108,42 @@ interface CompactFormationData {
   };
 }
 
+// FIXED: JSON-serializable format (no TypedArrays in JSON)
 interface CompactPhaseData {
-  // Positions stored as packed arrays for memory efficiency
-  zones: Uint8Array;           // Zone indices
-  positions: Float32Array;     // x,y coordinates (interleaved)
-  priorities: Uint8Array;      // Priority values 1-10
-  flexibility: Uint8Array;     // Flexibility * 100 (0-100)
+  // Wire format: JSON-serializable arrays
+  zones: number[];             // Zone indices (JSON-safe)
+  positions: number[];         // x,y coordinates (interleaved, JSON-safe)
+  priorities: number[];        // Priority values 1-10 (JSON-safe)
+  flexibility: number[];       // Flexibility * 100 (0-100, JSON-safe)
+}
+
+// Runtime format: optimized TypedArrays for performance
+interface RuntimePhaseData {
+  zones: Uint8Array;           // Converted from JSON on load
+  positions: Float32Array;     // Converted from JSON on load  
+  priorities: Uint8Array;      // Converted from JSON on load
+  flexibility: Uint8Array;     // Converted from JSON on load
+}
+
+// Serialization utilities for JSON ↔ Runtime conversion
+class FormationSerializer {
+  static toJSON(runtime: RuntimePhaseData): CompactPhaseData {
+    return {
+      zones: Array.from(runtime.zones),
+      positions: Array.from(runtime.positions),
+      priorities: Array.from(runtime.priorities),
+      flexibility: Array.from(runtime.flexibility)
+    };
+  }
+  
+  static fromJSON(json: CompactPhaseData): RuntimePhaseData {
+    return {
+      zones: new Uint8Array(json.zones),
+      positions: new Float32Array(json.positions),
+      priorities: new Uint8Array(json.priorities),
+      flexibility: new Uint8Array(json.flexibility)
+    };
+  }
 }
 ```
 
@@ -217,6 +247,12 @@ class OptimizedGridSystem {
       outputPositions[i + 1] = targetPositions[i + 1] * weight + ballY * invWeight;
     }
   }
+  
+  public indexToZoneId(zoneIndex: number): string {
+    const gridX = zoneIndex % this.GRID_WIDTH;
+    const gridY = Math.floor(zoneIndex / this.GRID_WIDTH);
+    return `x${gridX}_y${gridY}`;
+  }
 }
 ```
 
@@ -252,7 +288,7 @@ class SIMDPositionInterpolator {
     const ballZoneId = this.gridSystem.getZoneId(ballPosition.x, ballPosition.y);
     const directPosition = phaseData.positions[ballZoneId]?.players[playerRole];
     if (directPosition) {
-      const result = this.applyContextualModifiers(directPosition, context);
+      const result = this.applyGameContextModifiers(directPosition, context);
       this.interpolationCache.set(cacheKey, result);
       return result;
     }
@@ -260,7 +296,7 @@ class SIMDPositionInterpolator {
     // Interpolate from nearby zones using optimized integer indices
     const nearbyIndices = this.gridSystem.getNearbyZoneIndices(ballZoneIndex, 2);
     const nearbyZones = nearbyIndices.map(idx => 
-      this.gridSystem.getZoneId(0, 0) // Convert indices back to IDs for compatibility
+      this.gridSystem.indexToZoneId(idx) // Convert indices back to IDs for compatibility
     ).filter(Boolean);
     const weightedPositions: Array<{ position: Vector2; weight: number }> = [];
     
@@ -269,7 +305,7 @@ class SIMDPositionInterpolator {
       const playerPosition = zoneData?.players[playerRole];
       
       if (playerPosition) {
-        const distance = this.getZoneDistance(ballZoneId, zoneId);
+        const distance = this.calculateZoneDistance(ballZoneId, zoneId);
         const weight = 1 / (1 + distance);
         
         weightedPositions.push({
@@ -280,7 +316,7 @@ class SIMDPositionInterpolator {
     }
     
     const interpolated = this.calculateWeightedAverage(weightedPositions);
-    const result = this.applyContextualModifiers(interpolated, context);
+    const result = this.applyGameContextModifiers(interpolated, context);
     
     this.interpolationCache.set(cacheKey, result);
     return result;
@@ -301,6 +337,42 @@ class SIMDPositionInterpolator {
       x: weightedX / totalWeight,
       y: weightedY / totalWeight
     };
+  }
+  
+  private calculateZoneDistance(zoneId1: string, zoneId2: string): number {
+    const pos1 = this.parseZoneId(zoneId1);
+    const pos2 = this.parseZoneId(zoneId2);
+    
+    const dx = pos1.x - pos2.x;
+    const dy = pos1.y - pos2.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  
+  private parseZoneId(zoneId: string): { x: number, y: number } {
+    // Parse "x5_y3" format to {x: 5, y: 3}
+    const match = zoneId.match(/x(\d+)_y(\d+)/);
+    return match ? { x: parseInt(match[1]), y: parseInt(match[2]) } : { x: 0, y: 0 };
+  }
+  
+  private applyGameContextModifiers(position: Vector2, context: GameContext): Vector2 {
+    // Apply tactical adjustments based on game context
+    const modifiedPosition = { ...position };
+    
+    // Example: shift formation based on possession state
+    if (context.possession === 'DEFENSIVE') {
+      modifiedPosition.x -= 0.05; // Pull back slightly
+    } else if (context.possession === 'ATTACKING') {
+      modifiedPosition.x += 0.03; // Push forward slightly
+    }
+    
+    // Apply pressure response
+    if (context.pressure > 0.7) {
+      // Spread formation when under pressure
+      modifiedPosition.x += (modifiedPosition.x - 0.5) * 0.1;
+      modifiedPosition.y += (modifiedPosition.y - 0.5) * 0.1;
+    }
+    
+    return modifiedPosition;
   }
 }
 ```
@@ -329,7 +401,8 @@ class FormationEngine {
     gameState: GameState,
     tacticalCommand?: TacticalCommand
   ): Vector2 {
-    const startTime = performance.now();
+    // PROFILING: Only enabled in development builds for performance monitoring
+    const startTime = DEBUG_PROFILING_ENABLED ? performance.now() : 0;
     
     try {
       const formation = this.getActiveFormation(player.team);
@@ -346,8 +419,11 @@ class FormationEngine {
       return this.applyFlexibilityAndConstraints(player, position, gameState);
       
     } finally {
-      const executionTime = performance.now() - startTime;
-      this.performanceMonitor.recordPositionCalculation(executionTime);
+      // PROFILING: Wall-clock timing only for performance monitoring, not simulation logic
+      if (DEBUG_PROFILING_ENABLED) {
+        const executionTime = performance.now() - startTime;
+        this.performanceMonitor.recordPositionCalculation(executionTime);
+      }
     }
   }
   
@@ -470,7 +546,7 @@ interface ExportMetadata {
   author: string;
   description: string;
   gameVersion: string;
-  compatibilityFlags: string[];  // ["POC", "Phase2", "Phase3"]
+  compatibilityFlags: string[];  // ["Initial", "Phase2", "Phase3"]
 }
 ```
 
@@ -677,9 +753,9 @@ class PerformanceMonitor {
 }
 ```
 
-## 7. User Interface Specifications
+## 9. User Interface Specifications
 
-### 7.1 Editor Interface
+### 9.1 Editor Interface
 
 ```typescript
 interface FETUserInterface {
@@ -701,7 +777,7 @@ interface FETUserInterface {
 }
 ```
 
-### 7.2 Validation Interface
+### 9.2 Validation Interface
 
 ```typescript
 interface ValidationResult {
@@ -720,9 +796,9 @@ interface ValidationError {
 }
 ```
 
-## 8. MVP Tightening (Phase 2 Guidance)
+## 8. MVP Tightening (Phase 1 Guidance)
 
-### 8.1 Phase 2A: Core Editor (Months 4-5)
+### 8.1 Phase 1A: Core Editor (Months 4-5)
 **Strict Scope Limitations**:
 - **Single Formation Category**: Balanced formations only (defer Defensive/Attacking)
 - **Single Grid Density**: 20x15 fixed (no dynamic scaling)
@@ -730,7 +806,7 @@ interface ValidationError {
 - **JSON Export/Import**: Basic serialization without versioning
 - **Base Validations**: Bounds checking and overlap detection only
 
-### 9.2 Phase 2B: Enhanced Features (Month 6)
+### 8.2 Phase 1B: Enhanced Features (Month 6)
 **Incremental Additions**:
 - **Transition Phases**: Add TRANSITION_ATTACK/TRANSITION_DEFEND
 - **Set Piece Variants**: Corner and throw-in positioning
@@ -743,52 +819,52 @@ interface ValidationError {
 - Advanced coverage metrics and heat map generation
 - Version control and collaboration features
 
-## 9. Development Phases
+## 10. Development Phases
 
-### 9.1 Phase 2A: Core Editor (Months 4-5)
+### 10.1 Phase 2A: Core Editor (Months 4-5)
 - Basic drag-and-drop formation editor
 - Grid system implementation
 - Position validation engine  
 - Formation template system
 - Export/import functionality
 
-### 8.2 Phase 2B: Advanced Features (Month 6)
+### 10.2 Phase 2B: Advanced Features (Month 6)
 - Multi-phase formation support
 - Performance optimisation
 - Advanced validation rules
 - Formation testing simulation
 - Integration with AI controller
 
-### 8.3 Phase 3: Professional Features (Months 7-8)
+### 10.3 Phase 3: Professional Features (Months 7-8)
 - Formation analytics and effectiveness metrics
 - A/B testing framework
 - Version control system
 - Plugin architecture for extensibility
 - Machine learning formation suggestions
 
-## 9. Testing Strategy
+## 11. Testing Strategy
 
-### 9.1 Unit Testing
+### 11.1 Unit Testing
 - Position calculation accuracy
 - Grid system zone mapping
 - Data serialisation/deserialisation
 - Performance benchmark validation
 
-### 9.2 Integration Testing
+### 11.2 Integration Testing
 - AI controller integration
 - Formation switching during gameplay
 - Memory usage under load
 - Real-time position updates
 
-### 9.3 Performance Testing
+### 11.3 Performance Testing
 - 22 players positioning simultaneously
 - Formation data loading/caching
 - Memory leak detection
 - CPU usage profiling
 
-## 10. Risk Assessment
+## 12. Risk Assessment
 
-### 10.1 Technical Risks
+### 12.1 Technical Risks
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
@@ -797,7 +873,7 @@ interface ValidationError {
 | Complex formations break AI | Medium | Medium | Extensive validation, fallback positioning |
 | Integration complexity | Medium | High | Phased integration, comprehensive testing |
 
-### 10.2 Timeline Risks
+### 12.2 Timeline Risks
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
@@ -805,9 +881,9 @@ interface ValidationError {
 | AI integration complexity | High | Medium | Parallel development, early integration testing |
 | Performance optimisation time | Medium | Medium | Performance-first development approach |
 
-## 11. Future Extensibility
+## 13. Future Extensibility
 
-### 11.1 Plugin Architecture
+### 13.1 Plugin Architecture
 
 ```typescript
 interface FormationPlugin {
@@ -839,14 +915,14 @@ class FormationPluginManager {
 }
 ```
 
-### 11.2 Machine Learning Integration
+### 13.2 Machine Learning Integration
 
 - Formation effectiveness analysis
 - Automatic position optimisation
 - Player role suggestions based on attributes
 - Opponent formation counter-suggestions
 
-## 12. Conclusion
+### 14. Conclusion
 
 The Formation Editor Tool provides a comprehensive foundation for creating sophisticated AI behaviour in Soccer Manager: World Cup Edition. The architecture balances technical sophistication with performance requirements, ensuring smooth real-time gameplay whilst enabling rich tactical depth.
 

@@ -11,11 +11,11 @@
 
 This Technical Design Document outlines the technical architecture and implementation details for developing Soccer Manager: World Cup Edition. The game features a voice-controlled football simulation with AI-controlled teams, 3D ball physics presented in 2D, and sophisticated formation-based player positioning using a formation editing tool for tactical AI behaviour.
 
-### 1.1 POC Scope Definition
+### 1.1 Scope Definition
 
 **Primary Goal**: Demonstrate viable AI football simulation with formation adherence and realistic match flow
 
-**In-Scope for POC**:
+**In-Scope for Initial Implementation**:
 - AI vs AI autonomous match simulation
 - 3D ball physics with 2D visual presentation (including height simulation and landing position prediction)
 - Ball in/out detection with basic restarts (throw-ins, corners, goal kicks)
@@ -51,6 +51,8 @@ The PRD uses simplified phase names while the TDD implements a richer finite sta
 - `FREE_KICK`, `PENALTY` states for advanced rule system
 - `OFFSIDE` state for offside detection
 - `VAR_REVIEW` for future video review system
+- `QR_CODE_DISPLAY` state for mobile controller connection (multiplayer setup)
+- `WAITING_FOR_PLAYERS` state for multiplayer session formation
 
 ### 1.3 Deterministic Simulation Policy
 
@@ -69,6 +71,98 @@ The PRD uses simplified phase names while the TDD implements a richer finite sta
 - Clamped delta time to prevent "spiral of death" scenarios
 
 **VGF Deterministic Context Implementation**:
+
+**Centralised RNG System**:
+```typescript
+class GameRNG {
+  private seed: number;
+  private state: number;
+  
+  constructor(seed: number) {
+    this.seed = seed;
+    this.state = seed;
+  }
+  
+  // Linear Congruential Generator for deterministic randomness
+  next(): number {
+    this.state = (this.state * 1103515245 + 12345) & 0x7fffffff;
+    return this.state / 0x7fffffff;
+  }
+  
+  nextInt(min: number, max: number): number {
+    return Math.floor(this.next() * (max - min)) + min;
+  }
+  
+  choose<T>(array: T[]): T {
+    return array[this.nextInt(0, array.length)];
+  }
+  
+  getSeed(): number {
+    return this.seed;
+  }
+  
+  getState(): number {
+    return this.state;
+  }
+}
+```
+
+**Game Time System**:
+```typescript
+class GameClock {
+  private currentTick: number = 0;
+  private readonly TICKS_PER_SECOND = 60;
+  
+  tick(): void {
+    this.currentTick++;
+  }
+  
+  getCurrentTick(): number {
+    return this.currentTick;
+  }
+  
+  getGameTimeMs(): number {
+    return Math.floor(this.currentTick * (1000 / this.TICKS_PER_SECOND));
+  }
+  
+  ticksSince(previousTick: number): number {
+    return this.currentTick - previousTick;
+  }
+  
+  msToTicks(ms: number): number {
+    return Math.floor(ms / (1000 / this.TICKS_PER_SECOND));
+  }
+  
+  reset(): void {
+    this.currentTick = 0;
+  }
+}
+```
+
+**Deterministic Context**:
+```typescript
+interface DeterministicContext {
+  rng: GameRNG;
+  clock: GameClock;
+  matchSeed: number;
+}
+
+class GameContext {
+  public readonly rng: GameRNG;
+  public readonly clock: GameClock;
+  public readonly matchSeed: number;
+  
+  constructor(matchSeed: number) {
+    this.matchSeed = matchSeed;
+    this.rng = new GameRNG(matchSeed);
+    this.clock = new GameClock();
+  }
+  
+  createChildRNG(seedOffset: number): GameRNG {
+    return new GameRNG(this.matchSeed + seedOffset);
+  }
+}
+```
 
 VGF GameRuleset actions receive a `GameActionContext` that ensures deterministic execution across all clients:
 
@@ -194,26 +288,26 @@ export const FIFA_CONSTANTS = {
 
 ### 1.3 Component Phase Mapping
 
-| Component | POC Status | Phase 2 Status | Implementation Notes |
+| Component | Initial Status | Phase 2 Status | Implementation Notes |
 |-----------|------------|-----------------|----------------------|
-| **Match Phases** | ⚠️ Limited | Complete | POC: KICKOFF, IN_PLAY, OUT_OF_PLAY, THROW_IN, CORNER_KICK, GOAL_KICK<br/>Phase 2: +FREE_KICK, +PENALTY, +OFFSIDE |
+| **Match Phases** | ⚠️ Limited | Complete | Initial: KICKOFF, IN_PLAY, OUT_OF_PLAY, THROW_IN, CORNER_KICK, GOAL_KICK<br/>Phase 2: +FREE_KICK, +PENALTY, +OFFSIDE |
 | **AI Difficulty** | ✅ Full | Enhanced | BEGINNER, AMATEUR, PROFESSIONAL, WORLD_CLASS |
-| **Physics Engine** | ✅ 2D Only | 3D Enhanced | POC: Simple 2D Canvas physics<br/>Phase 2: +Ball height, +Spin effects, +Advanced trajectories |
-| **Formation System** | ⚠️ Basic | FET Integrated | POC: Predefined 4-4-2/4-3-3 templates<br/>Phase 2: FET-TDD schema consumption |
+| **Physics Engine** | ✅ 2D Only | 3D Enhanced | Initial: Simple 2D Canvas physics<br/>Phase 2: +Ball height, +Spin effects, +Advanced trajectories |
+| **Formation System** | ⚠️ Basic | FET Integrated | Initial: Predefined 4-4-2/4-3-3 templates<br/>Phase 2: FET-TDD schema consumption |
 | **Player Attributes** | ✅ Full | Enhanced | 0.0-10.0 scale (PRD specification) |
-| **Match Statistics** | ⚠️ Minimal | Advanced | POC: Possession, shots, corners<br/>Phase 2: +Passes, +Fouls, +Cards, +Heatmaps |
-| **Voice Commands** | ❌ Disabled | ✅ Full | Completely out of scope for POC |
-| **Multiplayer** | ❌ Disabled | ✅ Full | POC: AI vs AI evaluation only |
-| **Rules System** | ⚠️ Basic | Complete | POC: Ball boundaries, goals, basic restarts<br/>Phase 2: +Offside, +Fouls, +Cards, +Advanced restarts |
+| **Match Statistics** | ⚠️ Minimal | Advanced | Initial: Possession, shots, corners<br/>Phase 2: +Passes, +Fouls, +Cards, +Heatmaps |
+| **Player Controls** | ✅ Buttons | ✅ Voice | Phase 1: Button interface (D-pad, Select, etc.)<br/>Phase 2: Mobile controller with voice commands |
+| **Multiplayer** | ❌ Disabled | ✅ Full | Phase 1: Single-player vs AI only<br/>Phase 2: Local multiplayer (same room) + Online multiplayer |
+| **Rules System** | ⚠️ Basic | Complete | Initial: Ball boundaries, goals, basic restarts<br/>Phase 2: +Offside, +Fouls, +Cards, +Advanced restarts |
 
 **Legend**: ✅ Fully implemented | ⚠️ Limited implementation | ❌ Not implemented
 
 ## 2. System Architecture Overview
 
-### 2.1 POC Architecture Overview
+### 2.1 Architecture Overview
 
 ```
-POC Single-Client Architecture:
+Single-Client Architecture:
 ┌─────────────────────────────────────────┐
 │           React Client (FireTV)         │
 │  ┌─────────────────────────────────────┐ │
@@ -264,30 +358,1543 @@ Future Multiplayer (Phase 2):
 - ESLint + Prettier for code quality
 - Vitest (client) + Jest (server) for testing
 
-## 3. Core Systems Design
+## 3. User Journey and Flow Design
 
-### 3.1 Voice Recognition System
+### 3.1 Complete User Journey Map
 
-#### 3.1.1 Architecture
+#### 3.1.1 Phase 1 User Journey (Desktop Development)
+
+```
+App Startup (Desktop Browser/Electron)
+    ↓
+Frontend Manager
+    ├── Title Screen (5 seconds)
+    ├── Game Mode Selection
+    │   ├── Single Player vs AI
+    │   └── Practice Match
+    ↓
+Team & Match Setup (Mouse-driven UI)
+    ├── Team Selection (auto-generated or saved)
+    ├── Formation Selection (4-4-2, 4-3-3, etc.)
+    ├── AI Difficulty (Beginner → World Class)
+    └── Match Type (Friendly, League, etc.)
+    ↓
+PreMatch Phase
+    ├── Players Enter Pitch (30-45 seconds)
+    ├── Formation Display
+    └── Pre-match Statistics
+    ↓
+Game Manager Phases
+    ├── Kick Off Phase
+    │   └── On-Screen Button Overlay Active
+    ├── First Half (2.25 minutes real-time)
+    │   └── Live Mouse Clicks (SHOOT, DEFEND, ATTACK buttons)
+    ├── Half Time (≤1 minute)
+    │   └── Statistics Display
+    ├── Second Half (2.25 minutes real-time)
+    │   └── Continued Mouse Button Control
+    └── Full Time
+        ├── Final Statistics
+        ├── Match Summary
+        └── Return to Frontend Manager
+```
+
+#### 3.1.2 Phase 2 User Journey (Mobile Controller + Multiplayer)
+
+**Single-Player with Mobile Controller**:
+```
+App Startup → Title Screen → Game Mode Selection
+    ↓
+QR Code Display State
+    ├── Generate unique session QR code
+    ├── Display "Scan QR Code with Mobile Controller" message
+    └── Wait for mobile app connection
+    ↓
+Mobile Controller Connection
+    ├── Player scans QR code with mobile app
+    ├── Mobile app connects to VGF session "room"
+    ├── Connection confirmation on TV screen
+    └── Voice command testing (optional)
+    ↓
+Team & Match Setup (via mobile voice commands)
+    ├── "Select team [team name]" voice command
+    ├── "Use formation four-four-two" voice command
+    ├── "Set difficulty to professional" voice command
+    └── "Start friendly match" voice command
+    ↓
+Match Execution
+    ├── Live voice commands during gameplay
+    ├── Google Speech-to-Text processing
+    ├── AI command parsing and validation
+    └── VGF action dispatch to game
+```
+
+**Local Multiplayer (Same Room)**:
+```
+App Startup → Title Screen → Local Multiplayer Selection
+    ↓
+QR Code Display State
+    ├── Display single QR code for session
+    ├── "Player 1 and Player 2: Scan QR Code" message
+    └── Wait for both controllers to connect
+    ↓
+Waiting for Players State
+    ├── Player 1 scans QR code → "Player 1 Connected (HOME team)"
+    ├── Player 2 scans QR code → "Player 2 Connected (AWAY team)"  
+    ├── Both players see connection status on TV
+    └── Auto-proceed when both connected
+    ↓
+Team Selection (Simultaneous)
+    ├── Player 1: "Select my team [name]" → HOME team setup
+    ├── Player 2: "Select my team [name]" → AWAY team setup
+    ├── Formation selection via voice for both players
+    └── "Ready to start" confirmation from both players
+    ↓
+Match Execution
+    ├── Both players issue voice commands simultaneously
+    ├── VGF manages command routing to correct teams
+    ├── Real-time tactical competition
+    └── Shared TV display with team-colored indicators
+```
+
+**Online Multiplayer**:
+```
+App Startup → Title Screen → Online Multiplayer
+    ↓
+QR Code Display + Matchmaking
+    ├── Player scans QR code to connect mobile controller
+    ├── "Searching for opponent..." message
+    ├── VGF matchmaking based on league tier/skill
+    └── "Opponent found: [opponent name]" notification
+    ↓
+Pre-Match Lobby
+    ├── Both players see opponent information
+    ├── Team selection and formation setup
+    ├── "Ready" confirmations from both players
+    └── 3-second countdown to match start
+    ↓
+Networked Match Execution
+    ├── Deterministic game logic synchronised via VGF
+    ├── Voice commands processed locally, actions sent globally
+    ├── Real-time opponent tactical responses
+    └── Network resilience and reconnection handling
+```
+
+#### 3.1.3 Critical State Transitions
+
+**Session Connection Flow**:
 ```typescript
-interface VoiceCommand
-{
-  id: string;
-  phrase: string;
-  confidence: number;
-  timestamp: number;
-  playerId: string;
+enum SessionState {
+  STARTUP = 'startup',
+  QR_CODE_DISPLAY = 'qr_code_display',
+  WAITING_FOR_PLAYERS = 'waiting_for_players', 
+  PLAYER_SETUP = 'player_setup',
+  MATCH_READY = 'match_ready',
+  IN_MATCH = 'in_match',
+  MATCH_COMPLETE = 'match_complete'
 }
 
-interface CommandProcessor
-{
-  recogniseSpeech(audioInput: MediaStream): Promise<VoiceCommand>;
-  parseCommand(command: VoiceCommand): GameAction | null;
-  validateCommand(action: GameAction, gameState: GameState): boolean;
+interface SessionConnectionEvent {
+  playerId: string;
+  playerName: string;
+  controllerType: 'mobile' | 'button';
+  team: 'HOME' | 'AWAY';
+  connectionTimestamp: number;
 }
 ```
 
-#### 3.1.2 Implementation Details
+## 4. Control Systems Architecture
+
+### 4.1 Phase 1: Desktop Mouse Button Interface System
+
+**On-Screen Button Layout**:
+```typescript
+interface TacticalButton {
+  id: string;
+  command: TacticalCommand;
+  position: ButtonPosition;
+  enabled: boolean;
+  cooldownTicks: number; // Changed from cooldownMs to ticks
+  lastClickTick: number; // Changed from lastClickTime to ticks
+}
+
+interface ButtonPosition {
+  x: number;      // Pixel position from left
+  y: number;      // Pixel position from top
+  width: number;  // Button width in pixels
+  height: number; // Button height in pixels
+}
+
+enum TacticalCommand {
+  ATTACK = 'attack',
+  DEFEND = 'defend', 
+  BALANCE = 'balance',
+  SHOOT = 'shoot',
+  CLOSE_DOWN = 'close_down',
+  LONG_BALL = 'long_ball',
+  WATCH_LEFT = 'watch_left',
+  WATCH_RIGHT = 'watch_right'
+}
+
+// Button layout configuration for development
+const TACTICAL_BUTTONS: TacticalButton[] = [
+  // Top row - Tactical Style (2000ms = 120 ticks at 60fps)
+  { id: 'attack', command: TacticalCommand.ATTACK, position: { x: 20, y: 20, width: 80, height: 40 }, enabled: true, cooldownTicks: 120, lastClickTick: 0 },
+  { id: 'defend', command: TacticalCommand.DEFEND, position: { x: 120, y: 20, width: 80, height: 40 }, enabled: true, cooldownTicks: 120, lastClickTick: 0 },
+  { id: 'balance', command: TacticalCommand.BALANCE, position: { x: 220, y: 20, width: 80, height: 40 }, enabled: true, cooldownTicks: 120, lastClickTick: 0 },
+  
+  // Middle row - Immediate Actions (1000ms = 60 ticks, 1500ms = 90 ticks, 3000ms = 180 ticks)
+  { id: 'shoot', command: TacticalCommand.SHOOT, position: { x: 20, y: 80, width: 80, height: 40 }, enabled: false, cooldownTicks: 60, lastClickTick: 0 },
+  { id: 'close_down', command: TacticalCommand.CLOSE_DOWN, position: { x: 120, y: 80, width: 80, height: 40 }, enabled: false, cooldownTicks: 90, lastClickTick: 0 },
+  { id: 'long_ball', command: TacticalCommand.LONG_BALL, position: { x: 220, y: 80, width: 80, height: 40 }, enabled: true, cooldownTicks: 180, lastClickTick: 0 },
+  
+  // Bottom row - Positional Awareness (5000ms = 300 ticks)
+  { id: 'watch_left', command: TacticalCommand.WATCH_LEFT, position: { x: 20, y: 140, width: 80, height: 40 }, enabled: true, cooldownTicks: 300, lastClickTick: 0 },
+  { id: 'watch_right', command: TacticalCommand.WATCH_RIGHT, position: { x: 220, y: 140, width: 80, height: 40 }, enabled: true, cooldownTicks: 300, lastClickTick: 0 }
+];
+```
+
+**Mouse Click Processing**:
+```typescript
+class DesktopButtonProcessor {
+  private buttons: Map<string, TacticalButton> = new Map();
+  private commandQueue: TacticalCommand[] = [];
+  private context: GameContext;
+  
+  constructor(context: GameContext) {
+    this.context = context;
+    TACTICAL_BUTTONS.forEach(button => {
+      this.buttons.set(button.id, button);
+    });
+  }
+  
+  public handleMouseClick(x: number, y: number, gameState: GameState): void {
+    const clickedButton = this.getButtonAtPosition(x, y);
+    if (clickedButton && this.validateCommand(clickedButton.command, gameState)) {
+      this.executeCommand(clickedButton, gameState);
+    }
+  }
+  
+  private getButtonAtPosition(x: number, y: number): TacticalButton | null {
+    for (const button of this.buttons.values()) {
+      const pos = button.position;
+      if (x >= pos.x && x <= pos.x + pos.width && 
+          y >= pos.y && y <= pos.y + pos.height) {
+        return button;
+      }
+    }
+    return null;
+  }
+  
+  private validateCommand(command: TacticalCommand, gameState: GameState): boolean {
+    const currentTick = this.context.clock.getCurrentTick();
+    const button = Array.from(this.buttons.values()).find(b => b.command === command);
+    
+    if (!button?.enabled) return false;
+    if (currentTick - button.lastClickTick < button.cooldownTicks) return false;
+    
+    // Context validation
+    switch (command) {
+      case TacticalCommand.SHOOT:
+        return gameState.ballPossession === 'HOME'; // Assuming HOME is player team
+      case TacticalCommand.CLOSE_DOWN:
+        return gameState.ballPossession === 'AWAY';
+      default:
+        return true;
+    }
+  }
+  
+  private executeCommand(button: TacticalButton, gameState: GameState): void {
+    button.lastClickTick = this.context.clock.getCurrentTick();
+    this.animateButtonPress(button.id);
+    this.dispatchTacticalCommand(button.command, gameState);
+  }
+  
+  private animateButtonPress(buttonId: string): void {
+    // Visual feedback: button press animation, color change, etc.
+    const buttonElement = document.getElementById(buttonId);
+    if (buttonElement) {
+      buttonElement.classList.add('button-pressed');
+      setTimeout(() => buttonElement.classList.remove('button-pressed'), 200);
+    }
+  }
+}
+```
+
+**CSS Styling for Development**:
+```css
+.tactical-button {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.tactical-button:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.05);
+}
+
+.tactical-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tactical-button.button-pressed {
+  background: rgba(0, 255, 0, 0.8);
+  transform: scale(0.95);
+}
+
+/* Button-specific styling */
+.tactical-button.attack { border-color: #ff4444; }
+.tactical-button.defend { border-color: #4444ff; }
+.tactical-button.balance { border-color: #ffff44; }
+.tactical-button.shoot { border-color: #ff8844; }
+.tactical-button.close-down { border-color: #ff44ff; }
+```
+
+### 4.2 Phase 2: Mobile Controller Integration
+
+#### 4.2.1 QR Code Connection System
+
+**QR Code Generation**:
+```typescript
+// SECURITY FIXED: No encryption keys in QR codes
+interface SessionQRData {
+  sessionId: string;
+  serverEndpoint: string;
+  gameType: 'single' | 'local_multiplayer' | 'online_multiplayer';
+  timestamp: number;
+  sessionToken?: string; // Short-lived session token, not encryption key
+}
+
+class QRCodeManager {
+  public generateSessionQR(sessionId: string, gameType: GameType): string {
+    const qrData: SessionQRData = {
+      sessionId,
+      serverEndpoint: VGF_SERVER_ENDPOINT,
+      gameType,
+      timestamp: Date.now(),
+      sessionToken: gameType === 'online_multiplayer' ? this.generateSessionToken() : undefined
+    };
+    
+    return JSON.stringify(qrData); // Base64 encoded for QR code
+  }
+  
+  public displayQRCode(qrData: string): void {
+    // Render QR code on TV screen with instructions
+    // "Scan with Soccer Manager Controller App"
+    // Connection status indicators
+  }
+  
+  private generateSessionToken(): string {
+    // SECURITY: Generate short-lived session token (5 minutes)
+    // Server performs key exchange after token validation
+    // Use crypto-strong randomness for security tokens
+    const array = new Uint32Array(2);
+    crypto.getRandomValues(array);
+    return array[0].toString(36) + array[1].toString(36);
+  }
+}
+}
+```
+
+**Security Model & Threat Analysis**:
+
+```typescript
+// SECURITY: Secure session establishment
+enum SecurityThreat {
+  QR_INTERCEPTION = 'QR_INTERCEPTION',
+  SESSION_HIJACKING = 'SESSION_HIJACKING',
+  REPLAY_ATTACK = 'REPLAY_ATTACK',
+  MAN_IN_MIDDLE = 'MAN_IN_MIDDLE'
+}
+
+interface SecureSessionProtocol {
+  // Phase 1: QR code contains only session token (NOT encryption keys)
+  qrToken: string;          // Short-lived (5 min), single-use token
+  
+  // Phase 2: Server-side key exchange after token validation
+  clientChallenge: string;  // Client-generated nonce
+  serverResponse: string;   // Server-generated response + session key
+  
+  // Phase 3: Encrypted channel established
+  sessionKey: string;       // Server-generated, never transmitted in QR
+  expiresAt: number;        // Session timeout (15 minutes)
+}
+
+class SecureSessionManager {
+  private activeSessions = new Map<string, SecureSessionProtocol>();
+  
+  public validateQRToken(token: string): boolean {
+    // Token expires in 5 minutes, single-use only
+    // Server generates actual encryption keys after validation
+    return this.isTokenValid(token) && !this.isTokenUsed(token);
+  }
+  
+  public revokeSession(sessionId: string): void {
+    // Immediate session termination
+    this.activeSessions.delete(sessionId);
+  }
+}
+```
+
+**Mobile App Connection Flow**:
+```typescript
+// Mobile Controller App (External Repository)
+interface ControllerConnection {
+  scanQRCode(): Promise<SessionQRData>;
+  connectToSession(qrData: SessionQRData): Promise<ConnectionResult>;
+  sendVoiceCommand(audioBlob: Blob): Promise<CommandResult>;
+}
+
+interface CommandResult {
+  originalAudio: Blob;
+  speechToText: string;
+  parsedCommand: TacticalCommand;
+  confidence: number;
+  success: boolean;
+  profanityDetected: boolean;
+  profanityLevel: ProfanityLevel;
+  commentaryTriggered: boolean;
+}
+
+enum ProfanityLevel {
+  NONE = 'none',
+  MILD = 'mild',
+  MODERATE = 'moderate', 
+  SEVERE = 'severe'
+}
+
+class MobileControllerClient {
+  private vgfClient: VGFClient;
+  
+  public async processVoiceCommand(audioBlob: Blob): Promise<void> {
+    // Step 1: Send to Google Speech-to-Text API
+    const speechText = await this.speechToText(audioBlob);
+    
+    // Step 2: Send to AI command parser
+    const parsedCommand = await this.parseCommand(speechText);
+    
+    // Step 3: Validate and send to VGF session
+    if (parsedCommand.confidence > 0.8) {
+      await this.vgfClient.dispatchAction('tactical_command', {
+        command: parsedCommand.command,
+        playerId: this.playerId,
+        timestamp: Date.now()
+      });
+    }
+  }
+  
+  private async parseCommand(speechText: string): Promise<ParsedCommand> {
+    // AI prompt: "Convert this natural language to a tactical command: [speechText]"
+    // Expected commands: attack, defend, balance, shoot, close_down, long_ball, watch_left, watch_right
+    // Return structured command object
+  }
+}
+```
+
+#### 4.2.2 Multiplayer Session Management
+
+**VGF Session Architecture**:
+```typescript
+interface MultiplayerGameState extends GameState {
+  players: Map<string, PlayerConnection>;
+  sessionType: 'local_multiplayer' | 'online_multiplayer';
+  connectionStatus: ConnectionStatus;
+}
+
+interface PlayerConnection {
+  playerId: string;
+  playerName: string;
+  team: 'HOME' | 'AWAY';
+  controllerConnected: boolean;
+  lastCommandTimestamp: number;
+  connectionLatency: number;
+}
+
+class MultiplayerSessionManager {
+  private vgfServer: VGFServer;
+  
+  public async handlePlayerConnection(qrData: SessionQRData, playerId: string): Promise<void> {
+    const session = await this.vgfServer.getSession(qrData.sessionId);
+    
+    if (qrData.gameType === 'local_multiplayer') {
+      // Assign to next available team (HOME/AWAY)
+      const assignedTeam = session.players.size === 0 ? 'HOME' : 'AWAY';
+      await this.addPlayerToSession(session, playerId, assignedTeam);
+    } else {
+      // Online multiplayer - matchmaking logic
+      await this.handleOnlineMatchmaking(session, playerId);
+    }
+  }
+  
+  public async handleTacticalCommand(
+    sessionId: string, 
+    playerId: string, 
+    command: TacticalCommand
+  ): Promise<void> {
+    const session = await this.vgfServer.getSession(sessionId);
+    const player = session.players.get(playerId);
+    
+    // Route command to correct team's AI system
+    if (player.team === 'HOME') {
+      session.gameState.homeTeam.executeCommand(command);
+    } else {
+      session.gameState.awayTeam.executeCommand(command);
+    }
+    
+    // Broadcast state update to all connected players
+    await this.vgfServer.broadcastStateUpdate(sessionId, session.gameState);
+  }
+}
+```
+
+### 4.3 Reactive Commentary System
+
+#### 4.3.1 Commentary Trigger Architecture
+
+```typescript
+interface CommentaryTrigger {
+  triggerType: CommentaryTriggerType;
+  command: TacticalCommand;
+  profanityLevel: ProfanityLevel;
+  gameContext: GameContext;
+  timestamp: number;
+  cooldownActive: boolean;
+}
+
+enum CommentaryTriggerType {
+  TACTICAL_CHANGE = 'tactical_change',
+  PROFANITY_REACTION = 'profanity_reaction',
+  TIMING_CONTEXT = 'timing_context',
+  PERFORMANCE_IMPACT = 'performance_impact'
+}
+
+interface GameContext {
+  currentScore: { home: number, away: number };
+  gameTime: number;           // Minutes elapsed
+  ballPossession: 'HOME' | 'AWAY';
+  recentEvents: GameEvent[];  // Last 5 game events
+  tacticalHistory: TacticalCommand[]; // Recent commands for context
+}
+
+class ReactiveCommentaryManager {
+  private commentaryLines: Map<CommentaryTriggerType, string[]> = new Map();
+  private lastCommentaryTick: number = 0;
+  private readonly COMMENTARY_COOLDOWN_TICKS = 2700; // 45 seconds at 60fps
+  private context: GameContext;
+  
+  constructor(context: GameContext) {
+    this.context = context;
+    this.loadCommentaryLines();
+  }
+  
+  public async processVoiceCommand(
+    command: TacticalCommand,
+    speechText: string,
+    gameContext: GameContext
+  ): Promise<CommentaryResult> {
+    // Check profanity
+    const profanityResult = this.detectProfanity(speechText);
+    
+    // Determine if commentary should trigger
+    if (!this.shouldTriggerCommentary(gameContext)) {
+      return { triggered: false, profanityImpact: profanityResult };
+    }
+    
+    let commentaryLine: string | null = null;
+    
+    // Handle profanity-based commentary first (higher priority)
+    if (profanityResult.detected) {
+      commentaryLine = this.selectProfanityCommentary(profanityResult.level);
+      this.lastCommentaryTick = this.context.clock.getCurrentTick();
+    } else {
+      // Regular tactical commentary
+      commentaryLine = this.selectTacticalCommentary(command, gameContext);
+      if (commentaryLine) {
+        this.lastCommentaryTick = this.context.clock.getCurrentTick();
+      }
+    }
+    
+    return {
+      triggered: commentaryLine !== null,
+      commentaryLine,
+      profanityImpact: profanityResult,
+      performanceModifier: this.calculatePerformanceImpact(profanityResult, command)
+    };
+  }
+  
+  private detectProfanity(speechText: string): ProfanityResult {
+    const profanityWords = {
+      mild: ['damn', 'hell', 'crap'],
+      moderate: ['shit', 'bloody', 'piss'],
+      severe: ['fuck', 'fucking', 'fuckin', 'bastard']
+    };
+    
+    const lowerText = speechText.toLowerCase();
+    
+    // Check severe first
+    for (const word of profanityWords.severe) {
+      if (lowerText.includes(word)) {
+        return { detected: true, level: ProfanityLevel.SEVERE, words: [word] };
+      }
+    }
+    
+    // Then moderate
+    for (const word of profanityWords.moderate) {
+      if (lowerText.includes(word)) {
+        return { detected: true, level: ProfanityLevel.MODERATE, words: [word] };
+      }
+    }
+    
+    // Finally mild
+    for (const word of profanityWords.mild) {
+      if (lowerText.includes(word)) {
+        return { detected: true, level: ProfanityLevel.MILD, words: [word] };
+      }
+    }
+    
+    return { detected: false, level: ProfanityLevel.NONE, words: [] };
+  }
+  
+  private selectProfanityCommentary(level: ProfanityLevel): string {
+    const lines = this.commentaryLines.get(CommentaryTriggerType.PROFANITY_REACTION) || [];
+    const filteredLines = lines.filter(line => line.includes(`[${level}]`));
+    return this.getRandomLine(filteredLines).replace(`[${level}]`, '');
+  }
+  
+  private selectTacticalCommentary(command: TacticalCommand, context: GameContext): string | null {
+    const lines = this.getTacticalCommentaryLines(command);
+    if (lines.length === 0) return null;
+    
+    // Apply context filtering
+    const contextualLines = this.applyContextFilter(lines, context);
+    return this.getRandomLine(contextualLines);
+  }
+  
+  private getRandomLine(lines: string[]): string {
+    if (lines.length === 0) return '';
+    if (lines.length === 1) return lines[0];
+    
+    // Use deterministic RNG for commentary selection
+    const commentaryRNG = this.context.createChildRNG(1337); // Fixed seed for commentary
+    return commentaryRNG.choose(lines);
+  }
+  
+  private calculatePerformanceImpact(
+    profanityResult: ProfanityResult, 
+    command: TacticalCommand
+  ): PerformanceModifier {
+    if (!profanityResult.detected) {
+      return { accuracyModifier: 0, confidenceModifier: 0, durationMs: 0 };
+    }
+    
+    const baseImpact = {
+      [ProfanityLevel.MILD]: { accuracy: -0.05, confidence: -0.1, duration: 15000 },
+      [ProfanityLevel.MODERATE]: { accuracy: -0.10, confidence: -0.3, duration: 25000 },
+      [ProfanityLevel.SEVERE]: { accuracy: -0.15, confidence: -0.5, duration: 30000 }
+    };
+    
+    const impact = baseImpact[profanityResult.level];
+    
+    // Some commands are more affected by pressure/shouting
+    const commandMultiplier = {
+      [TacticalCommand.SHOOT]: 1.5,      // Shooting most affected by pressure
+      [TacticalCommand.CLOSE_DOWN]: 1.2,  // Defensive actions somewhat affected
+      [TacticalCommand.ATTACK]: 1.0,     // Tactical changes less affected
+      [TacticalCommand.DEFEND]: 1.0,
+      [TacticalCommand.BALANCE]: 1.0,
+      [TacticalCommand.LONG_BALL]: 1.1,
+      [TacticalCommand.WATCH_LEFT]: 0.8,  // Positional awareness least affected
+      [TacticalCommand.WATCH_RIGHT]: 0.8
+    };
+    
+    const multiplier = commandMultiplier[command] || 1.0;
+    
+    return {
+      accuracyModifier: impact.accuracy * multiplier,
+      confidenceModifier: impact.confidence * multiplier,
+      durationMs: impact.duration
+    };
+  }
+  
+  private shouldTriggerCommentary(context: GameContext): boolean {
+    const currentTick = this.context.clock.getCurrentTick();
+    return (currentTick - this.lastCommentaryTick) >= this.COMMENTARY_COOLDOWN_TICKS;
+  }
+  
+  private loadCommentaryLines(): void {
+    // Tactical commentary lines
+    this.commentaryLines.set(CommentaryTriggerType.TACTICAL_CHANGE, [
+      // Attack commands
+      "Well the manager is going for broke and getting his team to push forward more!",
+      "Bold tactical change there, committing more players to attack!",
+      "The gaffer wants goals and he's not holding back!",
+      
+      // Defend commands  
+      "Looks like the manager is tightening things up at the back",
+      "Playing it safe now, prioritising defensive solidarity",
+      "The manager's pulling his players back to protect what they have",
+      
+      // Shoot commands
+      "Manager's shouting from the sideline - have a go!",
+      "The boss wants them to be more direct in front of goal",
+      "Clear instructions from the touchline there!"
+    ]);
+    
+    // Profanity reaction lines
+    this.commentaryLines.set(CommentaryTriggerType.PROFANITY_REACTION, [
+      "[MILD]That frustrated shout from the manager there!",
+      "[MODERATE]Looks like the manager's strong words might have affected his player",
+      "[SEVERE]Looks like the manager's strong words there might have put his player off!",
+      "[SEVERE]That outburst from the sideline seems to have rattled the player",
+      "[SEVERE]The pressure from the touchline might be affecting the team's composure",
+      "[SEVERE]Sometimes a calmer approach works better than shouting!"
+    ]);
+  }
+}
+
+interface ProfanityResult {
+  detected: boolean;
+  level: ProfanityLevel;
+  words: string[];
+}
+
+interface PerformanceModifier {
+  accuracyModifier: number;    // -0.15 to 0 (negative impact)
+  confidenceModifier: number;  // -0.5 to 0 (negative impact)
+  durationMs: number;          // How long the effect lasts
+}
+
+interface CommentaryResult {
+  triggered: boolean;
+  commentaryLine?: string;
+  profanityImpact: ProfanityResult;
+  performanceModifier?: PerformanceModifier;
+}
+```
+
+#### 4.3.2 Integration with Game Systems
+
+```typescript
+// Integration with player performance system
+class PlayerActionProcessor {
+  private commentaryManager: ReactiveCommentaryManager;
+  
+  public async executePlayerAction(
+    action: PlayerAction,
+    commandContext: VoiceCommandContext
+  ): Promise<ActionResult> {
+    let baseAccuracy = this.calculateBaseAccuracy(action);
+    
+    // Apply profanity/commentary modifiers if present
+    if (commandContext.commentaryResult?.performanceModifier) {
+      const modifier = commandContext.commentaryResult.performanceModifier;
+      baseAccuracy += modifier.accuracyModifier;
+      
+      // Apply temporary confidence impact to player
+      this.applyTemporaryEffect(action.playerId, {
+        confidenceModifier: modifier.confidenceModifier,
+        duration: modifier.durationMs
+      });
+    }
+    
+    return this.processAction(action, baseAccuracy);
+  }
+}
+
+// Integration with audio system
+class AudioManager {
+  public playCommentary(commentaryLine: string, priority: AudioPriority): void {
+    // Queue commentary with appropriate priority
+    // Commentary has lower priority than goal celebrations, whistles
+    // But higher priority than ambient crowd noise
+    this.audioQueue.enqueue({
+      type: AudioType.COMMENTARY,
+      content: commentaryLine,
+      priority,
+      fadeDuration: 500 // Fade in/out smoothly
+    });
+  }
+}
+```
+
+### 4.4 Player Database System
+
+#### 4.4.1 Database Architecture
+
+```typescript
+interface PlayerDatabase {
+  version: string;
+  lastUpdated: string;
+  nationalTeams: Map<string, NationalTeam>;
+  customTeams: Map<string, CustomTeam>;
+  playerIndex: Map<string, Player>; // For fast player lookups
+}
+
+interface NationalTeam {
+  id: string;              // "ENG", "FRA", "BRA", etc.
+  name: string;            // "England", "France", "Brazil"
+  tier: TeamTier;          // Performance tier classification
+  confederation: string;   // "UEFA", "CONMEBOL", "AFC", etc.
+  players: Player[];       // 23-man squad
+  captain: string;         // Player ID of team captain
+  formation: FormationID;  // Default formation
+  kitColors: KitColors;
+}
+
+interface Player {
+  id: string;              // "ENG_001_Kane"
+  name: string;            // "Harry Kane"
+  nationality: string;     // "England"
+  age: number;            // 25-35 years
+  position: PlayerPosition;
+  primaryPosition: PlayerPosition;   // Main position
+  secondaryPositions: PlayerPosition[]; // Can also play
+  overall: number;         // 0.0-10.0 overall rating
+  marketValue: number;     // In pounds sterling
+  teamRole: TeamRole;
+  attributes: PlayerAttributes;
+  contractInfo?: ContractInfo; // For career mode
+  injuryStatus: InjuryStatus;
+  formRating: number;      // Current form (0.0-10.0)
+}
+
+enum TeamTier {
+  TIER_1 = 1,  // World-class teams (85-95 overall)
+  TIER_2 = 2,  // Strong competitive teams (75-85 overall)  
+  TIER_3 = 3   // Developing nations (65-75 overall)
+}
+
+enum PlayerPosition {
+  GK = 'GK',   // Goalkeeper
+  CB = 'CB',   // Centre-Back
+  LB = 'LB',   // Left-Back
+  RB = 'RB',   // Right-Back
+  LWB = 'LWB', // Left Wing-Back
+  RWB = 'RWB', // Right Wing-Back
+  CDM = 'CDM', // Defensive Midfielder
+  CM = 'CM',   // Central Midfielder
+  CAM = 'CAM', // Attacking Midfielder
+  LM = 'LM',   // Left Midfielder
+  RM = 'RM',   // Right Midfielder
+  LW = 'LW',   // Left Winger
+  RW = 'RW',   // Right Winger
+  ST = 'ST',   // Striker
+  CF = 'CF',   // Centre Forward
+  LF = 'LF',   // Left Forward
+  RF = 'RF'    // Right Forward
+}
+
+enum TeamRole {
+  CAPTAIN = 'captain',
+  VICE_CAPTAIN = 'vice_captain',
+  KEY_PLAYER = 'key_player',
+  REGULAR = 'regular',
+  SQUAD_PLAYER = 'squad_player',
+  SUBSTITUTE = 'substitute',
+  RESERVE = 'reserve'
+}
+
+interface PlayerAttributes {
+  // Physical (0.0-10.0)
+  pace: number;
+  acceleration: number;
+  stamina: number;
+  strength: number;
+  jumping: number;
+  agility: number;
+  balance: number;
+  
+  // Technical (0.0-10.0)
+  ballControl: number;
+  dribbling: number;
+  passing: number;
+  crossing: number;
+  shooting: number;
+  finishing: number;
+  longShots: number;
+  freeKicks: number;
+  penalties: number;
+  
+  // Mental (0.0-10.0)
+  decisions: number;
+  composure: number;
+  concentration: number;
+  positioning: number;
+  anticipation: number;
+  vision: number;
+  workRate: number;
+  teamwork: number;
+  leadership: number;
+  
+  // Defensive (0.0-10.0)
+  tackling: number;
+  marking: number;
+  heading: number;
+  interceptions: number;
+  
+  // Goalkeeping (0.0-10.0, only for goalkeepers)
+  handling?: number;
+  reflexes?: number;
+  aerialReach?: number;
+  oneOnOnes?: number;
+  distribution?: number;
+}
+```
+
+#### 4.4.2 Database Manager Implementation
+
+```typescript
+class PlayerDatabaseManager {
+  private database: PlayerDatabase;
+  private readonly DATABASE_PATH = './assets/data/players-database.json';
+  
+  constructor() {
+    this.loadDatabase();
+  }
+  
+  public async loadDatabase(): Promise<void> {
+    try {
+      const response = await fetch(this.DATABASE_PATH);
+      const data = await response.json();
+      
+      this.database = {
+        version: data.version,
+        lastUpdated: data.lastUpdated,
+        nationalTeams: new Map(Object.entries(data.nationalTeams)),
+        customTeams: new Map(Object.entries(data.customTeams || {})),
+        playerIndex: this.buildPlayerIndex(data)
+      };
+      
+      console.log(`Player database loaded: ${this.getTotalPlayerCount()} players`);
+    } catch (error) {
+      console.error('Failed to load player database:', error);
+      this.loadFallbackDatabase();
+    }
+  }
+  
+  public getNationalTeam(teamId: string): NationalTeam | null {
+    return this.database.nationalTeams.get(teamId) || null;
+  }
+  
+  public getAllNationalTeams(): NationalTeam[] {
+    return Array.from(this.database.nationalTeams.values());
+  }
+  
+  public getTeamsByTier(tier: TeamTier): NationalTeam[] {
+    return this.getAllNationalTeams().filter(team => team.tier === tier);
+  }
+  
+  public getPlayer(playerId: string): Player | null {
+    return this.database.playerIndex.get(playerId) || null;
+  }
+  
+  public getPlayersByPosition(position: PlayerPosition): Player[] {
+    return Array.from(this.database.playerIndex.values())
+      .filter(player => 
+        player.primaryPosition === position || 
+        player.secondaryPositions.includes(position)
+      );
+  }
+  
+  public searchPlayers(criteria: PlayerSearchCriteria): Player[] {
+    const players = Array.from(this.database.playerIndex.values());
+    
+    return players.filter(player => {
+      if (criteria.nationality && player.nationality !== criteria.nationality) return false;
+      if (criteria.position && player.primaryPosition !== criteria.position) return false;
+      if (criteria.minOverall && player.overall < criteria.minOverall) return false;
+      if (criteria.maxOverall && player.overall > criteria.maxOverall) return false;
+      if (criteria.minAge && player.age < criteria.minAge) return false;
+      if (criteria.maxAge && player.age > criteria.maxAge) return false;
+      if (criteria.nameSearch && !player.name.toLowerCase().includes(criteria.nameSearch.toLowerCase())) return false;
+      
+      return true;
+    }).sort((a, b) => b.overall - a.overall); // Sort by overall rating descending
+  }
+  
+  private buildPlayerIndex(data: any): Map<string, Player> {
+    const index = new Map<string, Player>();
+    
+    // Index national team players
+    for (const [teamId, team] of Object.entries(data.nationalTeams as Record<string, any>)) {
+      for (const player of team.players) {
+        index.set(player.id, player);
+      }
+    }
+    
+    // Index custom team players
+    for (const [teamId, team] of Object.entries(data.customTeams || {} as Record<string, any>)) {
+      for (const player of team.players) {
+        index.set(player.id, player);
+      }
+    }
+    
+    return index;
+  }
+  
+  private getTotalPlayerCount(): number {
+    return this.database.playerIndex.size;
+  }
+  
+  private loadFallbackDatabase(): void {
+    // Create minimal database with basic teams for development
+    this.database = {
+      version: "0.1.0-fallback",
+      lastUpdated: new Date().toISOString(),
+      nationalTeams: this.generateFallbackTeams(),
+      customTeams: new Map(),
+      playerIndex: new Map()
+    };
+  }
+  
+  private generateFallbackTeams(): Map<string, NationalTeam> {
+    // Generate basic England and France teams for development
+    const teams = new Map<string, NationalTeam>();
+    
+    teams.set("ENG", {
+      id: "ENG",
+      name: "England", 
+      tier: TeamTier.TIER_1,
+      confederation: "UEFA",
+      players: this.generateTeamPlayers("ENG", TeamTier.TIER_1),
+      captain: "ENG_001",
+      formation: "4-4-2",
+      kitColors: { primary: "#FFFFFF", secondary: "#003366" }
+    });
+    
+    return teams;
+  }
+  
+  private generateTeamPlayers(teamId: string, tier: TeamTier): Player[] {
+    const players: Player[] = [];
+    const baseRating = tier === TeamTier.TIER_1 ? 8.5 : tier === TeamTier.TIER_2 ? 7.5 : 6.5;
+    
+    // Create deterministic RNG for this team
+    const teamSeed = teamId.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    const teamRNG = new GameRNG(teamSeed);
+    
+    // Generate 23 players with appropriate positions
+    const positions = [
+      'GK', 'GK', 'GK',           // 3 goalkeepers
+      'CB', 'CB', 'CB', 'CB',     // 4 centre-backs
+      'LB', 'RB', 'LB', 'RB',     // 4 full-backs
+      'CDM', 'CM', 'CM', 'CAM',   // 4 midfielders
+      'LM', 'RM', 'LW', 'RW',     // 4 wide players
+      'ST', 'ST', 'CF'            // 3 forwards
+    ];
+    
+    positions.forEach((pos, index) => {
+      players.push(this.generatePlayer(`${teamId}_${(index + 1).toString().padStart(3, '0')}`, pos as PlayerPosition, baseRating, teamId, teamRNG));
+    });
+    
+    return players;
+  }
+  
+  private generatePlayer(id: string, position: PlayerPosition, baseRating: number, nationality: string, rng: GameRNG): Player {
+    const variation = (rng.next() - 0.5) * 1.5; // ±0.75 variation using seeded RNG
+    const overall = Math.max(5.0, Math.min(10.0, baseRating + variation));
+    
+    return {
+      id,
+      name: `Generated Player ${id.split('_')[1]}`,
+      nationality,
+      age: 25 + Math.floor(rng.next() * 10), // Using seeded RNG
+      position,
+      primaryPosition: position,
+      secondaryPositions: [],
+      overall,
+      marketValue: overall * 10000000, // £10M per rating point
+      teamRole: TeamRole.REGULAR,
+      attributes: this.generateAttributes(position, overall),
+      injuryStatus: { injured: false, daysRemaining: 0 },
+      formRating: overall
+    };
+  }
+  
+  private generateAttributes(position: PlayerPosition, overall: number): PlayerAttributes {
+    // Generate position-appropriate attributes
+    // Goalkeepers get high goalkeeping attributes, strikers get high shooting, etc.
+    const base = overall;
+    const variation = () => base + (rng.next() - 0.5) * 1.0; // Using seeded RNG
+    
+    const attributes: PlayerAttributes = {
+      // Physical
+      pace: variation(),
+      acceleration: variation(),
+      stamina: variation(),
+      strength: variation(),
+      jumping: variation(),
+      agility: variation(),
+      balance: variation(),
+      
+      // Technical  
+      ballControl: variation(),
+      dribbling: variation(),
+      passing: variation(),
+      crossing: variation(),
+      shooting: variation(),
+      finishing: variation(),
+      longShots: variation(),
+      freeKicks: variation(),
+      penalties: variation(),
+      
+      // Mental
+      decisions: variation(),
+      composure: variation(),
+      concentration: variation(),
+      positioning: variation(),
+      anticipation: variation(),
+      vision: variation(),
+      workRate: variation(),
+      teamwork: variation(),
+      leadership: variation(),
+      
+      // Defensive
+      tackling: variation(),
+      marking: variation(),
+      heading: variation(),
+      interceptions: variation()
+    };
+    
+    // Add goalkeeping attributes for goalkeepers
+    if (position === PlayerPosition.GK) {
+      attributes.handling = variation();
+      attributes.reflexes = variation();
+      attributes.aerialReach = variation();
+      attributes.oneOnOnes = variation();
+      attributes.distribution = variation();
+    }
+    
+    return attributes;
+  }
+}
+
+interface PlayerSearchCriteria {
+  nationality?: string;
+  position?: PlayerPosition;
+  minOverall?: number;
+  maxOverall?: number;
+  minAge?: number;
+  maxAge?: number;
+  nameSearch?: string;
+}
+
+interface CustomTeam {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdDate: string;
+  players: Player[];
+  formation: FormationID;
+  kitColors: KitColors;
+  homeStadium: string;
+}
+
+interface KitColors {
+  primary: string;    // Hex color code
+  secondary: string;  // Hex color code
+  accent?: string;    // Optional accent color
+}
+
+interface InjuryStatus {
+  injured: boolean;
+  daysRemaining: number;
+  injuryType?: string;
+}
+
+interface ContractInfo {
+  salary: number;
+  contractEnd: string;
+  releaseClause?: number;
+}
+```
+
+#### 4.4.3 Custom Team Creation System
+
+```typescript
+class CustomTeamManager {
+  private playerDatabase: PlayerDatabaseManager;
+  
+  constructor(playerDatabase: PlayerDatabaseManager) {
+    this.playerDatabase = playerDatabase;
+  }
+  
+  public createCustomTeam(teamData: CustomTeamCreationData): CustomTeam {
+    const teamId = this.generateTeamId(teamData.name);
+    
+    const team: CustomTeam = {
+      id: teamId,
+      name: teamData.name,
+      createdBy: teamData.creatorId,
+      createdDate: new Date().toISOString(),
+      players: this.generateCustomPlayers(teamData),
+      formation: teamData.formation || "4-4-2",
+      kitColors: teamData.kitColors,
+      homeStadium: teamData.stadium || "Generic Stadium"
+    };
+    
+    this.saveCustomTeam(team);
+    return team;
+  }
+  
+  private generateCustomPlayers(teamData: CustomTeamCreationData): Player[] {
+    const players: Player[] = [];
+    const targetOverall = teamData.targetOverall || 7.0;
+    
+    // Required positions for a valid squad
+    const requiredPositions = [
+      { position: PlayerPosition.GK, count: 3 },
+      { position: PlayerPosition.CB, count: 4 },
+      { position: PlayerPosition.LB, count: 2 },
+      { position: PlayerPosition.RB, count: 2 },
+      { position: PlayerPosition.CM, count: 4 },
+      { position: PlayerPosition.LM, count: 2 },
+      { position: PlayerPosition.RM, count: 2 },
+      { position: PlayerPosition.ST, count: 4 }
+    ];
+    
+    let playerId = 1;
+    
+    requiredPositions.forEach(({ position, count }) => {
+      for (let i = 0; i < count; i++) {
+        const player = this.generateCustomPlayer(
+          `${teamData.name.toUpperCase()}_${playerId.toString().padStart(3, '0')}`,
+          position,
+          targetOverall,
+          teamData.nationality || "Generated"
+        );
+        players.push(player);
+        playerId++;
+      }
+    });
+    
+    return players;
+  }
+  
+  private generateCustomPlayer(id: string, position: PlayerPosition, targetOverall: number, nationality: string): Player {
+    const nameGenerator = new PlayerNameGenerator();
+    const name = nameGenerator.generateName(nationality);
+    
+    return {
+      id,
+      name,
+      nationality,
+      age: 25 + Math.floor(rng.next() * 8), // 25-32 years using seeded RNG
+      position,
+      primaryPosition: position,
+      secondaryPositions: this.getSecondaryPositions(position),
+      overall: targetOverall + (rng.next() - 0.5) * 0.8, // ±0.4 variation using seeded RNG
+      marketValue: targetOverall * 8000000, // £8M per rating point
+      teamRole: position === PlayerPosition.GK ? TeamRole.KEY_PLAYER : TeamRole.REGULAR,
+      attributes: this.playerDatabase['generateAttributes'](position, targetOverall),
+      injuryStatus: { injured: false, daysRemaining: 0 },
+      formRating: targetOverall
+    };
+  }
+  
+  private getSecondaryPositions(primaryPosition: PlayerPosition): PlayerPosition[] {
+    // Define position versatility
+    const positionMap: Record<PlayerPosition, PlayerPosition[]> = {
+      [PlayerPosition.GK]: [],
+      [PlayerPosition.CB]: [PlayerPosition.CDM],
+      [PlayerPosition.LB]: [PlayerPosition.LWB, PlayerPosition.LM],
+      [PlayerPosition.RB]: [PlayerPosition.RWB, PlayerPosition.RM],
+      [PlayerPosition.CDM]: [PlayerPosition.CM, PlayerPosition.CB],
+      [PlayerPosition.CM]: [PlayerPosition.CAM, PlayerPosition.CDM],
+      [PlayerPosition.CAM]: [PlayerPosition.CM, PlayerPosition.CF],
+      [PlayerPosition.LM]: [PlayerPosition.LW, PlayerPosition.LB],
+      [PlayerPosition.RM]: [PlayerPosition.RW, PlayerPosition.RB],
+      [PlayerPosition.LW]: [PlayerPosition.LM, PlayerPosition.ST],
+      [PlayerPosition.RW]: [PlayerPosition.RM, PlayerPosition.ST],
+      [PlayerPosition.ST]: [PlayerPosition.CF, PlayerPosition.CAM],
+      [PlayerPosition.CF]: [PlayerPosition.ST, PlayerPosition.CAM],
+      [PlayerPosition.LF]: [PlayerPosition.LW, PlayerPosition.ST],
+      [PlayerPosition.RF]: [PlayerPosition.RW, PlayerPosition.ST],
+      [PlayerPosition.LWB]: [PlayerPosition.LB, PlayerPosition.LM],
+      [PlayerPosition.RWB]: [PlayerPosition.RB, PlayerPosition.RM]
+    };
+    
+    return positionMap[primaryPosition] || [];
+  }
+}
+
+interface CustomTeamCreationData {
+  name: string;
+  creatorId: string;
+  targetOverall?: number;
+  nationality?: string;
+  formation?: FormationID;
+  kitColors: KitColors;
+  stadium?: string;
+}
+
+class PlayerNameGenerator {
+  private nameData: Record<string, { firstNames: string[], lastNames: string[] }> = {
+    "English": {
+      firstNames: ["Harry", "Jack", "James", "Oliver", "George", "Charlie", "Jacob", "Thomas"],
+      lastNames: ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis"]
+    },
+    "Spanish": {
+      firstNames: ["Diego", "Carlos", "Miguel", "Luis", "Jose", "Fernando", "Pablo", "Sergio"],
+      lastNames: ["Garcia", "Rodriguez", "Martinez", "Lopez", "Gonzalez", "Hernandez", "Perez", "Sanchez"]
+    }
+    // Add more nationalities as needed
+  };
+  
+  public generateName(nationality: string): string {
+    const names = this.nameData[nationality] || this.nameData["English"];
+    const firstName = rng.choose(names.firstNames);
+    const lastName = rng.choose(names.lastNames);
+    return `${firstName} ${lastName}`;
+  }
+}
+```
+
+## 5. Development Setup and Testing
+
+### 5.1 VGF Infrastructure Setup (Priority 1)
+
+**Critical First Step**: Establish and validate VGF client-server communication before implementing game logic.
+
+#### 5.1.1 Development Environment Setup
+
+**Prerequisites**:
+- Node.js 22+
+- pnpm 10.6.5+
+- Redis server (for VGF session storage)
+- ngrok (for cross-machine testing)
+
+**Project Structure Validation**:
+```
+football-manager/
+├── packages/
+│   ├── client/          # React + VGF Client
+│   ├── server/          # Express + VGF Server  
+│   └── shared/          # Shared types and constants
+├── package.json         # Workspace configuration
+└── pnpm-workspace.yaml  # pnpm workspace setup
+```
+
+#### 5.1.2 Server Setup and Launch Sequence
+
+**Step 1: Server Launch**
+```bash
+# Start Redis server (required for VGF)
+redis-server
+
+# Install dependencies
+pnpm install
+
+# Start the VGF server
+pnpm --filter @game/server dev
+```
+
+**VGF Server Validation**:
+```typescript
+// apps/server/src/index.ts - Minimal VGF server setup
+import { VGFServer } from '@volley/vgf-server';
+import { GameRuleset } from './GameRuleset';
+
+const server = new VGFServer({
+  port: 3001,
+  redis: { host: 'localhost', port: 6379 },
+  transport: 'socket.io'
+});
+
+server.registerGame('football-manager', new GameRuleset());
+
+server.start().then(() => {
+  console.log('✅ VGF Server running on http://localhost:3001');
+  console.log('✅ Redis connection established');
+  console.log('✅ Socket.IO transport ready');
+});
+```
+
+**Step 2: Client Launch**  
+```bash
+# In separate terminal
+pnpm --filter @game/client dev
+```
+
+**VGF Client Validation**:
+```typescript
+// apps/client/src/App.tsx - Minimal VGF client setup  
+import { VGFProvider, useVGF } from '@volley/vgf-client';
+
+function App() {
+  return (
+    <VGFProvider 
+      serverUrl="http://localhost:3001"
+      gameId="football-manager"
+    >
+      <ConnectionTest />
+    </VGFProvider>
+  );
+}
+
+function ConnectionTest() {
+  const { connected, sessionId, createSession, joinSession } = useVGF();
+  
+  return (
+    <div>
+      <h1>VGF Connection Test</h1>
+      <p>Status: {connected ? '✅ Connected' : '❌ Disconnected'}</p>
+      <p>Session: {sessionId || 'None'}</p>
+      
+      <button onClick={createSession}>Create Session</button>
+      <input placeholder="Session ID" onEnter={joinSession} />
+    </div>
+  );
+}
+```
+
+#### 5.1.3 Multi-Client Testing with ngrok
+
+**Step 1: Expose Server via ngrok**
+```bash
+# In separate terminal, expose VGF server
+ngrok http 3001
+
+# Example output:
+# Forwarding: https://abc123.ngrok.io -> http://localhost:3001
+```
+
+**Step 2: Configure Client for Remote Testing**
+```typescript
+// apps/client/src/config/environment.ts
+export const VGF_CONFIG = {
+  serverUrl: process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001'     // Local development
+    : 'https://abc123.ngrok.io',  // Remote testing via ngrok
+  gameId: 'football-manager'
+};
+```
+
+**Step 3: Launch Second Client on Different Machine**
+```bash
+# On remote machine
+git clone <repository>
+cd football-manager
+pnpm install
+
+# Update VGF_CONFIG.serverUrl to ngrok URL
+# Then start client
+pnpm --filter @game/client dev
+```
+
+#### 5.1.4 VGF Connection Validation Tests
+
+**Test 1: Basic Connection**
+```typescript
+describe('VGF Connection Tests', () => {
+  test('should connect to VGF server', async () => {
+    const client = new VGFClient('http://localhost:3001');
+    const connected = await client.connect();
+    expect(connected).toBe(true);
+  });
+  
+  test('should create and join session', async () => {
+    const client1 = new VGFClient('http://localhost:3001');
+    const client2 = new VGFClient('http://localhost:3001');
+    
+    const sessionId = await client1.createSession('football-manager');
+    expect(sessionId).toBeDefined();
+    
+    const joined = await client2.joinSession(sessionId);
+    expect(joined).toBe(true);
+  });
+});
+```
+
+**Test 2: State Synchronization**
+```typescript
+test('should sync game state between clients', async () => {
+  const client1 = new VGFClient('http://localhost:3001');
+  const client2 = new VGFClient('http://localhost:3001');
+  
+  const sessionId = await client1.createSession('football-manager');
+  await client2.joinSession(sessionId);
+  
+  // Client 1 dispatches action
+  await client1.dispatchAction('test_action', { data: 'hello' });
+  
+  // Client 2 should receive state update
+  const client2State = await client2.getState();
+  expect(client2State.lastAction.data).toBe('hello');
+});
+```
+
+**Test 3: Cross-Machine Communication (ngrok)**
+```typescript
+test('should work across different machines via ngrok', async () => {
+  // This test requires manual coordination between machines
+  // Client A creates session, logs session ID
+  // Client B (different machine) joins using session ID
+  // Verify both clients can see each other's actions
+});
+```
+
+#### 5.1.5 Common VGF Setup Issues and Solutions
+
+**Issue 1: Redis Connection Failed**
+```bash
+# Solution: Start Redis server
+brew install redis  # macOS
+redis-server
+```
+
+**Issue 2: VGF Server Port Already in Use**
+```bash
+# Solution: Kill process on port 3001
+lsof -ti:3001 | xargs kill -9
+```
+
+**Issue 3: Socket.IO Connection Refused**
+```typescript
+// Solution: Check CORS configuration
+const server = new VGFServer({
+  port: 3001,
+  cors: {
+    origin: ["http://localhost:3000", "https://*.ngrok.io"],
+    credentials: true
+  }
+});
+```
+
+**Issue 4: ngrok URL Changes on Restart**
+```bash
+# Solution: Use ngrok auth token for consistent URLs
+ngrok config add-authtoken <your_token>
+ngrok http 3001 --subdomain=football-manager-dev
+```
+
+#### 5.1.6 Development Validation Checklist
+
+**Before Implementing Game Logic**:
+- [ ] VGF server starts without errors
+- [ ] Redis connection established  
+- [ ] Client connects to server successfully
+- [ ] Session creation/joining works
+- [ ] Actions dispatch between clients
+- [ ] State synchronization functions
+- [ ] ngrok cross-machine testing passes
+- [ ] Error handling gracefully managed
+
+**Success Criteria**: Two clients on different machines can create/join a VGF session and see each other's actions in real-time.
+
+### 5.2 Voice Recognition System
+
+#### 5.2.1 Implementation Details (Phase 2)
 - **Web Speech API Integration**: Continuous listening with noise filtering
 - **Command Mapping**: Natural language to game action translation
 - **Context Awareness**: Commands valid only in appropriate game states
@@ -320,10 +1927,10 @@ class GameManager {
 
   // Game systems
   private physicsEngine: Physics2DEngine;
-  // POC: simple predefined formations; Phase 2: replace with formation editing tool data
-  private formationManager: FormationManager; // POC placeholder
+  // Initial: simple predefined formations; Phase 2: replace with formation editing tool data
+  private formationManager: FormationManager; // Initial implementation placeholder
   private aiControllers: Map<string, TeamAIController>;
-  private matchState: MatchState;
+  private matchState: MatchPhase;
   private statistics: MatchStatistics;
 
   // Deterministic context for multiplayer consistency
@@ -350,7 +1957,7 @@ class GameManager {
 
     // Initialize game systems
     this.physicsEngine = new Physics2DEngine();
-    // POC placeholder; Phase 2: load formations via formation editing tool export
+    // Initial placeholder; Phase 2: load formations via formation editing tool export
     this.formationManager = new FormationManager();
     this.aiControllers = new Map();
     this.statistics = new MatchStatistics();
@@ -363,8 +1970,10 @@ class GameManager {
     this.positionBuffer = new Float32Array(44); // 22 players * 2 coordinates
 
     // Initialize match state and kick-off
-    this.matchState = MatchState.PREPARING_KICKOFF;
-    this.initialKickOffTeam = Math.random() < 0.5 ? 'HOME' : 'AWAY'; // Random kick-off
+    this.matchState = MatchPhase.PREPARING_KICKOFF;
+    // Deterministic kick-off using match seed
+    const kickoffRNG = new GameRNG(matchSeed + 42);
+    this.initialKickOffTeam = kickoffRNG.next() < 0.5 ? 'HOME' : 'AWAY';
     this.kickOffTeam = this.initialKickOffTeam;
     this.halfTimeTransitioned = false;
     this.halfTimeStartTime = 0;
@@ -389,9 +1998,9 @@ class GameManager {
     this.deterministicContext.frameCount++;
 
     // Update match state first
-    this.updateMatchState(clampedDelta);
+    this.updateMatchPhase(clampedDelta);
 
-    if (this.matchState === MatchState.IN_PLAY) {
+    if (this.matchState === MatchPhase.IN_PLAY) {
       // CRITICAL: AI and physics MUST use clampedDelta and deterministic context
       this.updateAI(clampedDelta);        // Deterministic AI decisions
       this.updatePhysics(clampedDelta);   // Deterministic physics simulation
@@ -418,7 +2027,7 @@ class GameManager {
     // Update ball physics
     this.ball.update(deltaTime);
 
-    // Check ball boundaries (POC scope: basic in/out detection)
+    // Check ball boundaries (initial scope: basic in/out detection)
     this.checkBallBoundaries();
 
     // Update player positions using Float32Array optimization
@@ -481,7 +2090,7 @@ class GameManager {
 }
 
 interface GameContext {
-  matchState: MatchState;
+  matchState: MatchPhase;
   ball: Ball;
   homeTeam: Team;
   awayTeam: Team;
@@ -493,7 +2102,7 @@ interface GameContext {
 interface GameManagerState {
   homeTeam: Team;
   awayTeam: Team;
-  ball: Ball3D; // Updated to 3D ball
+  ball: Ball; // Updated to 3D ball
   matchPhase: MatchPhase; // Updated to match phase system
   statistics: MatchStatistics;
   matchTime: MatchTime;
@@ -553,7 +2162,7 @@ class Team {
   private formationPositions: Float32Array;
   private teamColor: 'HOME' | 'AWAY';
   private currentPhase: 'ATTACK' | 'DEFEND' | 'TRANSITION';
-  private currentMatchState: MatchState = MatchState.INTRODUCTION;
+  private currentMatchPhase: MatchPhase = MatchPhase.INTRODUCTION;
 
   constructor(
     id: string,
@@ -580,7 +2189,7 @@ class Team {
 
   private findCaptain(): Player {
     return this.players.reduce((captain, player) =>
-      player.overallRating > captain.overallRating ? player : captain
+      player.overall > captain.overall ? player : captain
     );
   }
 
@@ -704,8 +2313,9 @@ class Team {
     // Example tactical adjustments based on game context
     // This would be expanded with more sophisticated tactical logic
     return {
-      x: (Math.random() - 0.5) * 0.1, // Simple random adjustment for POC
-      y: (Math.random() - 0.5) * 0.1
+      // Use deterministic positioning with player-specific seed
+      x: (this.context.rng.next() - 0.5) * 0.1,
+      y: (this.context.rng.next() - 0.5) * 0.1
     };
   }
 
@@ -750,38 +2360,38 @@ class Team {
   /**
    * STATE TRANSITION HANDLER - Called by GameManager when match state changes
    */
-  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
+  public onMatchPhaseChange(newState: MatchPhase, previousState: MatchPhase): void {
     console.log(`Team ${this.name}: State change ${previousState} -> ${newState}`);
-    this.currentMatchState = newState;
+    this.currentMatchPhase = newState;
 
     switch (newState) {
-      case MatchState.INTRODUCTION:
+      case MatchPhase.INTRODUCTION:
         this.handleIntroductionState();
         break;
 
-      case MatchState.PREPARE_FOR_KICKOFF:
+      case MatchPhase.PREPARE_FOR_KICKOFF:
         this.handlePrepareKickoffState();
         break;
 
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         this.handleInPlayState(previousState);
         break;
 
-      case MatchState.GOAL_KICK:
-      case MatchState.CORNER_KICK:
-      case MatchState.THROW_IN:
+      case MatchPhase.GOAL_KICK:
+      case MatchPhase.CORNER_KICK:
+      case MatchPhase.THROW_IN:
         this.handleSetPieceState(newState);
         break;
 
-      case MatchState.GOAL_SCORED:
+      case MatchPhase.GOAL_SCORED:
         this.handleGoalScoredState();
         break;
 
-      case MatchState.HALF_TIME:
+      case MatchPhase.HALF_TIME:
         this.handleHalfTimeState();
         break;
 
-      case MatchState.FULL_TIME:
+      case MatchPhase.FULL_TIME:
         this.handleFullTimeState();
         break;
 
@@ -792,7 +2402,7 @@ class Team {
 
     // Propagate state change to all players
     this.players.forEach(player => {
-      player.onMatchStateChange(newState, previousState);
+      player.onMatchPhaseChange(newState, previousState);
     });
   }
 
@@ -814,7 +2424,7 @@ class Team {
     });
   }
 
-  private handleInPlayState(previousState: MatchState): void {
+  private handleInPlayState(previousState: MatchPhase): void {
     // Resume normal gameplay
     this.currentPhase = 'TRANSITION'; // Reset to neutral phase
     this.players.forEach(player => {
@@ -828,16 +2438,16 @@ class Team {
     }
   }
 
-  private handleSetPieceState(setState: MatchState): void {
+  private handleSetPieceState(setState: MatchPhase): void {
     // Assign set piece roles and positions
     switch (setState) {
-      case MatchState.GOAL_KICK:
+      case MatchPhase.GOAL_KICK:
         this.assignGoalKickRoles();
         break;
-      case MatchState.CORNER_KICK:
+      case MatchPhase.CORNER_KICK:
         this.assignCornerKickRoles();
         break;
-      case MatchState.THROW_IN:
+      case MatchPhase.THROW_IN:
         this.assignThrowInRoles();
         break;
     }
@@ -889,10 +2499,10 @@ class Team {
     });
   }
 
-  private isSetPieceState(state: MatchState): boolean {
-    return state === MatchState.GOAL_KICK || 
-           state === MatchState.CORNER_KICK || 
-           state === MatchState.THROW_IN;
+  private isSetPieceState(state: MatchPhase): boolean {
+    return state === MatchPhase.GOAL_KICK || 
+           state === MatchPhase.CORNER_KICK || 
+           state === MatchPhase.THROW_IN;
   }
 
   private assignGoalKickRoles(): void {
@@ -993,14 +2603,14 @@ class Player {
   public hasBall: boolean = false;
   public stamina: number = 100; // 0-100
   public confidence: number = 80; // 0-100
-  public currentMatchState: MatchState = MatchState.INTRODUCTION;
+  public currentMatchPhase: MatchPhase = MatchPhase.INTRODUCTION;
   public animationState: string = 'idle';
   public movementSpeed: number = 0.04; // Base movement speed
   public temporaryRole: string | null = null;
 
   // Attributes (from PRD specification)
   public attributes: PlayerAttributes;
-  public overallRating: number;
+  public overall: number;
 
   // AI state
   private aiState: PlayerAIState;
@@ -1020,7 +2630,7 @@ class Player {
     this.attributes = attributes;
 
     // Calculate overall rating from attributes
-    this.overallRating = this.calculateOverallRating();
+    this.overall = this.calculateOverallRating();
 
     // Initialize position (set by team formation)
     this.position = { x: 0.5, y: 0.5 };
@@ -1191,37 +2801,37 @@ class Player {
   /**
    * STATE TRANSITION HANDLER - Called by Team when match state changes
    */
-  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
-    this.currentMatchState = newState;
+  public onMatchPhaseChange(newState: MatchPhase, previousState: MatchPhase): void {
+    this.currentMatchPhase = newState;
 
     switch (newState) {
-      case MatchState.INTRODUCTION:
+      case MatchPhase.INTRODUCTION:
         this.handleIntroductionState();
         break;
 
-      case MatchState.PREPARE_FOR_KICKOFF:
+      case MatchPhase.PREPARE_FOR_KICKOFF:
         this.handlePrepareKickoffState();
         break;
 
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         this.handleInPlayState(previousState);
         break;
 
-      case MatchState.GOAL_KICK:
-      case MatchState.CORNER_KICK:
-      case MatchState.THROW_IN:
+      case MatchPhase.GOAL_KICK:
+      case MatchPhase.CORNER_KICK:
+      case MatchPhase.THROW_IN:
         this.handleSetPieceState(newState);
         break;
 
-      case MatchState.GOAL_SCORED:
+      case MatchPhase.GOAL_SCORED:
         this.handleGoalScoredState();
         break;
 
-      case MatchState.HALF_TIME:
+      case MatchPhase.HALF_TIME:
         this.handleHalfTimeState();
         break;
 
-      case MatchState.FULL_TIME:
+      case MatchPhase.FULL_TIME:
         this.handleFullTimeState();
         break;
     }
@@ -1239,19 +2849,19 @@ class Player {
     this.confidence = Math.min(100, this.confidence + 2); // Ready to play
   }
 
-  private handleInPlayState(previousState: MatchState): void {
+  private handleInPlayState(previousState: MatchPhase): void {
     // Resume normal gameplay
     this.setAnimationState('ready');
     this.clearTemporaryRole(); // Clear any set piece roles
     
     // Adjust confidence based on previous state
-    if (previousState === MatchState.GOAL_SCORED) {
+    if (previousState === MatchPhase.GOAL_SCORED) {
       // Confidence affected by goal
       this.confidence = Math.min(100, this.confidence + (this.scoredLastGoal() ? 10 : -5));
     }
   }
 
-  private handleSetPieceState(setState: MatchState): void {
+  private handleSetPieceState(setState: MatchPhase): void {
     // Set appropriate animation for set piece
     this.setAnimationState('positioning');
     
@@ -1397,7 +3007,7 @@ interface PlayerAttributes {
   acceleration: number;   // Reaching top speed
   stamina: number;        // Match-long performance
   strength: number;       // Physical duels
-  jumpingReach: number;   // Aerial ability
+  jumping: number;   // Aerial ability
   agility: number;        // Direction changes
   balance: number;        // Stability
 
@@ -1409,8 +3019,8 @@ interface PlayerAttributes {
   shooting: number;       // Power and accuracy
   finishing: number;      // Goal conversion
   longShots: number;      // Distance shooting
-  freeKickTaking: number; // Dead ball expertise
-  penaltyTaking: number;  // Penalty conversion
+  freeKicks: number; // Dead ball expertise
+  penalties: number;  // Penalty conversion
 
   // Mental Attributes (0.0-10.0 scale as per PRD)
   decisions: number;      // Choice quality
@@ -1449,7 +3059,7 @@ class Ball {
   public owner: Player | null;
   public lastTouchedBy: Player | null;
   public isMoving: boolean = false;
-  public currentMatchState: MatchState = MatchState.INTRODUCTION;
+  public currentMatchPhase: MatchPhase = MatchPhase.INTRODUCTION;
 
   private radius: number = 0.01; // Normalized ball size
   private friction: number = 0.98; // 2% velocity loss per frame
@@ -1498,23 +3108,6 @@ class Ball {
     }
   }
   
-  // Calculate where ball will land for formation positioning
-  public predictLandingPosition(): { position: Vector2; gridSquare: string } {
-    // Calculate landing position based on current trajectory
-    const timeToLand = this.height > 0 ? Math.sqrt(2 * this.height / 9.81) : 0;
-    const landingX = this.position.x + this.velocity.x * timeToLand;
-    const landingY = this.position.y + this.velocity.y * timeToLand;
-    
-    // Convert to formation grid square
-    const gridX = Math.floor(landingX * 20); // 20 columns
-    const gridY = Math.floor(landingY * 15); // 15 rows
-    const gridSquare = `x${gridX}_y${gridY}`;
-    
-    return {
-      position: { x: landingX, y: landingY },
-      gridSquare
-    };
-  }
 
   private followOwner(deltaTime: number): void {
     if (!this.owner) return;
@@ -1586,34 +3179,34 @@ class Ball {
   /**
    * STATE TRANSITION HANDLER - Called by GameManager when match state changes
    */
-  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
-    this.currentMatchState = newState;
+  public onMatchPhaseChange(newState: MatchPhase, previousState: MatchPhase): void {
+    this.currentMatchPhase = newState;
 
     switch (newState) {
-      case MatchState.INTRODUCTION:
-      case MatchState.PREPARE_FOR_KICKOFF:
+      case MatchPhase.INTRODUCTION:
+      case MatchPhase.PREPARE_FOR_KICKOFF:
         this.resetToKickoffPosition();
         break;
 
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         // Resume normal physics if transitioning from static state
         if (this.isStaticState(previousState)) {
           this.enablePhysics();
         }
         break;
 
-      case MatchState.GOAL_KICK:
-      case MatchState.CORNER_KICK:
-      case MatchState.THROW_IN:
+      case MatchPhase.GOAL_KICK:
+      case MatchPhase.CORNER_KICK:
+      case MatchPhase.THROW_IN:
         this.prepareForSetPiece(newState);
         break;
 
-      case MatchState.GOAL_SCORED:
+      case MatchPhase.GOAL_SCORED:
         this.handleGoalScored();
         break;
 
-      case MatchState.HALF_TIME:
-      case MatchState.FULL_TIME:
+      case MatchPhase.HALF_TIME:
+      case MatchPhase.FULL_TIME:
         this.stopMovement();
         break;
     }
@@ -1627,16 +3220,16 @@ class Ball {
     this.isMoving = false;
   }
 
-  private prepareForSetPiece(setState: MatchState): void {
+  private prepareForSetPiece(setState: MatchPhase): void {
     // Position ball for specific set piece
     switch (setState) {
-      case MatchState.GOAL_KICK:
+      case MatchPhase.GOAL_KICK:
         this.positionForGoalKick();
         break;
-      case MatchState.CORNER_KICK:
+      case MatchPhase.CORNER_KICK:
         this.positionForCornerKick();
         break;
-      case MatchState.THROW_IN:
+      case MatchPhase.THROW_IN:
         this.positionForThrowIn();
         break;
     }
@@ -1664,16 +3257,16 @@ class Ball {
     // No specific action needed, physics will resume in update loop
   }
 
-  private isStaticState(state: MatchState): boolean {
+  private isStaticState(state: MatchPhase): boolean {
     return [
-      MatchState.INTRODUCTION,
-      MatchState.PREPARE_FOR_KICKOFF,
-      MatchState.GOAL_KICK,
-      MatchState.CORNER_KICK,
-      MatchState.THROW_IN,
-      MatchState.GOAL_SCORED,
-      MatchState.HALF_TIME,
-      MatchState.FULL_TIME
+      MatchPhase.INTRODUCTION,
+      MatchPhase.PREPARE_FOR_KICKOFF,
+      MatchPhase.GOAL_KICK,
+      MatchPhase.CORNER_KICK,
+      MatchPhase.THROW_IN,
+      MatchPhase.GOAL_SCORED,
+      MatchPhase.HALF_TIME,
+      MatchPhase.FULL_TIME
     ].includes(state);
   }
 
@@ -1694,9 +3287,9 @@ class Ball {
 }
 ```
 
-### 3.6 POC 2D Physics Engine
+### 3.6 Initial 2D Physics Engine
 
-**POC Constraint**: Simple 2D Canvas physics with no Z-axis simulation. Complex 3D physics, ball height/elevation, realistic spin effects, and complex trajectory simulation are explicitly out-of-scope.
+**Initial Implementation Constraint**: Simple 2D Canvas physics with no Z-axis simulation. Complex 3D physics, ball height/elevation, realistic spin effects, and complex trajectory simulation are explicitly out-of-scope.
 
 #### 3.6.1 Physics2DEngine Implementation
 ```typescript
@@ -1741,13 +3334,13 @@ class Physics2DEngine {
     }
   }
 
-  public updatePlayers(players: Player[], deltaTime: number): void {
+  public updatePlayers(players: Player[], ball: Ball, deltaTime: number): void {
     for (const player of players) {
       this.updatePlayerMovement(player, deltaTime);
     }
 
     // Check player-ball collisions
-    this.checkPlayerBallCollisions(players, this.ball);
+    this.checkPlayerBallCollisions(players, ball);
   }
 
   private updatePlayerMovement(player: Player, deltaTime: number): void {
@@ -1846,7 +3439,7 @@ interface FireTVPerformanceTargets {
   canvas: {
     maxDrawCalls: 500; // per frame (PRD specification: <500 draw calls per frame)
     maxSprites: 22; // players
-    maxParticles: 0; // disabled for POC
+    maxParticles: 0; // disabled for initial implementation
   };
 }
 
@@ -1870,7 +3463,7 @@ class FireTVPerformanceMonitor {
 
   private triggerPerformanceFallbacks(): void {
     // Reduce AI update frequency
-    POC_CONFIG.AI_UPDATE_INTERVAL_SECONDS = 2; // From 1 second to 2 seconds
+    INITIAL_CONFIG.AI_UPDATE_INTERVAL_SECONDS = 2; // From 1 second to 2 seconds
 
     // Reduce render quality
     this.enableSimplifiedRendering();
@@ -1941,7 +3534,7 @@ class OptimizedCanvas2DRenderer {
   private renderPlayer(player: Player): void {
     const sprite = this.getSpriteFromCache(player.team, player.playerType);
 
-    // Simple circle for POC - no complex sprites
+    // Simple circle for initial implementation - no complex sprites
     this.context.fillStyle = player.team === 'RED' ? '#FF0000' : '#0000FF';
     this.context.beginPath();
     this.context.arc(player.position.x, player.position.y, 15, 0, Math.PI * 2);
@@ -1956,8 +3549,8 @@ class OptimizedCanvas2DRenderer {
   }
 
   private renderBall(ball: Ball): void {
-    // **POC ONLY** - Simple 2D ball rendering
-    const ballRadius = 8; // Fixed radius for POC
+    // **Initial Implementation** - Simple 2D ball rendering
+    const ballRadius = 8; // Fixed radius for initial implementation
 
     // Simple white ball
     this.context.fillStyle = '#FFFFFF';
@@ -2905,9 +4498,9 @@ class FormationEngine {
     const ballPosition = gameState.ball.position;
 
     if (possession === team.id) {
-      return ballPosition.y > 0.6 ? GamePhase.ATTACK : GamePhase.TRANSITION_ATTACK;
+      return ballPosition.y > 0.7 ? GamePhase.ATTACK : GamePhase.TRANSITION_ATTACK; // CANONICAL: 0.7 threshold
     } else {
-      return ballPosition.y < 0.4 ? GamePhase.DEFEND : GamePhase.TRANSITION_DEFEND;
+      return ballPosition.y < 0.3 ? GamePhase.DEFEND : GamePhase.TRANSITION_DEFEND; // CANONICAL: 0.3 threshold
     }
   }
 }
@@ -2915,7 +4508,7 @@ class FormationEngine {
 
 ### 3.9 Player Abilities System
 
-**POC Constraint**: Basic attribute-driven behaviour with simplified ability execution. Complex skill animations and detailed ability mechanics are deferred to Phase 2.
+**Initial Implementation Constraint**: Basic attribute-driven behaviour with simplified ability execution. Complex skill animations and detailed ability mechanics are deferred to Phase 2.
 
 #### 3.9.1 Core Player Abilities
 
@@ -3338,7 +4931,7 @@ class MatchEngine implements Entity  // Core match engine implementation
   private referee: Referee;
   private physics: PhysicsEngine;
   private masterAI: MasterAIController;
-  private stateManager: MatchStateManager;   // Finite State Machine for match phases
+  private stateManager: MatchPhaseManager;   // Finite State Machine for match phases
   private performanceMonitor: PerformanceMonitor;
   private eventSystem: EventSystem;          // For decoupled event handling
 
@@ -3394,7 +4987,7 @@ interface Entity
 }
 
 // Match State Management with proper FSM
-enum MatchState
+enum MatchPhase
 {
   INTRODUCTION = 'introduction',       // Pre-match setup
   PREPARE_FOR_KICKOFF = 'prepare_kickoff',
@@ -3408,11 +5001,11 @@ enum MatchState
   FULL_TIME = 'full_time'
 }
 
-// MatchStateManager REMOVED - functionality absorbed into GameManager
+// MatchPhaseManager REMOVED - functionality absorbed into GameManager
 
 // GameManager now handles ALL match state logic with a clean switch statement
 class GameManager {
-  private matchState: MatchState = MatchState.INTRODUCTION;
+  private matchState: MatchPhase = MatchPhase.INTRODUCTION;
   private stateTimer: number = 0; // Timer for current state
   private stateData: any = {}; // State-specific data
 
@@ -3439,39 +5032,39 @@ class GameManager {
    */
   private handleCurrentState(deltaTime: number): void {
     switch (this.matchState) {
-      case MatchState.INTRODUCTION:
+      case MatchPhase.INTRODUCTION:
         this.handleIntroductionState(deltaTime);
         break;
 
-      case MatchState.PREPARE_FOR_KICKOFF:
+      case MatchPhase.PREPARE_FOR_KICKOFF:
         this.handlePrepareKickoffState(deltaTime);
         break;
 
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         this.handleInPlayState(deltaTime);
         break;
 
-      case MatchState.GOAL_KICK:
+      case MatchPhase.GOAL_KICK:
         this.handleGoalKickState(deltaTime);
         break;
 
-      case MatchState.CORNER_KICK:
+      case MatchPhase.CORNER_KICK:
         this.handleCornerKickState(deltaTime);
         break;
 
-      case MatchState.THROW_IN:
+      case MatchPhase.THROW_IN:
         this.handleThrowInState(deltaTime);
         break;
 
-      case MatchState.GOAL_SCORED:
+      case MatchPhase.GOAL_SCORED:
         this.handleGoalScoredState(deltaTime);
         break;
 
-      case MatchState.HALF_TIME:
+      case MatchPhase.HALF_TIME:
         this.handleHalfTimeState(deltaTime);
         break;
 
-      case MatchState.FULL_TIME:
+      case MatchPhase.FULL_TIME:
         this.handleFullTimeState(deltaTime);
         break;
 
@@ -3481,7 +5074,7 @@ class GameManager {
     }
   }
 
-  private transitionToState(newState: MatchState, stateData?: any): void {
+  private transitionToState(newState: MatchPhase, stateData?: any): void {
     console.log(`State transition: ${this.matchState} -> ${newState}`);
     
     // Exit current state
@@ -3505,35 +5098,35 @@ class GameManager {
    */
   private exitCurrentState(): void {
     switch (this.matchState) {
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         // Stop ball if needed, clear temporary state
         break;
-      case MatchState.GOAL_KICK:
-      case MatchState.CORNER_KICK:
-      case MatchState.THROW_IN:
+      case MatchPhase.GOAL_KICK:
+      case MatchPhase.CORNER_KICK:
+      case MatchPhase.THROW_IN:
         // Clear set piece state
         break;
     }
   }
 
-  private enterNewState(previousState: MatchState): void {
+  private enterNewState(previousState: MatchPhase): void {
     switch (this.matchState) {
-      case MatchState.GOAL_KICK:
+      case MatchPhase.GOAL_KICK:
         this.referee.blowBriefWhistle();
         break;
-      case MatchState.CORNER_KICK:
+      case MatchPhase.CORNER_KICK:
         this.referee.blowBriefWhistle();
         break;
-      case MatchState.THROW_IN:
+      case MatchPhase.THROW_IN:
         this.referee.blowBriefWhistle();
         break;
-      case MatchState.GOAL_SCORED:
+      case MatchPhase.GOAL_SCORED:
         this.statistics.recordGoal(this.stateData.scoringTeam, this.stateData.scoringPlayer);
         break;
-      case MatchState.HALF_TIME:
+      case MatchPhase.HALF_TIME:
         this.referee.blowExtendedWhistle();
         break;
-      case MatchState.FULL_TIME:
+      case MatchPhase.FULL_TIME:
         this.referee.blowExtendedWhistle();
         break;
     }
@@ -3542,15 +5135,15 @@ class GameManager {
   /**
    * STATE CHANGE BROADCASTING - Notify other systems of state changes
    */
-  private broadcastStateChange(newState: MatchState, previousState: MatchState): void {
+  private broadcastStateChange(newState: MatchPhase, previousState: MatchPhase): void {
     // Notify AI controllers
     this.aiControllers.forEach(controller => {
-      controller.onMatchStateChange(newState, previousState);
+      controller.onMatchPhaseChange(newState, previousState);
     });
 
     // Notify teams
-    this.homeTeam.onMatchStateChange(newState, previousState);
-    this.awayTeam.onMatchStateChange(newState, previousState);
+    this.homeTeam.onMatchPhaseChange(newState, previousState);
+    this.awayTeam.onMatchPhaseChange(newState, previousState);
 
     // Update statistics
     this.statistics.recordStateChange(newState, this.deterministicContext.gameTime);
@@ -3565,7 +5158,7 @@ class GameManager {
   private handleIntroductionState(deltaTime: number): void {
     // Players walking onto pitch, crowd noise, commentary
     if (this.stateTimer > 30) { // 30 seconds introduction
-      this.transitionToState(MatchState.PREPARE_FOR_KICKOFF);
+      this.transitionToState(MatchPhase.PREPARE_FOR_KICKOFF);
     }
   }
 
@@ -3574,7 +5167,7 @@ class GameManager {
     this.setupKickOffPositions(this.kickOffTeam);
     
     if (this.stateTimer > 5) { // 5 seconds to get in position
-      this.transitionToState(MatchState.IN_PLAY);
+      this.transitionToState(MatchPhase.IN_PLAY);
     }
   }
 
@@ -3601,7 +5194,7 @@ class GameManager {
       // Reset for kick-off by team that conceded
       const concedingTeam = this.stateData.scoringTeam === 'HOME' ? 'AWAY' : 'HOME';
       this.kickOffTeam = concedingTeam;
-      this.transitionToState(MatchState.PREPARE_FOR_KICKOFF);
+      this.transitionToState(MatchPhase.PREPARE_FOR_KICKOFF);
     }
   }
 
@@ -3634,7 +5227,7 @@ interface StateHandler
   enter(gameState: GameState): void;
   update(gameState: GameState, deltaTime: number): void;
   exit(gameState: GameState): void;
-  checkTransitions(gameState: GameState): MatchState | null;
+  checkTransitions(gameState: GameState): MatchPhase | null;
 }
 ```
 
@@ -3670,7 +5263,7 @@ interface GameState extends BaseGameState
   teams: Team[];
   
   // Core game objects  
-  ball: Ball3D;                        // 3D ball with physics
+  ball: Ball;                        // 3D ball with physics
   players: Player[];                   // All players from both teams
   
   // Match state
@@ -3714,7 +5307,7 @@ interface MatchTime
   lastUpdate: number;                 // Last time update timestamp
 }
 
-### 3.6.5 Goal Kick Implementation (POC)
+### 3.6.5 Goal Kick Implementation (Initial)
 
 **FIFA Law 16 Compliance**: Implementation follows FIFA Laws of the Game for goal kick procedures.
 
@@ -3756,7 +5349,7 @@ class GameManager {
         
       case GoalKickPhase.BALL_IN_PLAY:
         // Ball has been kicked and is moving - transition back to IN_PLAY
-        this.transitionToState(MatchState.IN_PLAY);
+        this.transitionToState(MatchPhase.IN_PLAY);
         break;
     }
   }
@@ -3883,7 +5476,7 @@ class GameManager {
       
       // Execute kick - ball becomes in play
       const kickDirection = this.calculateKickDirection(gameState, goalKickState.kickingTeam);
-      const kickPower = 0.8; // Moderate power for POC
+      const kickPower = 0.8; // Moderate power for initial implementation
       
       gameState.ball.position = { ...goalKickState.ballPosition };
       gameState.ball.velocity = {
@@ -3918,7 +5511,7 @@ class GameManager {
   private placeBallInGoalArea(kickingTeam: 'HOME' | 'AWAY'): Vector2 {
     const goalArea = this.getGoalAreaForTeam(kickingTeam);
     
-    // Place ball in center of goal area for POC simplicity
+    // Place ball in center of goal area for initial implementation simplicity
     return {
       x: (goalArea.left + goalArea.right) / 2,
       y: (goalArea.top + goalArea.bottom) / 2
@@ -3926,7 +5519,7 @@ class GameManager {
   }
   
   private calculateKickDirection(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): Vector2 {
-    // Simple POC implementation - kick toward center field
+    // Simple initial implementation - kick toward center field
     const fieldCenter = { x: 0.5, y: 0.5 }; // Normalized center
     const ballPos = gameState.ball.position;
     
@@ -3991,7 +5584,7 @@ class GoalKickAIBehavior {
 }
 ```
 
-### 3.6.6 Goalkeeper Ball Handling System (POC)
+### 3.6.6 Goalkeeper Ball Handling System (Initial)
 
 **FIFA Law 12 Compliance**: Goalkeeper can handle ball within penalty area, 6-second rule when ball is in hands.
 
@@ -4181,15 +5774,9 @@ class GoalkeeperController {
     // Opposing players retreat toward own half to defend counter-attack
     opposingPlayers.forEach(player => {
       if (player.playerType !== 'GOALKEEPER') {
-<<<<<<< Updated upstream
         const ownHalfX = opposingTeam === 'HOME' ? 
-          POC_CONFIG.FIELD_WIDTH * 0.25 : 
-          POC_CONFIG.FIELD_WIDTH * 0.75;
-        
-=======
-        const ownHalfX = opposingTeam === 'HOME' ? 0.25 : 0.75; // Normalized coordinates
-
->>>>>>> Stashed changes
+          INITIAL_CONFIG.FIELD_WIDTH * 0.25 : 
+          INITIAL_CONFIG.FIELD_WIDTH * 0.75;
         // Move toward own half, maintaining some width
         player.targetPosition = {
           x: ownHalfX,
@@ -4280,15 +5867,9 @@ class TacticalAIResponse {
   }
   
   private setRetreatBehavior(player: Player, team: 'HOME' | 'AWAY'): void {
-<<<<<<< Updated upstream
     const ownHalfCenterX = team === 'HOME' ? 
-      POC_CONFIG.FIELD_WIDTH * 0.25 : 
-      POC_CONFIG.FIELD_WIDTH * 0.75;
-    
-=======
-    const ownHalfCenterX = team === 'HOME' ? 0.25 : 0.75; // Normalized coordinates
-
->>>>>>> Stashed changes
+      INITIAL_CONFIG.FIELD_WIDTH * 0.25 : 
+      INITIAL_CONFIG.FIELD_WIDTH * 0.75;
     // Players retreat but maintain some attacking potential
     const retreatIntensity = player.attributes?.positioning || 0.5; // Use positioning attribute
     
@@ -4347,7 +5928,7 @@ class FIFALaw12GoalkeeperController extends GoalkeeperController {
   }
   
   private wasDeliberateFootPass(player: Player, ball: Ball): boolean {
-    // Simple POC logic: check if player was in passing state and used foot
+    // Simple initial implementation logic: check if player was in passing state and used foot
     const wasInPassingAction = player.state === PlayerState.ATTACKING || 
                               player.state === PlayerState.MAINTAINING_POSITION;
     const ballSpeed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2);
@@ -4451,7 +6032,7 @@ class SweeperKeeperBehaviour {
     const ballVelocity = ball.velocity;
     const ballPosition = ball.position;
     
-    // Simple linear prediction (POC level)
+    // Simple linear prediction (initial implementation level)
     const timeSteps = 10;
     let bestInterceptPoint = ballPosition;
     let minTimeToIntercept = Infinity;
@@ -4552,7 +6133,7 @@ class GoalkeeperPhysicalProtection {
     
     // Can challenge when ball is at goalkeeper's feet (within reach distance)
     const distanceToKeeper = this.calculateDistance(ball.position, goalkeeper.position);
-    const ballAtFeet = distanceToKeeper < 15; // POC: 15 pixel reach distance
+    const ballAtFeet = distanceToKeeper < 15; // Initial: 15 pixel reach distance
     
     return ballAtFeet && !ball.inGoalkeeperHands;
   }
@@ -4567,7 +6148,7 @@ class GoalkeeperPhysicalProtection {
     console.warn(`Illegal challenge: ${challengingPlayer.id} attempted to tackle goalkeeper with ball in hands`);
     
     // In full implementation, this would award an indirect free kick
-    // For POC, we just prevent the action from occurring
+    // For initial implementation, we just prevent the action from occurring
   }
   
   private calculateDistance(pos1: Vector2, pos2: Vector2): number {
@@ -4598,14 +6179,14 @@ Half-time is managed as a state within the Game Manager's finite state machine, 
 ```typescript
 // Half-time logic integrated directly into GameManager
 class GameManager {
-  private matchState: MatchState = MatchState.INTRODUCTION;
+  private matchState: MatchPhase = MatchPhase.INTRODUCTION;
   private kickOffTeam: 'HOME' | 'AWAY';
   private initialKickOffTeam: 'HOME' | 'AWAY';
   private halfTimeTransitioned: boolean = false;
 
   private checkStateTransitions(): void {
     switch (this.matchState) {
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         if (this.isHalfTimeReached() && !this.halfTimeTransitioned) {
           this.transitionToHalfTime();
         }
@@ -4614,7 +6195,7 @@ class GameManager {
         }
         break;
 
-      case MatchState.HALF_TIME:
+      case MatchPhase.HALF_TIME:
         if (this.isHalfTimeComplete()) {
           this.transitionToSecondHalf();
         }
@@ -4630,7 +6211,7 @@ class GameManager {
 
   private isHalfTimeComplete(): boolean {
     // Half-time lasts 1 minute in real-time (as per PRD spec)
-    const halfTimeStarted = this.matchState === MatchState.HALF_TIME;
+    const halfTimeStarted = this.matchState === MatchPhase.HALF_TIME;
     const halfTimeDuration = 60; // 1 minute
     // Track when half-time state was entered
     return halfTimeStarted && (this.deterministicContext.gameTime - this.halfTimeStartTime) >= halfTimeDuration;
@@ -4645,7 +6226,7 @@ class GameManager {
     console.log('Transitioning to half-time');
     
     // Set state
-    this.matchState = MatchState.HALF_TIME;
+    this.matchState = MatchPhase.HALF_TIME;
     this.halfTimeTransitioned = true;
     this.halfTimeStartTime = this.deterministicContext.gameTime;
 
@@ -4663,7 +6244,7 @@ class GameManager {
     console.log('Transitioning to second half');
     
     // Set state for second half kick-off
-    this.matchState = MatchState.PREPARE_FOR_KICKOFF;
+    this.matchState = MatchPhase.PREPARE_FOR_KICKOFF;
     
     // Players take positions for second half kick-off
     this.setupKickOffPositions(this.kickOffTeam);
@@ -4676,7 +6257,7 @@ class GameManager {
   private transitionToFullTime(): void {
     console.log('Match completed - Full time');
     
-    this.matchState = MatchState.FULL_TIME;
+    this.matchState = MatchPhase.FULL_TIME;
     
     // Referee blows extended whistle (1.25 seconds) for full-time
     this.referee.blowExtendedWhistle();
@@ -4790,7 +6371,7 @@ class TeamAIController implements AIController
   private ballProgression: BallProgressionEngine;
   private tacticalEngine: TacticalEngine;
   private greedyAssignment: GreedyAssignmentEngine;
-  private currentMatchState: MatchState = MatchState.INTRODUCTION;
+  private currentMatchPhase: MatchPhase = MatchPhase.INTRODUCTION;
 
   public teamId: string;
   public difficulty: AIDifficulty;
@@ -4804,38 +6385,38 @@ class TeamAIController implements AIController
   /**
    * STATE TRANSITION HANDLER - Called by GameManager when match state changes
    */
-  public onMatchStateChange(newState: MatchState, previousState: MatchState): void {
+  public onMatchPhaseChange(newState: MatchPhase, previousState: MatchPhase): void {
     console.log(`TeamAI ${this.teamId}: State change ${previousState} -> ${newState}`);
-    this.currentMatchState = newState;
+    this.currentMatchPhase = newState;
 
     switch (newState) {
-      case MatchState.INTRODUCTION:
+      case MatchPhase.INTRODUCTION:
         this.handleIntroductionState();
         break;
 
-      case MatchState.PREPARE_FOR_KICKOFF:
+      case MatchPhase.PREPARE_FOR_KICKOFF:
         this.handlePrepareKickoffState();
         break;
 
-      case MatchState.IN_PLAY:
+      case MatchPhase.IN_PLAY:
         this.handleInPlayState(previousState);
         break;
 
-      case MatchState.GOAL_KICK:
-      case MatchState.CORNER_KICK:
-      case MatchState.THROW_IN:
+      case MatchPhase.GOAL_KICK:
+      case MatchPhase.CORNER_KICK:
+      case MatchPhase.THROW_IN:
         this.handleSetPieceState(newState);
         break;
 
-      case MatchState.GOAL_SCORED:
+      case MatchPhase.GOAL_SCORED:
         this.handleGoalScoredState();
         break;
 
-      case MatchState.HALF_TIME:
+      case MatchPhase.HALF_TIME:
         this.handleHalfTimeState();
         break;
 
-      case MatchState.FULL_TIME:
+      case MatchPhase.FULL_TIME:
         this.handleFullTimeState();
         break;
 
@@ -4863,7 +6444,7 @@ class TeamAIController implements AIController
     this.adjustDifficultyForSituation('kickoff');
   }
 
-  private handleInPlayState(previousState: MatchState): void {
+  private handleInPlayState(previousState: MatchPhase): void {
     // Resume normal gameplay AI
     this.currentStrategy = this.calculateOptimalStrategy();
     
@@ -4878,16 +6459,16 @@ class TeamAIController implements AIController
     this.setUpdateFrequency(this.getBaseUpdateFrequency());
   }
 
-  private handleSetPieceState(setState: MatchState): void {
+  private handleSetPieceState(setState: MatchPhase): void {
     // Adjust strategy for set pieces
     switch (setState) {
-      case MatchState.GOAL_KICK:
+      case MatchPhase.GOAL_KICK:
         this.handleGoalKickAI();
         break;
-      case MatchState.CORNER_KICK:
+      case MatchPhase.CORNER_KICK:
         this.handleCornerKickAI();
         break;
-      case MatchState.THROW_IN:
+      case MatchPhase.THROW_IN:
         this.handleThrowInAI();
         break;
     }
@@ -4971,8 +6552,8 @@ class TeamAIController implements AIController
   }
 
   // Helper methods for state handling
-  private isSetPieceState(state: MatchState): boolean {
-    return [MatchState.GOAL_KICK, MatchState.CORNER_KICK, MatchState.THROW_IN].includes(state);
+  private isSetPieceState(state: MatchPhase): boolean {
+    return [MatchPhase.GOAL_KICK, MatchPhase.CORNER_KICK, MatchPhase.THROW_IN].includes(state);
   }
 
   private adjustDifficultyForSituation(situation: string): void {
@@ -5693,7 +7274,7 @@ class BallProgressionEngine
     return {
       passingRange: this.calculatePassingRange(player.attributes.passing, player.attributes.vision),
       riskAssessment: this.calculateRiskTolerance(player.attributes.decisions, player.attributes.composure),
-      creativityLevel: (player.attributes.vision + player.attributes.freeKickTaking) / 2,
+      creativityLevel: (player.attributes.vision + player.attributes.freeKicks) / 2,
       pressureResistance: (player.attributes.composure + player.attributes.ballControl) / 2
     };
   }
@@ -5879,8 +7460,8 @@ class FETRoleMapper {
   }
 }
 
-// **POC ONLY** - Simplified formation grid (no FET integration yet)
-class POCFormationGrid {
+// **Initial Implementation** - Simplified formation grid (no FET integration yet)
+class InitialFormationGrid {
   private readonly GRID_WIDTH = 20;
   private readonly GRID_HEIGHT = 15;
   private readonly ZONE_COUNT = 300;
@@ -5982,12 +7563,12 @@ interface FormationDefinition {
   };
 }
 
-// POC placeholder formation manager
+// Initial implementation placeholder formation manager
 // Phase 2: This will be replaced by a FormationAdapter that consumes FET export schema (see docs/FET-TDD.md)
 class FormationManager {
   private formations: Map<string, FormationDefinition> = new Map();
   private currentFormation: FormationDefinition;
-  private gridSystem: OptimizedFormationGrid; // POC-only grid; Phase 2 uses FET data
+  private gridSystem: OptimizedFormationGrid; // Initial implementation grid; Phase 2 uses FET data
 
   constructor() {
     this.gridSystem = new OptimizedFormationGrid();
@@ -5995,7 +7576,7 @@ class FormationManager {
   }
 
   private loadPredefinedFormations(): void {
-    // Pre-defined formations for POC
+    // Pre-defined formations for initial implementation
     const formation442 = this.createFormation442();
     const formation433 = this.createFormation433();
 
@@ -6072,7 +7653,7 @@ class FormationManager {
 
 #### 3.4.1 Enhanced Ball Physics Implementation
 ```typescript
-// **PHASE 2 ONLY** - Advanced 3D Ball Physics (not implemented in POC)
+// **PHASE 2 ONLY** - Advanced 3D Ball Physics (not implemented in initial version)
 class Phase2BallPhysics
 {
   position: Vector3;          // Include Z-axis for height calculations - PHASE 2
@@ -6093,7 +7674,7 @@ class Phase2BallPhysics
   public checkCollisions(players: Player[], boundaries: Boundary[]): Collision[];
 }
 
-// **PHASE 2 ONLY** - Realistic 3D physics constants (not used in POC)
+// **PHASE 2 ONLY** - Realistic 3D physics constants (not used in initial implementation)
 interface Phase2PhysicsConstants
 {
   BALL_MASS: 0.43;              // kg (FIFA regulation) - PHASE 2
@@ -6105,7 +7686,7 @@ interface Phase2PhysicsConstants
   SPIN_DECAY_RATE: 0.95;        // Spin reduction per frame - PHASE 2
 }
 
-// POC uses simplified 2D constants (see Section 3.6 POC 2D Physics Engine)
+// Initial implementation uses simplified 2D constants (see Section 3.6 Initial 2D Physics Engine)
 ```
 
 #### 3.4.2 Advanced Player Movement System
@@ -6287,7 +7868,7 @@ The Game Manager acts as the central authority for ball boundary detection and e
 
 ```typescript
 class GameManager {
-  private ball: Ball3D;
+  private ball: Ball;
   private referee: Referee;
   private audioSystem: AudioSystem;
   private eventBus: GameEventBus;
@@ -6596,7 +8177,7 @@ export const soccerWorldCupGame = {
     match: null,
     ball: { position: { x: 0.5, y: 0.5, z: 0 }, velocity: { x: 0, y: 0, z: 0 } },
     gameTime: 0,
-    matchSeed: Math.floor(Math.random() * 1000000),
+    matchSeed: Math.floor(Date.now() % 1000000), // Use timestamp for unique match seeds
   }),
 
   actions: {
@@ -6767,7 +8348,7 @@ import { GameComponent } from './GameComponent';
 
 const client = new VGFClient({
   serverUrl: 'http://localhost:3000',
-  userId: `manager-${Math.random().toString(36).substr(2, 9)}`,
+  userId: `manager-${Date.now().toString(36).substr(-9)}`, // Use timestamp for unique user IDs
 });
 
 function App() {
@@ -7045,7 +8626,7 @@ interface Player extends Entity  // Implementing Entity pattern
 
   // Animation and rendering
   spriteAnimation: SpriteAnimation;
-  // PHASE 2 ONLY: height (for 3D/headers); not used in POC 2D engine
+  // PHASE 2 ONLY: height (for 3D/headers); not used in initial 2D engine
   height?: number;
 
   // Captain status
@@ -7192,15 +8773,15 @@ class SoccerTestHarness {
 }
 ```
 
-### 10.2 POC Acceptance Tests (Priority 1 - Critical)
+### 10.2 Initial Implementation Acceptance Tests (Priority 1 - Critical)
 
-**These tests validate PRD POC acceptance criteria and must pass for POC success.**
+**These tests validate PRD acceptance criteria and must pass for initial implementation success.**
 
 #### 10.1.1 Ball Physics and Boundaries (PRD Requirements)
 ```typescript
-describe('POC Ball Physics', () => {
+describe('Initial Ball Physics', () => {
   test('should detect out-of-bounds within 16ms', async () => {
-    const ball = createBall({ position: { x: POC_CONFIG.FIELD_WIDTH + 1, y: 500 } });
+    const ball = createBall({ position: { x: INITIAL_CONFIG.FIELD_WIDTH + 1, y: 500 } });
     const testClock = createTestClock();
     const startTime = testClock.now();
     const result = physics.checkBoundaries(ball);
@@ -7266,7 +8847,7 @@ describe('POC Ball Physics', () => {
 
 #### 10.1.2 Formation Adherence (PRD Requirements)
 ```typescript
-describe('POC Formation Adherence', () => {
+describe('Initial Formation Adherence', () => {
   test('should maintain formation within ±10% tolerance', () => {
     const gameState = createGameState();
     const team = gameState.teams[0];
@@ -7277,7 +8858,7 @@ describe('POC Formation Adherence', () => {
 
       team.players.forEach(player => {
         const distance = calculateDistance(player.position, player.basePosition);
-        const fieldDiagonal = Math.sqrt(POC_CONFIG.FIELD_WIDTH**2 + POC_CONFIG.FIELD_HEIGHT**2);
+        const fieldDiagonal = Math.sqrt(INITIAL_CONFIG.FIELD_WIDTH**2 + INITIAL_CONFIG.FIELD_HEIGHT**2);
         const maxDeviation = fieldDiagonal * 0.1; // 10% tolerance
 
         expect(distance).toBeLessThan(maxDeviation);
@@ -7326,7 +8907,7 @@ describe('POC Formation Adherence', () => {
 
 #### 10.1.3 FireTV Performance (PRD Requirements)
 ```typescript
-describe('POC FireTV Performance', () => {
+describe('Initial FireTV Performance', () => {
   test('should maintain 30+ FPS during gameplay', async () => {
     const gameState = createGameState();
     const frameTimes = [];

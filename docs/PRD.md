@@ -62,11 +62,11 @@ App Manager (Top Level)
 - Voice command recognition accuracy > 90%
 - Multiplayer match-making success rate > 95%
 
-## 3. POC Scope and Functional Requirements
+## 3. Scope and Functional Requirements
 
-### 3.0 POC Scope Definition
+### 3.0 Scope Definition
 
-#### 3.0.1 In-Scope for POC
+#### 3.0.1 In-Scope for Initial Implementation
 - **Ball Physics**: Ball in/out detection on all four boundaries
 - **Basic Restarts**: Throw-ins, corner kicks, goal kicks based on last touch and line crossed
 - **Goals**: Ball completely crossing goal line with proper detection
@@ -76,7 +76,7 @@ App Manager (Top Level)
 - **Minimal HUD**: Essential match information only (score, time, basic stats)
 - **AI vs AI**: Autonomous team behaviour for evaluation purposes
 
-#### 3.0.2 Out-of-Scope for POC
+#### 3.0.2 Out-of-Scope for Initial Implementation
 - **Voice Commands**: Deferred to Phase 2
 - **Offside Detection**: Complex rule implementation deferred
 - **Foul System**: Cards, free kicks, penalties deferred
@@ -90,7 +90,7 @@ App Manager (Top Level)
 
 **Rule Implementation**: When a goal kick occurs, the referee only allows the game to commence once all opposing players have attempted to exit the penalty area, as per FIFA Laws of the Game.
 
-**POC Behaviour**:
+**Initial Implementation Behaviour**:
 - Ball is placed within the defending team's goal area (6-yard box)
 - All opposing players must move outside the penalty area before the kick can be taken
 - If any opposing player remains in the penalty area, they must attempt to leave
@@ -249,9 +249,9 @@ interface BallTrajectory {
 
 **Future Implementation**: A developer-only Formation Editor Tool will be delivered in Phase 2 to enable sophisticated tactical AI positioning. See `docs/FET-TDD.md` for complete technical specifications.
 
-**POC Approach**: Use pre-defined formation templates (4-4-2, 4-3-3) with basic positioning rules.
+**Initial Approach**: Use pre-defined formation templates (4-4-2, 4-3-3) with basic positioning rules.
 
-### 3.2 POC Acceptance Criteria
+### 3.2 Acceptance Criteria
 
 #### 3.2.1 Ball Physics and Boundaries
 - **Out-of-bounds Detection**: Accurate detection within 16ms of ball crossing any boundary
@@ -281,17 +281,36 @@ interface BallTrajectory {
 ### 3.3 Core Gameplay Loop
 
 #### 3.1.1 Match Setup
-- **Game Mode Selection**: Choose between single-player (vs AI) or multiplayer (vs human)
+
+**Game Mode Selection**: Three distinct gameplay modes available:
+
+1. **Single-Player vs AI**: Human player controls one team against AI-controlled opponent
+   - **AI Difficulty Options**: Beginner, Amateur, Professional, World Class
+   - **Practice Mode**: Ideal for learning game mechanics and testing tactics
+   - **Control Method**: Button interface (Phase 1) or mobile controller (Phase 2)
+
+2. **Local Multiplayer (Same Room)**: Two human players compete on same TV device
+   - **Dual Controller Setup**: Each player uses separate mobile controller app
+   - **QR Code Connection**: Both players scan same QR code to join session
+   - **Session Management**: VGF backend manages single "room" with two connected controllers
+   - **Shared Display**: Both players view same TV screen with split team allegiances
+
+3. **Online Multiplayer (Internet)**: Human players compete across internet connection
+   - **Matchmaking System**: Automated opponent finding based on skill/league tier
+   - **Friend Invites**: Direct challenges to known players (future enhancement)
+   - **Global Competition**: Play against unknown opponents worldwide
+   - **VGF Infrastructure**: Real-time networking handled by Voice Gaming Framework
+
+**Universal Setup Options**:
 - **Team Selection**: Choose from user's current team or opponents in league
 - **Formation Selection**: Choose tactical formation (4-4-2, 4-3-3, 3-5-2, etc.)
 - **Match Type**: League matches, friendly matches, cup competitions, or practice matches
-- **AI Difficulty** (Single-player): Beginner, Amateur, Professional, or World Class AI opponents
 - **Team Generation**: New users receive auto-generated team with English National League quality players
 
 #### 3.1.2 Live Match Experience
 - **Real-time Duration**: 5 minutes real-time representing 90 minutes game time (18x acceleration).
 - **Two Halves**: 45 minute halves - there is a brief pause between them which is tunable. 45 minutes of game time represents 2.25 minutes of real time
-- **Stoppage Time**: Simple fixed addition (30 seconds per half for POC)
+- **Stoppage Time**: Simple fixed addition (30 seconds per half for initial version)
 - **Top-down View**: Bird's eye view of football pitch with player positioning
 
 #### 3.1.3 Match Outcome
@@ -425,11 +444,67 @@ interface BallTrajectory {
 - **Shoulder Charge**: Legal physical challenge using shoulder-to-shoulder contact to dispossess opponent while both players are competing for ball
 - **Recovery Tackle**: Last-ditch defensive action to prevent goal-scoring opportunity, often involving desperate lunges or blocks
 
-### 3.3 Voice Command System (Out of Scope for POC)
+### 3.3 Player Control System
 
-**Future Implementation**: Voice commands will be the primary interface for tactical control in the full game, allowing natural language tactical instructions during live gameplay.
+**Development Implementation**: During development, players will use button controls to issue orders to their team. This will be replaced by the mobile controller system for voice-controlled gameplay.
 
-#### 3.3.1 Core Command Categories
+**Final Implementation**: Voice commands via mobile controller app will be the primary interface for tactical control, allowing natural language tactical instructions during live gameplay.
+
+#### 3.3.1 Development Button Interface (Phase 1)
+
+**Desktop Development Controls**: During development on desktop machines, players use on-screen clickable buttons with mouse pointer to issue tactical commands:
+
+**On-Screen Button Layout**:
+```
+┌─────────────────────────────────────┐
+│  ATTACK    │   DEFEND   │  BALANCE  │  ← Tactical Style
+├─────────────────────────────────────┤
+│   SHOOT    │ CLOSE DOWN │ LONG BALL │  ← Immediate Actions  
+├─────────────────────────────────────┤
+│ WATCH LEFT │     -      │WATCH RIGHT│  ← Positional Awareness
+└─────────────────────────────────────┘
+```
+
+**Tactical Style Buttons**:
+- **"ATTACK"**: Team adopts aggressive attacking posture
+- **"DEFEND"**: Team adopts defensive posture  
+- **"BALANCE"**: Team maintains balanced approach
+
+**Immediate Action Buttons**:
+- **"SHOOT"**: Ball possessor attempts immediate shot on goal
+- **"CLOSE DOWN"**: Nearest player pressures opponent ball carrier
+- **"LONG BALL"**: Ball possessor kicks ball upfield to relieve pressure
+
+**Positional Awareness Buttons**:
+- **"WATCH LEFT"**: Increase defensive attention to left flank
+- **"WATCH RIGHT"**: Increase defensive attention to right flank
+
+**Development Notes**: 
+- Buttons positioned as overlay on game view for easy access during testing
+- Click feedback with visual button press animation
+- Button availability context-sensitive (e.g., "SHOOT" disabled when opponent has possession)
+- FireTV remote integration deferred until voice control implementation (Phase 2)
+
+#### 3.3.2 Mobile Controller Integration (Phase 2)
+
+**Architecture Overview**: 
+- **Mobile Controller App**: Separate mobile application (external repository)
+- **Speech-to-Text**: Google Speech-to-Text API integration
+- **AI Command Processing**: Natural language converted to structured game commands
+- **VGF Integration**: Commands transmitted via VGF networking to game session
+
+**Connection Process**:
+1. **QR Code Generation**: Game displays unique QR code for session
+2. **Mobile App Scan**: Players scan QR code to join game session
+3. **Session Binding**: Mobile controller connects to specific game "room"
+4. **Command Transmission**: Voice commands processed and sent to game
+
+**Voice Processing Pipeline**:
+```
+Voice Input → Google Speech-to-Text → AI Command Parser → VGF Transport → Game Action
+```
+
+#### 3.3.3 Core Command Categories
 
 **Tactical Style Commands**:
 - **"Defend"**: Team adopts defensive posture, players rarely venture out of own half, making it difficult for opposition to score but also difficult for user's team to score
@@ -473,7 +548,7 @@ enum CommandType {
 - "Attack" variations: "Push forward", "Go on the attack", "Get forward"
 - "Shoot" variations: "Take the shot", "Have a go", "Strike it"
 
-**POC Approach**: AI teams will operate autonomously without voice input. Basic tactical behaviours corresponding to "Defend", "Balance", and "Attack" styles will be pre-programmed to demonstrate the foundation for voice-controlled gameplay.
+**Initial Approach**: AI teams will operate autonomously without voice input. Basic tactical behaviours corresponding to "Defend", "Balance", and "Attack" styles will be pre-programmed to demonstrate the foundation for voice-controlled gameplay.
 
 *Note: Complete voice command specification and natural language processing details will be documented in Phase 2 planning.*
 
@@ -585,19 +660,19 @@ This displays the current score, the names of the teams and the current time. It
 
 ### 3.11 Match Rules Implementation
 
-#### 3.11.1 POC Minimal Ruleset
+#### 3.11.1 Minimal Ruleset
 **Core Rules**:
 - **Ball In/Out**: Complete ball crossing boundary lines
 - **Goal Scoring**: Ball completely crossing goal line
 - **Basic Restarts**: Throw-ins, corner kicks, goal kicks only
 
-**Deferred for POC**:
+**Deferred for Initial Implementation**:
 - Offside detection and enforcement
 - Foul system and disciplinary actions
 - Free kicks and penalties
 - Advanced restart procedures
 
-**POC Focus**: Ensure smooth gameplay flow without complex rule interruptions that would hinder AI evaluation
+**Initial Focus**: Ensure smooth gameplay flow without complex rule interruptions that would hinder AI evaluation
 
 #### 3.11.2 Half-Time Procedures
 - **Automatic Transition**: Brief pause at 45 minutes, automatic progression to second half
@@ -605,11 +680,11 @@ This displays the current score, the names of the teams and the current time. It
 - **Formation Reset**: Players return to kick-off positions
 - **Simple UI**: Minimal "Half Time" notification (brief, non-blocking)
 
-#### 3.11.3 POC Simplifications
+#### 3.11.3 Initial Implementation Simplifications
 - **No Stoppage Time Calculation**: Fixed 30-second addition per half
 - **No Advantage Rule**: Immediate whistle for all infractions (when implemented)
 - **Simplified Offside**: Deferred to Phase 2
-- **No Disciplinary System**: No cards or player ejections in POC
+- **No Disciplinary System**: No cards or player ejections in initial implementation
 
 ## 4. Technical Requirements
 
@@ -626,7 +701,7 @@ This displays the current score, the names of the teams and the current time. It
 - **Latency Management**: Sub-100ms command response time
 
 ### 4.3 Physics and Animation System
-**POC Target**: 2D Canvas physics with no Z-axis simulation
+**Initial Target**: 2D Canvas physics with no Z-axis simulation
 - **Ball Physics**: Simple 2D movement with basic friction, no height or spin simulation
 - **Player Movement**: 2D position interpolation with basic collision avoidance
 - **Collision Detection**: Circular collision detection for player-to-player and player-to-ball interactions
@@ -660,7 +735,7 @@ This displays the current score, the names of the teams and the current time. It
 - **Text Alternatives**: Optional text display of recognised commands
 - **Audio Cues**: Sound feedback for successful command execution
 
-**POC Approach**: Focus on visual clarity and TV-optimised display
+**Initial Approach**: Focus on visual clarity and TV-optimised display
 
 ### 5.3 Onboarding Experience
 - **Tutorial Mode**: Interactive voice command training
@@ -670,13 +745,130 @@ This displays the current score, the names of the teams and the current time. It
 
 ## 6. Content Requirements
 
-### 6.1 Teams and Players
-- **League Structure**: 28 teams per league division
-- **Player Database**: 22 players per team (11 starting + 5 subs + 6 reserves)
-- **Team Names**: Inspired by English League and Premier League names, plus custom user-created names
-- **Attribute Variation**: Realistic attribute distributions based on league tier (National League to Premier League quality)
-- **Name Generation**: Authentic player names with cultural diversity
-- **Team Captain**: Each team has a designated captain (usually highest-rated player)
+### 6.1 Player Database System
+
+#### 6.1.1 National Teams Database (Phase 1)
+
+**Primary Team Selection**: Initial implementation focuses on international national teams for authentic World Cup experience:
+
+**Tier 1 Nations** (World-class players, 85-95 overall ratings):
+- England, France, Germany, Spain, Italy, Netherlands, Portugal, Belgium, Croatia, Argentina, Brazil, Uruguay
+
+**Tier 2 Nations** (Strong competitive teams, 75-85 overall ratings):  
+- Poland, Switzerland, Denmark, Austria, Czech Republic, Sweden, Colombia, Mexico, Japan, Morocco
+
+**Tier 3 Nations** (Developing football nations, 65-75 overall ratings):
+- Wales, Scotland, Ireland, Norway, Finland, South Korea, Australia, USA, Canada, Nigeria
+
+**Database Structure**: 
+- **32 National Teams** (World Cup format)
+- **23 Players per team** (World Cup squad size: 11 starting + 12 substitutes/reserves)
+- **736 Total Players** in initial database
+- **Authentic Player Names**: Real-world inspired names with cultural authenticity
+- **Position-Specific Attributes**: Goalkeepers, defenders, midfielders, forwards with realistic attribute distributions
+
+#### 6.1.2 Player Data Schema
+
+**Core Player Information**:
+```
+Player ID: Unique identifier (e.g., "ENG_001_Kane")
+Name: Harry Kane (culturally appropriate names)
+Nationality: England
+Age: 25-35 years (peak performance range)
+Position: ST (Striker), CB (Centre-Back), GK (Goalkeeper), etc.
+Overall Rating: 0.0-10.0 scale
+Market Value: £500K - £150M (for career mode context)
+Team Role: Captain, Vice-Captain, Regular, Substitute, Reserve
+```
+
+**Physical Attributes** (0.0-10.0 scale):
+- Pace, Acceleration, Stamina, Strength, Jumping, Agility, Balance
+
+**Technical Attributes** (0.0-10.0 scale):
+- Ball Control, Dribbling, Passing, Crossing, Shooting, Finishing, Long Shots, Free Kicks, Penalties
+
+**Mental Attributes** (0.0-10.0 scale):
+- Decisions, Composure, Concentration, Positioning, Anticipation, Vision, Work Rate, Teamwork, Leadership
+
+**Specialised Attributes**:
+- **Defensive**: Tackling, Marking, Heading, Interceptions
+- **Goalkeeping**: Handling, Reflexes, Aerial Reach, One-on-Ones, Distribution
+
+#### 6.1.3 Custom Team Creation System (Phase 2)
+
+**User-Generated Teams**: Players can create personalised teams alongside national teams:
+
+**Team Creation Features**:
+- **Custom Team Names**: User-defined team names and abbreviations  
+- **Team Colours**: Primary/secondary kit colours with pattern selection
+- **Stadium Selection**: Choose from available stadium templates
+- **Formation Preference**: Default tactical setup (4-4-2, 4-3-3, etc.)
+
+**Player Generation Options**:
+1. **Fully Generated Squad**: AI creates 23 players with specified overall rating range
+2. **Mixed Squad**: Combine generated players with selected real players (transfer system)
+3. **Custom Player Creation**: Create individual players with custom names and attributes
+
+**Attribute Budget System**:
+- **Overall Rating Target**: User selects team strength (60-90 overall average)
+- **Attribute Points Pool**: Distributed across squad based on target rating
+- **Position Requirements**: Automatic generation ensures proper goalkeeper and position balance
+- **Cultural Naming**: Names generated based on selected team nationality/region
+
+**Team Storage**:
+- **Local Storage**: Custom teams saved locally in browser/app
+- **Cloud Sync**: Optional cloud storage for cross-device team access
+- **Team Sharing**: Export/import team files for sharing with other players
+
+#### 6.1.4 Database Implementation Options
+
+**Option 1: Large JSON File** (Recommended for Phase 1):
+- Single `players-database.json` file (~2-3MB)
+- Fast loading, no server dependency
+- Easy to update and version control
+- Suitable for 736 national team players
+
+**Option 2: Embedded Database** (Future consideration):
+- SQLite database for complex queries
+- Better performance for thousands of custom teams
+- More sophisticated search and filtering capabilities
+
+**Data Storage Structure**:
+```json
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-08-21",
+  "nationalTeams": {
+    "ENG": {
+      "name": "England",
+      "tier": 1,
+      "confederation": "UEFA",
+      "players": [
+        {
+          "id": "ENG_001",
+          "name": "Harry Kane",
+          "position": "ST",
+          "age": 30,
+          "overall": 8.9,
+          "attributes": { "pace": 6.5, "shooting": 9.2, "passing": 7.8 }
+        }
+      ]
+    }
+  },
+  "customTeams": {
+    // User-created teams stored here
+  }
+}
+```
+
+#### 6.1.5 Content Expansion Strategy
+
+**Phase 1**: 32 National teams (736 players)
+**Phase 2**: Custom team creation system
+**Phase 3**: Club teams from major leagues (EPL, La Liga, Serie A, Bundesliga)
+**Phase 4**: Historical teams and legends mode
+
+This database provides authentic World Cup atmosphere while enabling creative team-building for personalised gameplay experiences.
 
 ### 6.2 Stadiums and Environments
 - **Stadium Variations**: Multiple pitch environments with different atmospheres
@@ -690,7 +882,53 @@ This displays the current score, the names of the teams and the current time. It
 - **Pitch Conditions**: Surface variations affecting ball roll and player movement, higher leagues have superior pitch quality
 
 ### 6.3 Audio Design
-- **Commentary System**: Dynamic match commentary responsive to events
+
+#### 6.3.1 Reactive Commentary System (Phase 2)
+
+**Voice Command Reactive Commentary**: Commentary system responds intelligently to player's voice commands and tactical changes, creating immersive managerial experience.
+
+**Tactical Command Responses**:
+- **Attack Commands**: 
+  - "Well the manager is going for broke and getting his team to push forward more!"
+  - "Bold tactical change there, committing more players to attack!"
+  - "The gaffer wants goals and he's not holding back!"
+
+- **Defensive Commands**: 
+  - "Looks like the manager is tightening things up at the back"
+  - "Playing it safe now, prioritising defensive solidarity"
+  - "The manager's pulling his players back to protect what they have"
+
+- **Shoot Commands**: 
+  - "Manager's shouting from the sideline - have a go!"  
+  - "The boss wants them to be more direct in front of goal"
+  - "Clear instructions from the touchline there!"
+
+**Profanity Impact System**: 
+- **Detection**: AI parser identifies profanity in voice commands (e.g., "FUCKING SHOOT!")
+- **Performance Impact**: 
+  - 5-15% accuracy reduction for affected action
+  - Temporary player confidence decrease (-0.2 to -0.5 attribute points for 30 seconds)
+  - Increased chance of rushed decision-making
+
+- **Commentary Responses to Profanity**:
+  - "Looks like the manager's strong words there might have put his player off!"
+  - "That outburst from the sideline seems to have rattled the player"
+  - "The pressure from the touchline might be affecting the team's composure"
+  - "Sometimes a calmer approach works better than shouting!"
+
+**Frequency Management**: 
+- **Commentary Triggers**: Maximum 1 reaction per 45 seconds to avoid annoyance
+- **Context Sensitivity**: Commentary only triggers for significant tactical shifts
+- **Variety System**: 15+ variations per command type to prevent repetition
+- **Priority System**: Match events (goals, fouls) take precedence over command reactions
+
+**Advanced Commentary Features**:
+- **Timing Awareness**: "Late change in tactics" if command issued in final 15 minutes
+- **Score Context**: Different reactions based on current match situation
+- **Formation Recognition**: Commentary acknowledges when tactical changes affect team shape
+- **Player Performance**: Links voice command effectiveness to individual player attributes
+
+#### 6.3.2 Traditional Commentary System
 - **Crowd Audio System**:
   - **Ambient Crowd Noise**: Continuous background crowd murmur varying by match intensity
   - **Event-Driven Reactions**: Specific crowd responses to match events:
@@ -747,7 +985,7 @@ This displays the current score, the names of the teams and the current time. It
 - **Return Rate**: 60%+ users return within 7 days
 
 ### 8.2 Technical Performance Metrics
-**POC-Focused Metrics**:
+**Initial Implementation Metrics**:
 - **Frame Rate**: Consistent 30+ FPS during match simulation
 - **AI Responsiveness**: Player position updates within 100ms of ball movement
 - **Match Stability**: Matches complete without crashes or game-breaking bugs
@@ -755,14 +993,14 @@ This displays the current score, the names of the teams and the current time. It
 **Deferred**: Voice recognition metrics (out of scope), server uptime targets
 
 ### 8.3 Gameplay Quality Metrics
-**POC Success Criteria**:
+**Success Criteria**:
 - **AI Formation Adherence**: Players maintain formation shape within acceptable tolerance
 - **Ball Physics Consistency**: Ball movement appears natural and predictable
 - **Match Flow**: Full 5-minute matches complete with proper half-time and end-game states
 - **Visual Clarity**: Player actions (pass, shot, tackle) are clearly distinguishable
 - **Possession Tracking**: Match statistics (possession, shots) track accurately
 
-**Key POC Question**: Does the AI behaviour and visual presentation demonstrate a viable foundation for the full game?
+**Key Question**: Does the AI behaviour and visual presentation demonstrate a viable foundation for the full game?
 
 ## 9. Questions Requiring Clarification
 
@@ -838,7 +1076,7 @@ These questions will help refine the PRD and ensure all stakeholder requirements
 
 ## 11. Implementation Phases
 
-### Phase 1: POC Match Engine (Months 1-3)
+### Phase 1: Initial Match Engine (Months 1-3)
 - Basic match engine with AI-controlled teams
 - Single match functionality (human vs AI or AI vs AI)
 - Top-down 2D visual presentation

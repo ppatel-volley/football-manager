@@ -1,6 +1,158 @@
-# Source of Truth
+# Canonical Type Definitions
 
-This file contains canonical definitions for schemas, constants, and mappings used throughout the project. Both PRD.md and TDD.md reference this file to ensure consistency.
+**AUTHORITATIVE SOURCE**: This file contains the definitive type definitions for the Football Manager game. All other documentation files (PRD.md, TDD.md, FET-TDD.md) MUST reference these exact definitions.
+
+## CRITICAL: Type Consistency Issues Fixed
+
+**Previous inconsistencies across docs have been resolved. Use these definitions only.**
+
+## Core Game Types
+
+### Match State Management
+
+```typescript
+// CANONICAL: Use MatchPhase enum everywhere
+enum MatchPhase {
+  PREPARATION = 'PREPARATION',
+  KICK_OFF = 'KICK_OFF', 
+  IN_PLAY = 'IN_PLAY',
+  GOAL_KICK = 'GOAL_KICK',
+  CORNER_KICK = 'CORNER_KICK',
+  THROW_IN = 'THROW_IN',
+  FREE_KICK = 'FREE_KICK',
+  PENALTY = 'PENALTY',
+  HALF_TIME = 'HALF_TIME',
+  FULL_TIME = 'FULL_TIME'
+}
+
+// DEPRECATED: MatchState mentioned in TDD - replace with MatchPhase
+type MatchState = MatchPhase;
+```
+
+### Ball System
+
+```typescript
+// CANONICAL: Single Ball interface
+interface Ball {
+  position: Vector2; // Use Vector2, not Vector3D
+  velocity: Vector2;
+  height: number;
+  owner: Player | null;
+  isMoving: boolean;
+  lastTouch: {
+    player: Player;
+    timestamp: number;
+  } | null;
+}
+
+// DEPRECATED: Ball3D referenced in some docs - use Ball above
+interface Vector2 {
+  x: number;
+  y: number;
+}
+```
+
+### Player System - CANONICAL ATTRIBUTES
+
+```typescript
+interface PlayerAttributes {
+  // CANONICAL field names - use these exactly
+  // Technical
+  passing: number;
+  shooting: number;
+  dribbling: number;
+  crossing: number;
+  finishing: number;
+  longShots: number;
+  freeKicks: number;        // NOT freeKickTaking
+  penalties: number;        // NOT penaltyTaking
+  
+  // Physical  
+  pace: number;
+  acceleration: number;
+  stamina: number;
+  strength: number;
+  jumping: number;          // NOT jumpingReach
+  agility: number;
+  balance: number;
+  
+  // Mental
+  decisions: number;
+  composure: number;
+  concentration: number;
+  positioning: number;
+  anticipation: number;
+  vision: number;
+  workRate: number;
+  teamwork: number;
+  leadership: number;
+  
+  // Defensive
+  tackling: number;
+  marking: number;
+  heading: number;
+  interceptions: number;
+  
+  // Goalkeeping (only for GK position)
+  goalkeeping?: {
+    shotStopping: number;
+    handling: number;
+    distribution: number;
+    positioning: number;
+    reflexes: number;
+    communication: number;
+  };
+}
+
+interface Player {
+  id: string;
+  name: string;
+  position: PlayerPosition;
+  age: number;
+  nationality: string;
+  overall: number;          // NOT overallRating
+  attributes: PlayerAttributes;
+}
+
+enum PlayerRole {
+  // CANONICAL role names
+  GOALKEEPER = 'GOALKEEPER',
+  DEFENDER = 'DEFENDER', 
+  MIDFIELDER = 'MIDFIELDER',
+  FORWARD = 'FORWARD',
+  KEY_PLAYER = 'KEY_PLAYER',
+  CAPTAIN = 'CAPTAIN',
+  VICE_CAPTAIN = 'VICE_CAPTAIN',
+  REGULAR = 'REGULAR',
+  SUBSTITUTE = 'SUBSTITUTE',
+  YOUTH = 'YOUTH'
+}
+```
+
+### Repository Structure - CANONICAL PATHS
+
+```
+// CORRECT paths - use in ALL documentation
+apps/
+├── client/          # NOT packages/client
+├── server/          # NOT packages/server
+└── shared/
+```
+
+## Game Phase Constants
+
+```typescript
+// CANONICAL: Phase determination thresholds
+export const PHASE_THRESHOLDS = {
+  DEFENSIVE_THIRD: 0.3,     // Ball position < 0.3 = defensive
+  ATTACKING_THIRD: 0.7,     // Ball position > 0.7 = attacking
+  MIDDLE_THIRD: 0.3,        // Between 0.3-0.7 = transition
+} as const;
+
+// Usage: 
+// if (ballPosition.y < PHASE_THRESHOLDS.DEFENSIVE_THIRD) { ... }
+// if (ballPosition.y > PHASE_THRESHOLDS.ATTACKING_THIRD) { ... }
+```
 
 ## FIFA Constants
 
