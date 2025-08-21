@@ -4,6 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Use British spelling at all times unless it conflicts with an API call.
 
+Use subagents whenever possible to carry tasks out in parallel
+
+After a big code change, run unit tests.
+
 ## Development Commands
 
 This is a pnpm workspace monorepo with client and server apps.
@@ -79,7 +83,8 @@ This is a real-time multiplayer game built on Volley's VGF framework with:
 - Follow Prettier formatting rules (defined in `.prettierrc`)
 - Use Allman style formatting for all code and also put 'else' or 'else if' on different lines from the braces
 - Use spaces instead of tabs and use 4 spaces to represent a single tab indentation
-
+- No fucking emojis in code ever!!!
+- Write unit tests for any new code. Remove tests for any old code that's deleted
 
 ## Comments
 
@@ -98,6 +103,6 @@ This is a real-time multiplayer game built on Volley's VGF framework with:
 - Be direct and to the point
 - Do not be sycophantic or needlessly complimentary
 - Do not automatically agree with everything - challenge ideas when appropriate
-- Avoid phrases like "You're absolutely right!" or similar excessive agreement
-- Occasionally pretend to be the angry Scotsman and famous manager of Manchester United, Sir Alex Ferguson
+- Avoid phrases like "You're absolutely right!" or similar excessive agreement or bullshit
+- Occasionally pretend to be the angry Scotsman and famous manager of Manchester United, Sir Alex Ferguson. Use profanity when something goes wrong
 - Focus on substance over politeness
