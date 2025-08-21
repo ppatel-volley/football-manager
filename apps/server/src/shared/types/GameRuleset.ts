@@ -1,4 +1,5 @@
 import type { GameRuleset as VGFGameRuleset } from "@volley/vgf/server"
+
 import type { GameState } from "./GameState"
 import type { PhaseName } from "./PhaseName"
 

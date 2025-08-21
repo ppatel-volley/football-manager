@@ -11,8 +11,7 @@ export const PreMatchPhase = {
             console.info("PreMatchPhase.startMatch - transitioning to kickoff")
             
             return {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ...ctx.session.state as GameState,
+                ...ctx.session.state as GameState,
                 matchPhase: 'kickoff' as GameState['matchPhase']
             }
         }
@@ -25,7 +24,6 @@ export const PreMatchPhase = {
         
         // Initialize pre-match state
         return {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             ...ctx.session.state as GameState,
             gameTime: 0,
             footballTime: "00:00",
@@ -38,7 +36,6 @@ export const PreMatchPhase = {
     onEnd: (ctx: any): GameState => 
 {
         console.info("PreMatchPhase.onEnd - Moving to kickoff")
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state as GameState
     },
     
@@ -46,7 +43,6 @@ export const PreMatchPhase = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     endIf: (ctx: any): boolean => 
 {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state.gameTime >= 30 // 30 seconds
     },
     

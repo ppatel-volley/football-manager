@@ -1,9 +1,10 @@
-import { type GameState, PhaseName } from "../shared"
 import { PlayerDatabaseManager } from "../database/PlayerDatabaseManager"
+import { type GameState, PhaseName } from "../shared"
 
 export const setupGameState = (
     setupData: Partial<GameState> = {}
-): GameState => {
+): GameState =>
+{
     // Generate a match seed for deterministic simulation
     const matchSeed = Math.floor(Math.random() * 1000000)
     
@@ -54,7 +55,7 @@ export const setupGameState = (
         },
         
         // Game flow
-        matchPhase: 'pre_match' as any,
+        matchPhase: 'pre_match' as 'pre_match' | 'kickoff' | 'first_half' | 'half_time' | 'second_half' | 'full_time',
         phase: PhaseName.PreMatch,
     }
 

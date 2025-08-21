@@ -195,7 +195,8 @@ export const COORDINATE_UTILS = {
     /**
      * Check if position is within penalty area
      */
-    isInPenaltyArea: (x: number, y: number, team: 'HOME' | 'AWAY') => {
+    isInPenaltyArea: (x: number, y: number, team: 'HOME' | 'AWAY') => 
+{
         const area = team === 'HOME' ? PITCH_ZONES.HOME_PENALTY_AREA : PITCH_ZONES.AWAY_PENALTY_AREA
         return x >= area.x[0] && x <= area.x[1] && y >= area.y[0] && y <= area.y[1]
     },
@@ -203,7 +204,8 @@ export const COORDINATE_UTILS = {
     /**
      * Calculate distance between two normalised positions
      */
-    distance: (pos1: { x: number; y: number }, pos2: { x: number; y: number }) => {
+    distance: (pos1: { x: number; y: number }, pos2: { x: number; y: number }) => 
+{
         const dx = (pos1.x - pos2.x) * FIFA_DIMENSIONS.PITCH_LENGTH
         const dy = (pos1.y - pos2.y) * FIFA_DIMENSIONS.PITCH_WIDTH
         return Math.sqrt(dx * dx + dy * dy)

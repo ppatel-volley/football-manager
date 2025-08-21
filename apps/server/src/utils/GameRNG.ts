@@ -5,8 +5,11 @@
  */
 export class GameRNG
 {
-    private seed: number
     private current: number
+
+private seed: number
+
+    
 
     constructor(seed: number)
     {
@@ -15,9 +18,28 @@ export class GameRNG
     }
 
     /**
+     * Create new RNG instance with different seed
+     */
+public fork(offset: number): GameRNG
+    {
+        return new GameRNG(this.seed + offset)
+    }
+
+/**
+     * Get current seed value
+     */
+    public getSeed(): number
+    {
+        return this.seed
+    }
+
+    
+    
+
+    /**
      * Generate next random number between 0 and 1 (exclusive of 1)
      */
-    next(): number
+    public next(): number
     {
         // LCG formula: (a * seed + c) % m
         // Using parameters from Numerical Recipes
@@ -30,42 +52,56 @@ export class GameRNG
     }
 
     /**
-     * Generate random integer between min (inclusive) and max (exclusive)
-     */
-    nextInt(min: number, max: number): number
-    {
-        return Math.floor(this.next() * (max - min)) + min
-    }
-
-    /**
-     * Generate random float between min (inclusive) and max (exclusive)
-     */
-    nextFloat(min: number, max: number): number
-    {
-        return this.next() * (max - min) + min
-    }
-
-    /**
      * Generate random boolean with given probability (0-1)
      */
-    nextBoolean(probability: number = 0.5): boolean
+public nextBoolean(probability: number = 0.5): boolean
     {
         return this.next() < probability
     }
 
+/**
+     * Generate random float between min (inclusive) and max (exclusive)
+     */
+public nextFloat(min: number, max: number): number
+    {
+        return this.next() * (max - min) + min
+    }
+
+/**
+     * Generate random integer between min (inclusive) and max (exclusive)
+     */
+    public nextInt(min: number, max: number): number
+    {
+        return Math.floor(this.next() * (max - min)) + min
+    }
+
+    
+    
+
+    
+    
+
     /**
      * Pick random element from array
      */
-    pickRandom<T>(array: T[]): T
+    public pickRandom<T>(array: T[]): T
     {
         const index = this.nextInt(0, array.length)
         return array[index]
     }
 
     /**
+     * Reset RNG to initial seed state
+     */
+public reset(): void
+    {
+        this.current = this.seed
+    }
+
+/**
      * Shuffle array using Fisher-Yates algorithm
      */
-    shuffle<T>(array: T[]): T[]
+    public shuffle<T>(array: T[]): T[]
     {
         const result = [...array]
         for (let i = result.length - 1; i > 0; i--)
@@ -76,27 +112,6 @@ export class GameRNG
         return result
     }
 
-    /**
-     * Reset RNG to initial seed state
-     */
-    reset(): void
-    {
-        this.current = this.seed
-    }
-
-    /**
-     * Get current seed value
-     */
-    getSeed(): number
-    {
-        return this.seed
-    }
-
-    /**
-     * Create new RNG instance with different seed
-     */
-    fork(offset: number): GameRNG
-    {
-        return new GameRNG(this.seed + offset)
-    }
+    
+    
 }

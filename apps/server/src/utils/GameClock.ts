@@ -6,14 +6,36 @@
 export class GameClock
 {
     private currentTime: number = 0
-    private isRunning: boolean = false
+
+    // 45 minutes in seconds
+public static readonly FULL_MATCH_DURATION = 90 * 60
+
+// Football match timing constants
+public static readonly HALF_DURATION = 45 * 60
+
+private isRunning: boolean = false
+
     private lastUpdateTime: number = 0
-    private timeScale: number = 1
+
+    // 90 minutes in seconds
+public static readonly STOPPAGE_TIME_MAX = 5 * 60
+
+private timeScale: number = 1
     
-    // Football match timing constants
-    public static readonly HALF_DURATION = 45 * 60 // 45 minutes in seconds
-    public static readonly FULL_MATCH_DURATION = 90 * 60 // 90 minutes in seconds
-    public static readonly STOPPAGE_TIME_MAX = 5 * 60 // Maximum 5 minutes stoppage time
+    
+     
+
+     
+
+     /**
+     * Advance clock by specific amount (for deterministic simulation)
+     */
+
+public advance(seconds: number): void
+    {
+        this.currentTime += seconds
+    }
+// Maximum 5 minutes stoppage time
 
     constructor(initialTime: number = 0, scale: number = 1)
     {
@@ -23,57 +45,25 @@ export class GameClock
     }
 
     /**
-     * Start the clock
+     * Get current half (1 or 2)
      */
-    start(): void
+public getCurrentHalf(): 1 | 2
     {
-        this.isRunning = true
-        this.lastUpdateTime = Date.now()
+        return this.currentTime <= GameClock.HALF_DURATION ? 1 : 2
     }
 
-    /**
-     * Stop the clock
-     */
-    stop(): void
-    {
-        this.isRunning = false
-    }
-
-    /**
-     * Update clock time based on elapsed real time
-     */
-    update(): void
-    {
-        if (!this.isRunning) return
-
-        const now = Date.now()
-        const deltaMs = now - this.lastUpdateTime
-        const deltaSeconds = (deltaMs / 1000) * this.timeScale
-        
-        this.currentTime += deltaSeconds
-        this.lastUpdateTime = now
-    }
-
-    /**
-     * Advance clock by specific amount (for deterministic simulation)
-     */
-    advance(seconds: number): void
-    {
-        this.currentTime += seconds
-    }
-
-    /**
+/**
      * Get current time in seconds
      */
-    getCurrentTime(): number
+public getCurrentTime(): number
     {
         return this.currentTime
     }
 
-    /**
+/**
      * Get formatted match time (MM:SS or 90+MM format)
      */
-    getFormattedTime(): string
+public getFormattedTime(): string
     {
         const totalMinutes = Math.floor(this.currentTime / 60)
         const seconds = Math.floor(this.currentTime % 60)
@@ -92,89 +82,10 @@ export class GameClock
         }
     }
 
-    /**
-     * Get current half (1 or 2)
-     */
-    getCurrentHalf(): 1 | 2
-    {
-        return this.currentTime <= GameClock.HALF_DURATION ? 1 : 2
-    }
-
-    /**
-     * Check if first half is complete
-     */
-    isFirstHalfComplete(): boolean
-    {
-        return this.currentTime >= GameClock.HALF_DURATION
-    }
-
-    /**
-     * Check if match is complete (including stoppage time)
-     */
-    isMatchComplete(): boolean
-    {
-        return this.currentTime >= GameClock.FULL_MATCH_DURATION + GameClock.STOPPAGE_TIME_MAX
-    }
-
-    /**
-     * Check if in stoppage time
-     */
-    isInStoppageTime(): boolean
-    {
-        const halfTime = this.getCurrentHalf() === 1 ? GameClock.HALF_DURATION : GameClock.FULL_MATCH_DURATION
-        return this.currentTime > halfTime
-    }
-
-    /**
-     * Get stoppage time minutes
-     */
-    getStoppageTime(): number
-    {
-        if (!this.isInStoppageTime()) return 0
-        
-        const halfTime = this.getCurrentHalf() === 1 ? GameClock.HALF_DURATION : GameClock.FULL_MATCH_DURATION
-        return Math.floor((this.currentTime - halfTime) / 60)
-    }
-
-    /**
-     * Set time scale (1 = real time, higher = faster)
-     */
-    setTimeScale(scale: number): void
-    {
-        this.timeScale = scale
-    }
-
-    /**
-     * Get current time scale
-     */
-    getTimeScale(): number
-    {
-        return this.timeScale
-    }
-
-    /**
-     * Reset clock to zero
-     */
-    reset(): void
-    {
-        this.currentTime = 0
-        this.isRunning = false
-        this.lastUpdateTime = Date.now()
-    }
-
-    /**
-     * Set clock to specific time
-     */
-    setTime(seconds: number): void
-    {
-        this.currentTime = seconds
-        this.lastUpdateTime = Date.now()
-    }
-
-    /**
+/**
      * Create a snapshot of current clock state
      */
-    getState(): { time: number; running: boolean; scale: number }
+public getState(): { time: number; running: boolean; scale: number }
     {
         return {
             time: this.currentTime,
@@ -183,14 +94,189 @@ export class GameClock
         }
     }
 
-    /**
+/**
+     * Get stoppage time minutes
+     */
+public getStoppageTime(): number
+    {
+        if (!this.isInStoppageTime()) return 0
+        
+        const halfTime = this.getCurrentHalf() === 1 ? GameClock.HALF_DURATION : GameClock.FULL_MATCH_DURATION
+        return Math.floor((this.currentTime - halfTime) / 60)
+    }
+
+/**
+     * Get current time scale
+     */
+public getTimeScale(): number
+    {
+        return this.timeScale
+    }
+
+/**
+     * Check if first half is complete
+     */
+public isFirstHalfComplete(): boolean
+    {
+        return this.currentTime >= GameClock.HALF_DURATION
+    }
+
+/**
+     * Check if in stoppage time
+     */
+public isInStoppageTime(): boolean
+    {
+        const halfTime = this.getCurrentHalf() === 1 ? GameClock.HALF_DURATION : GameClock.FULL_MATCH_DURATION
+        return this.currentTime > halfTime
+    }
+
+/**
+     * Check if match is complete (including stoppage time)
+     */
+public isMatchComplete(): boolean
+    {
+        return this.currentTime >= GameClock.FULL_MATCH_DURATION + GameClock.STOPPAGE_TIME_MAX
+    }
+
+/**
+     * Reset clock to zero
+     */
+public reset(): void
+    {
+        this.currentTime = 0
+        this.isRunning = false
+        this.lastUpdateTime = Date.now()
+    }
+
+/**
      * Restore clock from snapshot
      */
-    setState(state: { time: number; running: boolean; scale: number }): void
+public setState(state: { time: number; running: boolean; scale: number }): void
     {
         this.currentTime = state.time
         this.isRunning = state.running
         this.timeScale = state.scale
         this.lastUpdateTime = Date.now()
     }
+
+/**
+     * Set clock to specific time
+     */
+public setTime(seconds: number): void
+    {
+        this.currentTime = seconds
+        this.lastUpdateTime = Date.now()
+    }
+
+/**
+     * Set time scale (1 = real time, higher = faster)
+     */
+public setTimeScale(scale: number): void
+    {
+        this.timeScale = scale
+    }
+
+/**
+     * Start the clock
+     */
+    public start(): void
+    {
+        this.isRunning = true
+        this.lastUpdateTime = Date.now()
+    }
+
+    /**
+     * Stop the clock
+     */
+    public stop(): void
+    {
+        this.isRunning = false
+    }
+
+    /**
+     * Update clock time based on elapsed real time
+     */
+    public update(): void
+    {
+        if (!this.isRunning) return
+
+        const now = Date.now()
+        const deltaMs = now - this.lastUpdateTime
+        const deltaSeconds = (deltaMs / 1000) * this.timeScale
+        
+        this.currentTime += deltaSeconds
+        this.lastUpdateTime = now
+    }
+
+    
+    
+
+    
+
+
+    
+
+    
+    
+
+    
+    
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+    
+
+
+
+    
+
+    
+    
+
+    
+    
+
+    
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+    
+
+    
+
+
+    
+
+    
+
+
+
+    
+
+    
+    
+
+    
+    
 }

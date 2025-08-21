@@ -2,7 +2,7 @@
  * Server Configuration for Football Manager VGF
  * Central configuration management for all server settings
  */
-import { STAGE, PORT, AWS_REGION } from "../constants/Environment"
+import { AWS_REGION,PORT, STAGE } from "../constants/Environment"
 
 export interface ServerConfig {
     port: number
@@ -42,7 +42,8 @@ export interface ServerConfig {
 /**
  * Get server configuration based on environment
  */
-export function getServerConfig(): ServerConfig {
+export function getServerConfig(): ServerConfig 
+{
     const baseConfig: ServerConfig = {
         port: PORT || 8000,
         stage: STAGE || "local",
@@ -79,7 +80,8 @@ export function getServerConfig(): ServerConfig {
     }
 
     // Environment-specific overrides
-    switch (STAGE) {
+    switch (STAGE) 
+{
         case "local":
         case "development":
             return {
@@ -197,7 +199,8 @@ export interface SocketIOConfig {
     allowEIO3: boolean
 }
 
-export function getSocketIOConfig(): SocketIOConfig {
+export function getSocketIOConfig(): SocketIOConfig 
+{
     const serverConfig = getServerConfig()
     
     return {
@@ -240,7 +243,8 @@ export interface SecurityConfig {
     jwtSecret?: string
 }
 
-export function getSecurityConfig(): SecurityConfig {
+export function getSecurityConfig(): SecurityConfig 
+{
     return {
         enableHelmet: STAGE === "production",
         enableRateLimit: STAGE !== "local",
@@ -262,7 +266,8 @@ export interface MonitoringConfig {
     version: string
 }
 
-export function getMonitoringConfig(): MonitoringConfig {
+export function getMonitoringConfig(): MonitoringConfig 
+{
     return {
         enableMetrics: STAGE === "production" || STAGE === "staging",
         enableTracing: STAGE === "production",

@@ -2,8 +2,9 @@
  * Redis Configuration for Football Manager VGF
  * Handles different environments and connection strategies
  */
-import type { RedisOptions, ClusterOptions } from "ioredis"
-import { STAGE, REDIS_HOST, REDIS_PORT } from "../constants/Environment"
+import type { ClusterOptions } from "ioredis"
+
+import { REDIS_HOST, REDIS_PORT,STAGE } from "../constants/Environment"
 
 export interface RedisConfig {
     host: string
@@ -28,7 +29,8 @@ export interface RedisClusterConfig {
 /**
  * Get Redis configuration based on environment
  */
-export function getRedisConfig(): RedisConfig & { cluster: RedisClusterConfig } {
+export function getRedisConfig(): RedisConfig & { cluster: RedisClusterConfig } 
+{
     const baseConfig: RedisConfig = {
         host: REDIS_HOST || "127.0.0.1",
         port: REDIS_PORT || 6379,
@@ -41,7 +43,8 @@ export function getRedisConfig(): RedisConfig & { cluster: RedisClusterConfig } 
     }
 
     // Environment-specific configurations
-    switch (STAGE) {
+    switch (STAGE) 
+{
         case "local":
         case "development":
             return {
@@ -78,7 +81,8 @@ export function getRedisConfig(): RedisConfig & { cluster: RedisClusterConfig } 
                 cluster: {
                     enabled: process.env.REDIS_CLUSTER_ENABLED === "true",
                     nodes: process.env.REDIS_CLUSTER_NODES 
-                        ? process.env.REDIS_CLUSTER_NODES.split(",").map(node => {
+                        ? process.env.REDIS_CLUSTER_NODES.split(",").map(node => 
+{
                             const [host, port] = node.split(":")
                             return { host, port: parseInt(port) }
                         })

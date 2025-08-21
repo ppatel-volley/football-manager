@@ -6,24 +6,34 @@ const USER_ID_KEY = "userId"
 /**
  * TODO: This will be within the Platform SDK/VGF eventually.
  */
-export const useUserId = (): string | undefined => {
+export const useUserId = (): string | undefined =>
+{
     const [userId, setUserId] = useState<string | undefined>(undefined)
 
-    useEffect(() => {
+    useEffect(() =>
+    {
         const storedUserId = localStorage.getItem(USER_ID_KEY)
 
-        if (storedUserId) {
+        if (storedUserId)
+        {
             setUserId(storedUserId)
-        } else {
+        }
+        else
+        {
             const newUserId = v4()
 
-            try {
+            try
+            {
                 localStorage.setItem(USER_ID_KEY, newUserId)
 
                 setUserId(newUserId)
-            } catch (error) {
+            }
+            catch (error)
+            {
                 console.error("Error setting user ID", error)
-            } finally {
+            }
+            finally
+            {
                 setUserId(newUserId)
             }
         }

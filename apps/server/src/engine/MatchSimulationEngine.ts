@@ -3,16 +3,20 @@
  * Integrates POC match logic with VGF framework for deterministic gameplay
  * Uses GameRNG and GameClock for reproducible results
  */
-import type { GameState } from "../shared/types/GameState"
-import { GameRNG } from "../utils/GameRNG"
+import { COORDINATE_UTILS, FORMATION_POSITIONS, KEY_POSITIONS } from "../constants/FIFA"
+import type { GameState, Player } from "../shared/types/GameState"
 import { GameClock } from "../utils/GameClock"
-import { FIFA_DIMENSIONS, KEY_POSITIONS, FORMATION_POSITIONS, COORDINATE_UTILS } from "../constants/FIFA"
+import { GameRNG } from "../utils/GameRNG"
 
 export class MatchSimulationEngine
 {
-    private rng: GameRNG
     private clock: GameClock
-    private eventQueue: MatchEvent[] = []
+
+private eventQueue: MatchEvent[] = []
+
+private rng: GameRNG
+    
+    
     
     constructor(matchSeed: number)
     {
@@ -21,78 +25,24 @@ export class MatchSimulationEngine
     }
 
     /**
-     * Update simulation state for one frame
+     * Start or stop the match clock
      */
-    updateSimulation(gameState: GameState, deltaTime: number): GameState
+public controlClock(start: boolean): void
     {
-        // Update game clock
-        this.clock.update()
-        
-        // Process scheduled events
-        const updatedState = this.processScheduledEvents(gameState)
-        
-        // Update player positions and movement
-        const withPlayerMovement = this.updatePlayerMovement(updatedState, deltaTime)
-        
-        // Update ball physics
-        const withBallMovement = this.updateBallMovement(withPlayerMovement, deltaTime)
-        
-        // Update possession logic
-        const withPossession = this.updateBallPossession(withBallMovement)
-        
-        // Check for game events (goals, out of play, etc.)
-        const withEvents = this.checkGameEvents(withPossession)
-        
-        // Update match statistics
-        const withStats = this.updateMatchStats(withEvents, deltaTime)
-        
-        return {
-            ...withStats,
-            gameTime: this.clock.getCurrentTime(),
-            footballTime: this.clock.getFormattedTime(),
-            footballHalf: this.clock.getCurrentHalf()
-        }
-    }
-
-    /**
-     * Execute a tactical command on the match
-     */
-    executeTacticalCommand(gameState: GameState, command: {
-        type: 'ATTACK' | 'DEFEND' | 'BALANCE'
-        team: 'HOME' | 'AWAY'
-    }): GameState
-    {
-        const targetTeam = command.team === 'HOME' ? gameState.homeTeam : gameState.awayTeam
-        
-        // Update team tactical style
-        targetTeam.tacticalStyle = command.type
-        
-        // Adjust player positions based on tactical style
-        const adjustedPositions = this.adjustFormationForTactics(targetTeam, command.type)
-        
-        // Update player target positions
-        targetTeam.players.forEach((player, index) =>
+        if (start)
         {
-            if (adjustedPositions[index])
-            {
-                player.targetPosition = adjustedPositions[index]
-            }
-        })
-
-        return {
-            ...gameState,
-            lastCommand: {
-                type: command.type,
-                team: command.team,
-                timestamp: this.clock.getCurrentTime()
-            }
+            this.clock.start()
+        }
+        else
+        {
+            this.clock.stop()
         }
     }
 
-    /**
+/**
      * Execute a shooting action
      */
-    executeShoot(gameState: GameState, team: 'HOME' | 'AWAY'): GameState
+public executeShoot(gameState: GameState, team: 'HOME' | 'AWAY'): GameState
     {
         const shootingTeam = team === 'HOME' ? gameState.homeTeam : gameState.awayTeam
         
@@ -114,7 +64,7 @@ export class MatchSimulationEngine
         // Determine if it's a goal (based on distance, angle, player attributes)
         const isGoal = this.rng.nextBoolean(shotAccuracy * 0.15) // Base 15% chance modified by accuracy
 
-        let updatedState = { ...gameState }
+        const updatedState = { ...gameState }
         
         if (isGoal)
         {
@@ -155,10 +105,53 @@ export class MatchSimulationEngine
         return updatedState
     }
 
-    /**
+/**
+     * Execute a tactical command on the match
+     */
+public executeTacticalCommand(gameState: GameState, command: {
+        type: 'ATTACK' | 'DEFEND' | 'BALANCE';
+        team: 'HOME' | 'AWAY';
+    }): GameState
+    {
+        const targetTeam = command.team === 'HOME' ? gameState.homeTeam : gameState.awayTeam
+        
+        // Update team tactical style
+        targetTeam.tacticalStyle = command.type
+        
+        // Adjust player positions based on tactical style
+        const adjustedPositions = this.adjustFormationForTactics(targetTeam, command.type)
+        
+        // Update player target positions
+        targetTeam.players.forEach((player, index) =>
+        {
+            if (adjustedPositions[index])
+            {
+                player.targetPosition = adjustedPositions[index]
+            }
+        })
+
+        return {
+            ...gameState,
+            lastCommand: {
+                type: command.type,
+                team: command.team,
+                timestamp: this.clock.getCurrentTime()
+            }
+        }
+    }
+
+/**
+     * Set clock time scale (for accelerated simulation)
+     */
+public setTimeScale(scale: number): void
+    {
+        this.clock.setTimeScale(scale)
+    }
+
+/**
      * Set up match for kickoff
      */
-    setupKickoff(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): GameState
+public setupKickoff(gameState: GameState, kickingTeam: 'HOME' | 'AWAY'): GameState
     {
         // Reset ball to centre
         const updatedState = {
@@ -212,49 +205,255 @@ export class MatchSimulationEngine
         return updatedState
     }
 
-    /**
-     * Start or stop the match clock
+/**
+     * Update simulation state for one frame
      */
-    controlClock(start: boolean): void
+    public updateSimulation(gameState: GameState, deltaTime: number): GameState
     {
-        if (start)
-        {
-            this.clock.start()
-        }
-        else
-        {
-            this.clock.stop()
+        // Update game clock
+        this.clock.update()
+        
+        // Process scheduled events
+        const updatedState = this.processScheduledEvents(gameState)
+        
+        // Update player positions and movement
+        const withPlayerMovement = this.updatePlayerMovement(updatedState, deltaTime)
+        
+        // Update ball physics
+        const withBallMovement = this.updateBallMovement(withPlayerMovement, deltaTime)
+        
+        // Update possession logic
+        const withPossession = this.updateBallPossession(withBallMovement)
+        
+        // Check for game events (goals, out of play, etc.)
+        const withEvents = this.checkGameEvents(withPossession)
+        
+        // Update match statistics
+        const withStats = this.updateMatchStats(withEvents, deltaTime)
+        
+        return {
+            ...withStats,
+            gameTime: this.clock.getCurrentTime(),
+            footballTime: this.clock.getFormattedTime(),
+            footballHalf: this.clock.getCurrentHalf()
         }
     }
 
-    /**
-     * Set clock time scale (for accelerated simulation)
-     */
-    setTimeScale(scale: number): void
+    
+    
+
+    
+
+
+    
+
+    
+
+
+
+    
+
+    
+    
+
+    
+    
+
+    private adjustFormationForTactics(team: { id: string }, tactic: string): Array<{ x: number; y: number }>
     {
-        this.clock.setTimeScale(scale)
+        const basePositions = FORMATION_POSITIONS['4-4-2'][team.id.toUpperCase() as 'HOME' | 'AWAY'] || []
+        
+        return basePositions.map(pos =>
+        {
+            switch (tactic)
+            {
+                case 'ATTACK':
+                    // Push players forward
+                    return {
+                        x: team.id === 'home' ? Math.min(1, pos.x + 0.05) : Math.max(0, pos.x - 0.05),
+                        y: pos.y
+                    }
+                    
+                case 'DEFEND':
+                    // Pull players back
+                    return {
+                        x: team.id === 'home' ? Math.max(0, pos.x - 0.05) : Math.min(1, pos.x + 0.05),
+                        y: pos.y
+                    }
+                    
+                default:
+                    return { x: pos.x, y: pos.y }
+            }
+        })
     }
 
-    private processScheduledEvents(gameState: GameState): GameState
+private calculateShotAccuracy(player: Player, targetGoal: { x: number; y: number }): number
     {
-        const currentTime = this.clock.getCurrentTime()
-        const eventsToExecute = this.eventQueue.filter(event => event.executeTime <= currentTime)
+        const distance = COORDINATE_UTILS.distance(player.position, targetGoal)
+        const baseAccuracy = player.attributes.shooting / 10
+        const distancePenalty = Math.min(distance / 50, 1) // Penalty increases with distance
         
-        // Remove executed events
-        this.eventQueue = this.eventQueue.filter(event => event.executeTime > currentTime)
+        return Math.max(0.1, baseAccuracy - distancePenalty)
+    }
+
+private calculateShotTrajectory(
+        playerPos: { x: number; y: number }, 
+        target: { x: number; y: number }, 
+        accuracy: number
+    ): { x: number; y: number }
+    {
+        const dx = target.x - playerPos.x
+        const dy = target.y - playerPos.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
         
-        let updatedState = { ...gameState }
+        if (distance === 0) return { x: 0, y: 0 }
         
-        // Execute each event
-        for (const event of eventsToExecute)
+        // Add inaccuracy
+        const inaccuracy = (1 - accuracy) * this.rng.nextFloat(-0.2, 0.2)
+        const adjustedDy = dy + inaccuracy
+        
+        // Normalise and apply power
+        const power = 0.5 // Ball speed in normalised coordinates per second
+        return {
+            x: (dx / distance) * power,
+            y: (adjustedDy / distance) * power
+        }
+    }
+
+private checkBallOutOfPlay(gameState: GameState): { outOfPlay: boolean; gameState: GameState }
+    {
+        const { x, y } = gameState.ball.position
+        
+        if (x < 0 || x > 1 || y < 0 || y > 1)
         {
-            updatedState = this.executeEvent(updatedState, event)
+            // Ball is out of play - determine restart type
+            // This is a simplified implementation - full logic would handle corners, throw-ins, etc.
+            return {
+                outOfPlay: true,
+                gameState: {
+                    ...gameState,
+                    ball: {
+                        ...gameState.ball,
+                        position: { ...KEY_POSITIONS.CENTRE_SPOT },
+                        velocity: { x: 0, y: 0 },
+                        isMoving: false,
+                        possessor: null
+                    }
+                }
+            }
         }
         
-        return updatedState
+        return { outOfPlay: false, gameState }
     }
 
-    private executeEvent(gameState: GameState, event: MatchEvent): GameState
+private checkForGoals(gameState: GameState): { goalScored: boolean; gameState: GameState }
+    {
+        const ball = gameState.ball
+        
+        // Check home goal (away team scores)
+        if (ball.position.x <= 0 && Math.abs(ball.position.y - 0.5) <= 0.1)
+        {
+            return {
+                goalScored: true,
+                gameState: {
+                    ...gameState,
+                    score: { ...gameState.score, away: gameState.score.away + 1 }
+                }
+            }
+        }
+        
+        // Check away goal (home team scores) 
+        if (ball.position.x >= 1 && Math.abs(ball.position.y - 0.5) <= 0.1)
+        {
+            return {
+                goalScored: true,
+                gameState: {
+                    ...gameState,
+                    score: { ...gameState.score, home: gameState.score.home + 1 }
+                }
+            }
+        }
+        
+        return { goalScored: false, gameState }
+    }
+
+private checkGameEvents(gameState: GameState): GameState
+    {
+        // Check for goals
+        const goalResult = this.checkForGoals(gameState)
+        if (goalResult.goalScored)
+        {
+            return goalResult.gameState
+        }
+        
+        // Check for ball out of play
+        const outOfPlayResult = this.checkBallOutOfPlay(gameState)
+        if (outOfPlayResult.outOfPlay)
+        {
+            return outOfPlayResult.gameState
+        }
+        
+        return gameState
+    }
+
+private executeAutoPass(gameState: GameState, data: { playerId: string }): GameState
+    {
+        const player = this.findPlayerById(gameState, data.playerId)
+        if (!player || !player.hasBall)
+        {
+            return gameState
+        }
+
+        // Find best teammate to pass to
+        const playerTeam = gameState.homeTeam.players.find(p => p.id === data.playerId) ? 'HOME' : 'AWAY'
+        const teammates = playerTeam === 'HOME' ? 
+            gameState.homeTeam.players.filter(p => p.id !== data.playerId) :
+            gameState.awayTeam.players.filter(p => p.id !== data.playerId)
+        
+        if (teammates.length === 0) return gameState
+        
+        // Choose teammate closest to opponent's goal
+        const targetGoal = playerTeam === 'HOME' ? KEY_POSITIONS.AWAY_GOAL_CENTRE : KEY_POSITIONS.HOME_GOAL_CENTRE
+        let bestTeammate = teammates[0]
+        let bestDistance = COORDINATE_UTILS.distance(bestTeammate.position, targetGoal)
+        
+        for (const teammate of teammates)
+        {
+            const distance = COORDINATE_UTILS.distance(teammate.position, targetGoal)
+            if (distance < bestDistance)
+            {
+                bestDistance = distance
+                bestTeammate = teammate
+            }
+        }
+        
+        // Execute pass
+        player.hasBall = false
+        const dx = bestTeammate.position.x - player.position.x
+        const dy = bestTeammate.position.y - player.position.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        if (distance > 0)
+        {
+            const passSpeed = 0.3
+            return {
+                ...gameState,
+                ball: {
+                    ...gameState.ball,
+                    possessor: null,
+                    velocity: {
+                        x: (dx / distance) * passSpeed,
+                        y: (dy / distance) * passSpeed
+                    },
+                    isMoving: true
+                }
+            }
+        }
+        
+        return gameState
+    }
+
+private executeEvent(gameState: GameState, event: MatchEvent): GameState
     {
         switch (event.type)
         {
@@ -264,7 +463,7 @@ export class MatchSimulationEngine
                 
             case 'KICKOFF_RESTART':
                 // Set up kickoff for specified team
-                return this.setupKickoff(gameState, event.data.kickingTeam)
+                return this.setupKickoff(gameState, (event.data as { kickingTeam: 'HOME' | 'AWAY' }).kickingTeam)
                 
             case 'AUTO_PASS':
                 // AI player automatically passes
@@ -279,24 +478,34 @@ export class MatchSimulationEngine
         }
     }
 
-    private updatePlayerMovement(gameState: GameState, deltaTime: number): GameState
+private executeGoalCelebration(gameState: GameState, _data: unknown): GameState
     {
-        const updatedState = { ...gameState }
-        
-        // Update home team players
-        updatedState.homeTeam.players = updatedState.homeTeam.players.map(player =>
-            this.movePlayerTowardsTarget(player, deltaTime)
-        )
-        
-        // Update away team players
-        updatedState.awayTeam.players = updatedState.awayTeam.players.map(player =>
-            this.movePlayerTowardsTarget(player, deltaTime)
-        )
-        
-        return updatedState
+        // Simple goal celebration - could be expanded
+        return gameState
     }
 
-    private movePlayerTowardsTarget(player: any, deltaTime: number): any
+private executePositionAdjustment(gameState: GameState, _data: unknown): GameState
+    {
+        // Implement tactical position adjustments
+        return gameState
+    }
+
+private findPlayerById(gameState: GameState, playerId: string): Player | null
+    {
+        for (const player of gameState.homeTeam.players)
+        {
+            if (player.id === playerId) return player
+        }
+        
+        for (const player of gameState.awayTeam.players)
+        {
+            if (player.id === playerId) return player
+        }
+        
+        return null
+    }
+
+private movePlayerTowardsTarget(player: Player, deltaTime: number): Player
     {
         const dx = player.targetPosition.x - player.position.x
         const dy = player.targetPosition.y - player.position.y
@@ -319,7 +528,38 @@ export class MatchSimulationEngine
         return player
     }
 
-    private updateBallMovement(gameState: GameState, deltaTime: number): GameState
+private processScheduledEvents(gameState: GameState): GameState
+    {
+        const currentTime = this.clock.getCurrentTime()
+        const eventsToExecute = this.eventQueue.filter(event => event.executeTime <= currentTime)
+        
+        // Remove executed events
+        this.eventQueue = this.eventQueue.filter(event => event.executeTime > currentTime)
+        
+        let updatedState = { ...gameState }
+        
+        // Execute each event
+        for (const event of eventsToExecute)
+        {
+            updatedState = this.executeEvent(updatedState, event)
+        }
+        
+        return updatedState
+    }
+
+    
+
+    
+
+
+
+private scheduleEvent(event: MatchEvent): void
+    {
+        this.eventQueue.push(event)
+        this.eventQueue.sort((a, b) => a.executeTime - b.executeTime)
+    }
+
+private updateBallMovement(gameState: GameState, deltaTime: number): GameState
     {
         if (!gameState.ball.isMoving)
         {
@@ -372,7 +612,7 @@ export class MatchSimulationEngine
         }
     }
 
-    private updateBallPossession(gameState: GameState): GameState
+private updateBallPossession(gameState: GameState): GameState
     {
         // If ball is moving fast, no possession
         const ballSpeed = Math.sqrt(
@@ -397,7 +637,7 @@ export class MatchSimulationEngine
         }
 
         // Find closest player to ball
-        let closestPlayer: any = null
+        let closestPlayer: Player | null = null
         let closestDistance = Infinity
         let closestTeam: 'HOME' | 'AWAY' = 'HOME'
         
@@ -479,83 +719,7 @@ export class MatchSimulationEngine
         return gameState
     }
 
-    private checkGameEvents(gameState: GameState): GameState
-    {
-        // Check for goals
-        const goalResult = this.checkForGoals(gameState)
-        if (goalResult.goalScored)
-        {
-            return goalResult.gameState
-        }
-        
-        // Check for ball out of play
-        const outOfPlayResult = this.checkBallOutOfPlay(gameState)
-        if (outOfPlayResult.outOfPlay)
-        {
-            return outOfPlayResult.gameState
-        }
-        
-        return gameState
-    }
-
-    private checkForGoals(gameState: GameState): { goalScored: boolean; gameState: GameState }
-    {
-        const ball = gameState.ball
-        
-        // Check home goal (away team scores)
-        if (ball.position.x <= 0 && Math.abs(ball.position.y - 0.5) <= 0.1)
-        {
-            return {
-                goalScored: true,
-                gameState: {
-                    ...gameState,
-                    score: { ...gameState.score, away: gameState.score.away + 1 }
-                }
-            }
-        }
-        
-        // Check away goal (home team scores) 
-        if (ball.position.x >= 1 && Math.abs(ball.position.y - 0.5) <= 0.1)
-        {
-            return {
-                goalScored: true,
-                gameState: {
-                    ...gameState,
-                    score: { ...gameState.score, home: gameState.score.home + 1 }
-                }
-            }
-        }
-        
-        return { goalScored: false, gameState }
-    }
-
-    private checkBallOutOfPlay(gameState: GameState): { outOfPlay: boolean; gameState: GameState }
-    {
-        const { x, y } = gameState.ball.position
-        
-        if (x < 0 || x > 1 || y < 0 || y > 1)
-        {
-            // Ball is out of play - determine restart type
-            // This is a simplified implementation - full logic would handle corners, throw-ins, etc.
-            return {
-                outOfPlay: true,
-                gameState: {
-                    ...gameState,
-                    ball: {
-                        ...gameState.ball,
-                        position: { ...KEY_POSITIONS.CENTRE_SPOT },
-                        velocity: { x: 0, y: 0 },
-                        isMoving: false,
-                        possessor: null
-                    }
-                }
-            }
-        }
-        
-        return { outOfPlay: false, gameState }
-    }
-
-    private updateMatchStats(gameState: GameState, deltaTime: number): GameState
+private updateMatchStats(gameState: GameState, deltaTime: number): GameState
     {
         // Update possession time
         const ballPossession = gameState.ballPossession
@@ -576,156 +740,83 @@ export class MatchSimulationEngine
         return gameState
     }
 
-    private calculateShotAccuracy(player: any, targetGoal: { x: number; y: number }): number
+private updatePlayerMovement(gameState: GameState, deltaTime: number): GameState
     {
-        const distance = COORDINATE_UTILS.distance(player.position, targetGoal)
-        const baseAccuracy = player.attributes.shooting / 10
-        const distancePenalty = Math.min(distance / 50, 1) // Penalty increases with distance
+        const updatedState = { ...gameState }
         
-        return Math.max(0.1, baseAccuracy - distancePenalty)
+        // Update home team players
+        updatedState.homeTeam.players = updatedState.homeTeam.players.map(player =>
+            this.movePlayerTowardsTarget(player, deltaTime)
+        )
+        
+        // Update away team players
+        updatedState.awayTeam.players = updatedState.awayTeam.players.map(player =>
+            this.movePlayerTowardsTarget(player, deltaTime)
+        )
+        
+        return updatedState
     }
 
-    private calculateShotTrajectory(
-        playerPos: { x: number; y: number }, 
-        target: { x: number; y: number }, 
-        accuracy: number
-    ): { x: number; y: number }
-    {
-        const dx = target.x - playerPos.x
-        const dy = target.y - playerPos.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        
-        if (distance === 0) return { x: 0, y: 0 }
-        
-        // Add inaccuracy
-        const inaccuracy = (1 - accuracy) * this.rng.nextFloat(-0.2, 0.2)
-        const adjustedDy = dy + inaccuracy
-        
-        // Normalise and apply power
-        const power = 0.5 // Ball speed in normalised coordinates per second
-        return {
-            x: (dx / distance) * power,
-            y: (adjustedDy / distance) * power
-        }
-    }
+    
 
-    private adjustFormationForTactics(team: any, tactic: string): Array<{ x: number; y: number }>
-    {
-        const basePositions = FORMATION_POSITIONS['4-4-2'][team.id.toUpperCase() as 'HOME' | 'AWAY'] || []
-        
-        return basePositions.map(pos =>
-        {
-            switch (tactic)
-            {
-                case 'ATTACK':
-                    // Push players forward
-                    return {
-                        x: team.id === 'home' ? Math.min(1, pos.x + 0.05) : Math.max(0, pos.x - 0.05),
-                        y: pos.y
-                    }
-                    
-                case 'DEFEND':
-                    // Pull players back
-                    return {
-                        x: team.id === 'home' ? Math.max(0, pos.x - 0.05) : Math.min(1, pos.x + 0.05),
-                        y: pos.y
-                    }
-                    
-                default:
-                    return { x: pos.x, y: pos.y }
-            }
-        })
-    }
+    
 
-    private executeGoalCelebration(gameState: GameState, data: any): GameState
-    {
-        // Simple goal celebration - could be expanded
-        return gameState
-    }
 
-    private executeAutoPass(gameState: GameState, data: { playerId: string }): GameState
-    {
-        const player = this.findPlayerById(gameState, data.playerId)
-        if (!player || !player.hasBall)
-        {
-            return gameState
-        }
 
-        // Find best teammate to pass to
-        const playerTeam = gameState.homeTeam.players.find(p => p.id === data.playerId) ? 'HOME' : 'AWAY'
-        const teammates = playerTeam === 'HOME' ? 
-            gameState.homeTeam.players.filter(p => p.id !== data.playerId) :
-            gameState.awayTeam.players.filter(p => p.id !== data.playerId)
-        
-        if (teammates.length === 0) return gameState
-        
-        // Choose teammate closest to opponent's goal
-        const targetGoal = playerTeam === 'HOME' ? KEY_POSITIONS.AWAY_GOAL_CENTRE : KEY_POSITIONS.HOME_GOAL_CENTRE
-        let bestTeammate = teammates[0]
-        let bestDistance = COORDINATE_UTILS.distance(bestTeammate.position, targetGoal)
-        
-        for (const teammate of teammates)
-        {
-            const distance = COORDINATE_UTILS.distance(teammate.position, targetGoal)
-            if (distance < bestDistance)
-            {
-                bestDistance = distance
-                bestTeammate = teammate
-            }
-        }
-        
-        // Execute pass
-        player.hasBall = false
-        const dx = bestTeammate.position.x - player.position.x
-        const dy = bestTeammate.position.y - player.position.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        
-        if (distance > 0)
-        {
-            const passSpeed = 0.3
-            return {
-                ...gameState,
-                ball: {
-                    ...gameState.ball,
-                    possessor: null,
-                    velocity: {
-                        x: (dx / distance) * passSpeed,
-                        y: (dy / distance) * passSpeed
-                    },
-                    isMoving: true
-                }
-            }
-        }
-        
-        return gameState
-    }
 
-    private executePositionAdjustment(gameState: GameState, data: any): GameState
-    {
-        // Implement tactical position adjustments
-        return gameState
-    }
 
-    private findPlayerById(gameState: GameState, playerId: string): any
-    {
-        for (const player of gameState.homeTeam.players)
-        {
-            if (player.id === playerId) return player
-        }
-        
-        for (const player of gameState.awayTeam.players)
-        {
-            if (player.id === playerId) return player
-        }
-        
-        return null
-    }
 
-    private scheduleEvent(event: MatchEvent): void
-    {
-        this.eventQueue.push(event)
-        this.eventQueue.sort((a, b) => a.executeTime - b.executeTime)
-    }
+
+
+
+
+
+
+    
+
+    
+
+    
+
+
+
+
+
+    
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+
+
+    
+
+    
+
+
+
+    
+
+    
+
+    
+
+    
 }
 
 // Types for match events
@@ -733,5 +824,5 @@ interface MatchEvent
 {
     type: 'GOAL_CELEBRATION' | 'KICKOFF_RESTART' | 'AUTO_PASS' | 'POSITION_ADJUSTMENT'
     executeTime: number
-    data: any
+    data: unknown
 }

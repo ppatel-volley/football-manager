@@ -13,7 +13,6 @@ export const HalfTimePhase = {
         
         // Switch team sides and prepare for second half
         return {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             ...ctx.session.state as GameState,
             footballHalf: 2,
             matchPhase: 'half_time' as GameState['matchPhase'],
@@ -32,7 +31,6 @@ export const HalfTimePhase = {
     onEnd: (ctx: any): GameState => 
 {
         console.info("HalfTimePhase.onEnd - Second half begins")
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state as GameState
     },
     
@@ -41,7 +39,6 @@ export const HalfTimePhase = {
     endIf: (ctx: any): boolean => 
 {
         const halfTimeStart = 2700 // When first half ended
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state.gameTime >= halfTimeStart + 60
     },
     

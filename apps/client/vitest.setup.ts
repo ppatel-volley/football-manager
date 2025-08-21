@@ -1,9 +1,11 @@
 import { beforeAll, vi } from "vitest"
 
-beforeAll(() => {
+beforeAll((): void =>
+{
     const GLOBAL_TIMEOUT = 10_000 // 10 seconds
 
-    setTimeout(() => {
+    setTimeout((): void =>
+    {
         console.error("\n❌ Test suite exceeded global timeout of 10 seconds")
         process.exit(1)
     }, GLOBAL_TIMEOUT)
@@ -21,19 +23,24 @@ beforeAll(() => {
     const mockStorage = {
         storage: new Map<string, string>(),
         getItem: vi.fn((key: string) => mockStorage.storage.get(key) || null),
-        setItem: vi.fn((key: string, value: string) => {
+        setItem: vi.fn((key: string, value: string): void =>
+        {
             mockStorage.storage.set(key, value)
         }),
-        removeItem: vi.fn((key: string) => {
+        removeItem: vi.fn((key: string): void =>
+        {
             mockStorage.storage.delete(key)
         }),
-        clear: vi.fn(() => {
+        clear: vi.fn((): void =>
+        {
             mockStorage.storage.clear()
         }),
-        get length() {
+        get length(): number
+        {
             return mockStorage.storage.size
         },
-        key: vi.fn((index: number) => {
+        key: vi.fn((index: number): string | null =>
+        {
             const keys = Array.from(mockStorage.storage.keys())
             return keys[index] || null
         })

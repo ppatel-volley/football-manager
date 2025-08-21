@@ -3,14 +3,17 @@
  * Manages player data, attributes, and persistence
  * Integrates with VGF for consistent player state management
  */
-import { GameRNG } from "../utils/GameRNG"
 import type { Player, PlayerAttributes } from "../shared/types/GameState"
+import { GameRNG } from "../utils/GameRNG"
 
 export class PlayerDatabaseManager
 {
-    private players: Map<string, Player> = new Map()
-    private rng: GameRNG
     private nextPlayerId: number = 1
+
+private players: Map<string, Player> = new Map()
+
+    private rng: GameRNG
+    
 
     constructor(seed: number = 42)
     {
@@ -19,25 +22,9 @@ export class PlayerDatabaseManager
     }
 
     /**
-     * Get player by ID
-     */
-    getPlayer(playerId: string): Player | null
-    {
-        return this.players.get(playerId) || null
-    }
-
-    /**
-     * Get multiple players by IDs
-     */
-    getPlayers(playerIds: string[]): Player[]
-    {
-        return playerIds.map(id => this.getPlayer(id)).filter(Boolean) as Player[]
-    }
-
-    /**
      * Create a new player with generated attributes
      */
-    createPlayer(data: {
+public createPlayer(data: {
         name: string
         squadNumber?: number
         team: 'HOME' | 'AWAY'
@@ -63,29 +50,18 @@ export class PlayerDatabaseManager
         return player
     }
 
-    /**
-     * Update player attributes
+/**
+     * Export all players to JSON
      */
-    updatePlayerAttributes(playerId: string, attributes: Partial<PlayerAttributes>): boolean
+public exportPlayers(): Player[]
     {
-        const player = this.players.get(playerId)
-        if (!player)
-        {
-            return false
-        }
-
-        player.attributes = {
-            ...player.attributes,
-            ...attributes
-        }
-
-        return true
+        return Array.from(this.players.values())
     }
 
-    /**
+/**
      * Generate a full team of players
      */
-    generateTeam(teamName: string, teamSide: 'HOME' | 'AWAY', formation: '4-4-2' | '4-3-3' = '4-4-2'): Player[]
+public generateTeam(teamName: string, teamSide: 'HOME' | 'AWAY', formation: '4-4-2' | '4-3-3' = '4-4-2'): Player[]
     {
         const players: Player[] = []
         const formationData = this.getFormationData(formation, teamSide)
@@ -106,39 +82,10 @@ export class PlayerDatabaseManager
         return players
     }
 
-    /**
-     * Search players by criteria
-     */
-    searchPlayers(criteria: {
-        team?: 'HOME' | 'AWAY'
-        playerType?: 'GOALKEEPER' | 'OUTFIELD'
-        minPace?: number
-        minShooting?: number
-        minPassing?: number
-        minPositioning?: number
-    }): Player[]
-    {
-        const results: Player[] = []
-
-        for (const player of this.players.values())
-        {
-            if (criteria.team && player.team !== criteria.team) continue
-            if (criteria.playerType && player.playerType !== criteria.playerType) continue
-            if (criteria.minPace && player.attributes.pace < criteria.minPace) continue
-            if (criteria.minShooting && player.attributes.shooting < criteria.minShooting) continue
-            if (criteria.minPassing && player.attributes.passing < criteria.minPassing) continue
-            if (criteria.minPositioning && player.attributes.positioning < criteria.minPositioning) continue
-
-            results.push(player)
-        }
-
-        return results
-    }
-
-    /**
+/**
      * Get team's best player for a specific attribute
      */
-    getBestPlayerForAttribute(team: 'HOME' | 'AWAY', attribute: keyof PlayerAttributes): Player | null
+public getBestPlayerForAttribute(team: 'HOME' | 'AWAY', attribute: keyof PlayerAttributes): Player | null
     {
         let bestPlayer: Player | null = null
         let bestValue = 0
@@ -155,94 +102,33 @@ export class PlayerDatabaseManager
         return bestPlayer
     }
 
-    /**
-     * Calculate team average for an attribute
+/**
+     * Get player by ID
      */
-    getTeamAttributeAverage(team: 'HOME' | 'AWAY', attribute: keyof PlayerAttributes): number
+    public getPlayer(playerId: string): Player | null
     {
-        const teamPlayers = this.getTeamPlayers(team)
-        if (teamPlayers.length === 0) return 0
-
-        const total = teamPlayers.reduce((sum, player) => sum + player.attributes[attribute], 0)
-        return total / teamPlayers.length
+        return this.players.get(playerId) || null
     }
 
     /**
-     * Get all players from a team
+     * Get multiple players by IDs
      */
-    getTeamPlayers(team: 'HOME' | 'AWAY'): Player[]
+    public getPlayers(playerIds: string[]): Player[]
     {
-        const teamPlayers: Player[] = []
-
-        for (const player of this.players.values())
-        {
-            if (player.team === team)
-            {
-                teamPlayers.push(player)
-            }
-        }
-
-        return teamPlayers.sort((a, b) => a.squadNumber - b.squadNumber)
+        return playerIds.map(id => this.getPlayer(id)).filter(Boolean) as Player[]
     }
 
-    /**
-     * Import players from external data
-     */
-    importPlayers(playersData: any[]): number
-    {
-        let imported = 0
+    
+    
 
-        for (const data of playersData)
-        {
-            try
-            {
-                this.createPlayer({
-                    name: data.name,
-                    squadNumber: data.squadNumber,
-                    team: data.team,
-                    playerType: data.playerType,
-                    position: data.position
-                })
-                imported++
-            }
-            catch (error)
-            {
-                console.warn(`Failed to import player: ${data.name}`, error)
-            }
-        }
+    
 
-        return imported
-    }
 
-    /**
-     * Export all players to JSON
-     */
-    exportPlayers(): any[]
-    {
-        return Array.from(this.players.values()).map(player => ({
-            id: player.id,
-            name: player.name,
-            squadNumber: player.squadNumber,
-            team: player.team,
-            playerType: player.playerType,
-            attributes: player.attributes
-        }))
-    }
 
-    /**
-     * Reset database (clear all players)
-     */
-    reset(): void
-    {
-        this.players.clear()
-        this.nextPlayerId = 1
-        this.initializeDefaultPlayers()
-    }
-
-    /**
+/**
      * Get database statistics
      */
-    getStats(): {
+public getStats(): {
         totalPlayers: number
         homeTeamPlayers: number
         awayTeamPlayers: number
@@ -273,16 +159,173 @@ export class PlayerDatabaseManager
         }
     }
 
-    // Private helper methods
-
-    private generatePlayerId(): string
+/**
+     * Calculate team average for an attribute
+     */
+public getTeamAttributeAverage(team: 'HOME' | 'AWAY', attribute: keyof PlayerAttributes): number
     {
-        return `player_${this.nextPlayerId++}_${Date.now()}`
+        const teamPlayers = this.getTeamPlayers(team)
+        if (teamPlayers.length === 0) return 0
+
+        const total = teamPlayers.reduce((sum, player) => sum + player.attributes[attribute], 0)
+        return total / teamPlayers.length
     }
+
+/**
+     * Get all players from a team
+     */
+public getTeamPlayers(team: 'HOME' | 'AWAY'): Player[]
+    {
+        const teamPlayers: Player[] = []
+
+        for (const player of this.players.values())
+        {
+            if (player.team === team)
+            {
+                teamPlayers.push(player)
+            }
+        }
+
+        return teamPlayers.sort((a, b) => a.squadNumber - b.squadNumber)
+    }
+
+/**
+     * Import players from external data
+     */
+public importPlayers(playersData: Player[]): number
+    {
+        let imported = 0
+
+        for (const data of playersData)
+        {
+            try
+            {
+                this.createPlayer({
+                    name: data.name,
+                    squadNumber: data.squadNumber,
+                    team: data.team,
+                    playerType: data.playerType,
+                    position: data.position
+                })
+                imported++
+            }
+            catch (error)
+            {
+                console.warn(`Failed to import player: ${data.name}`, error)
+            }
+        }
+
+        return imported
+    }
+
+/**
+     * Reset database (clear all players)
+     */
+public reset(): void
+    {
+        this.players.clear()
+        this.nextPlayerId = 1
+        this.initializeDefaultPlayers()
+    }
+
+/**
+     * Search players by criteria
+     */
+public searchPlayers(criteria: {
+        team?: 'HOME' | 'AWAY'
+        playerType?: 'GOALKEEPER' | 'OUTFIELD'
+        minPace?: number
+        minShooting?: number
+        minPassing?: number
+        minPositioning?: number
+    }): Player[]
+    {
+        const results: Player[] = []
+
+        for (const player of this.players.values())
+        {
+            if (criteria.team && player.team !== criteria.team) continue
+            if (criteria.playerType && player.playerType !== criteria.playerType) continue
+            if (criteria.minPace && player.attributes.pace < criteria.minPace) continue
+            if (criteria.minShooting && player.attributes.shooting < criteria.minShooting) continue
+            if (criteria.minPassing && player.attributes.passing < criteria.minPassing) continue
+            if (criteria.minPositioning && player.attributes.positioning < criteria.minPositioning) continue
+
+            results.push(player)
+        }
+
+        return results
+    }
+
+/**
+     * Update player attributes
+     */
+    public updatePlayerAttributes(playerId: string, attributes: Partial<PlayerAttributes>): boolean
+    {
+        const player = this.players.get(playerId)
+        if (!player)
+        {
+            return false
+        }
+
+        player.attributes = {
+            ...player.attributes,
+            ...attributes
+        }
+
+        return true
+    }
+
+    
+    
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+    
+
+    
+
+
+
+
+    
+
+    
+    
+
+    
+    
+
+    
+    
+
+    
+
+
+    
+
+    
+    
 
     private generatePlayerAttributes(isGoalkeeper: boolean): PlayerAttributes
     {
-        const clamp = (value: number) => Math.max(1, Math.min(10, Math.round(value)))
+        const clamp = (value: number): number => Math.max(1, Math.min(10, Math.round(value)))
 
         if (isGoalkeeper)
         {
@@ -303,6 +346,14 @@ export class PlayerDatabaseManager
             }
         }
     }
+// Private helper methods
+
+    private generatePlayerId(): string
+    {
+        return `player_${this.nextPlayerId++}_${Date.now()}`
+    }
+
+    
 
     private generatePlayerName(): string
     {
