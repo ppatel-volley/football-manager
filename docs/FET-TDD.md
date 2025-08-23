@@ -1,8 +1,10 @@
 # Formation Editor Tool (FET) - Technical Design Document
 
+> **Note**: This document references canonical definitions in [docs/CANONICAL-DEFINITIONS.md](./CANONICAL-DEFINITIONS.md) for schemas, constants, and mappings.
+
 **Project**: Soccer Manager: World Cup Edition
-**Document Version**: 1.0
-**Date**: 13 August 2025
+**Document Version**: 1.2
+**Date**: 20 August 2025
 **Target Phase**: Phase 2 Implementation
 
 ## 1. Executive Summary
@@ -48,6 +50,33 @@ graph TB
 ### 3.1 Core Data Structures
 
 ```typescript
+// Reference: see docs/CANONICAL-DEFINITIONS.md for canonical UberFormationData schema
+interface UberFormationData {
+  version: string;
+  lastModified: string;
+  formations: Record<string, FormationDefinition>;
+  kickoffPositions: Record<string, KickoffPositionSet>;
+}
+
+interface FormationDefinition {
+  formationId: string;
+  name: string;
+  category: FormationCategory;
+  playerComposition: PlayerRole[];
+  postures: Record<string, PostureData>;
+  metadata?: FormationMetadata;
+}
+
+interface PostureData {
+  phases: Record<GamePhase, PhaseData>;
+}
+
+interface KickoffPositionSet {
+  formationId: string;
+  positions: Record<PlayerRole, Vector2>;
+}
+
+// DEPRECATED: Use UberFormationData instead
 interface FormationData {
   formationId: string;           // "4-4-2-flat"
   name: string;                  // "4-4-2 Flat Formation"
@@ -87,14 +116,13 @@ interface ModifierCondition {
   playerStamina?: number;
 }
 
-enum GamePhase {
-  ATTACK = "attack",
-  DEFEND = "defend", 
-  TRANSITION_ATTACK = "transition_attack",
-  TRANSITION_DEFEND = "transition_defend",
-  SET_PIECE_FOR = "set_piece_for",
-  SET_PIECE_AGAINST = "set_piece_against"
-}
+type GamePhase = 
+    | 'ATTACK'
+    | 'DEFEND' 
+    | 'TRANSITION_ATTACK'
+    | 'TRANSITION_DEFEND'
+    | 'SET_PIECE_FOR'
+    | 'SET_PIECE_AGAINST'
 ```
 
 ### 3.2 Optimised Storage Format
@@ -432,9 +460,9 @@ class FormationEngine {
     const ballPosition = gameState.ball.position;
     
     if (possession === team.id) {
-      return ballPosition.y > 0.6 ? GamePhase.ATTACK : GamePhase.TRANSITION_ATTACK;
+      return ballPosition.y > 0.6 ? 'ATTACK' : 'TRANSITION_ATTACK';
     } else {
-      return ballPosition.y < 0.4 ? GamePhase.DEFEND : GamePhase.TRANSITION_DEFEND;
+      return ballPosition.y < 0.4 ? 'DEFEND' : 'TRANSITION_DEFEND';
     }
   }
   

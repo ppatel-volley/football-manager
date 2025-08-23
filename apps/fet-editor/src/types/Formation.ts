@@ -70,14 +70,12 @@ export interface FormationDefinition
     metadata?: FormationMetadata
 }
 
-// Formation templates define the standard player compositions
+// Formation templates define exact player compositions (matches formations.json)
 export const FORMATION_TEMPLATES: Record<string, PlayerRole[]> = {
-    "4-4-2": ["GK", "LB", "CB_1", "CB_2", "RB", "LM", "CM_1", "CM_2", "RM", "ST_1", "ST_2"],
-    "4-3-3": ["GK", "LB", "CB_1", "CB_2", "RB", "DM", "CM_1", "CM_2", "LW", "RW", "ST"],
+    "4-4-2": ["GK", "LB", "CB_L", "CB_R", "RB", "LW", "CM_L", "CM_R", "RW", "ST_L", "ST_R"],
+    "4-3-3": ["GK", "LB", "CB_L", "CB_R", "RB", "CM_L", "CM_R", "LW", "RW", "ST_L", "ST_R"],
     "5-3-2": ["GK", "LWB", "CB_1", "CB_2", "CB_3", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
-    "3-5-2": ["GK", "CB_1", "CB_2", "CB_3", "LWB", "RWB", "CM_1", "CM_2", "CM_3", "ST_1", "ST_2"],
-    "4-2-3-1": ["GK", "LB", "CB_1", "CB_2", "RB", "DM_1", "DM_2", "LW", "AM", "RW", "ST"],
-    "3-4-3": ["GK", "CB_1", "CB_2", "CB_3", "LM", "CM_1", "CM_2", "RM", "LW", "ST", "RW"],
+    "3-5-2": ["GK", "CB_1", "CB_2", "CB_3", "CDM_1", "CDM_2", "LM", "RM", "CAM", "ST_1", "ST_2"],
 }
 
 export interface PostureData
@@ -136,12 +134,12 @@ export interface FormationMetadata
 
 export type FormationCategory = 'Defensive' | 'Balanced' | 'Attacking'
 
-export type GamePhase = 
-    | 'ATTACK'
-    | 'DEFEND' 
-    | 'TRANSITION_ATTACK'
-    | 'TRANSITION_DEFEND'
-    | 'SET_PIECE_FOR'
-    | 'SET_PIECE_AGAINST'
+// CANONICAL: Matches docs/CANONICAL-DEFINITIONS.md
+export enum GamePhase {
+    DEFENDING = "defending",
+    NEUTRAL = "neutral", 
+    ATTACKING = "attacking",
+    SET_PIECE = "set_piece"
+}
 
 

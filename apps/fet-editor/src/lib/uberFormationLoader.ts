@@ -5,6 +5,7 @@ import type {
     PlayerRole,
     Vector2 
 } from "../types/Formation"
+import { GamePhase } from "../types/Formation"
 import { validateUberFormationData } from "./formationSchema"
 
 // Import the uber formations data
@@ -82,7 +83,7 @@ export function convertLegacyFormationToKickoff(
         postures: {
             BALANCE: {
                 phases: {
-                    ATTACK: {
+                    [GamePhase.ATTACKING]: {
                         positions: {
                             "x10_y7": { // Middle of the pitch
                                 players: Object.entries(roles).reduce((acc, [role, pos]) => {
@@ -97,7 +98,7 @@ export function convertLegacyFormationToKickoff(
                             }
                         }
                     },
-                    DEFEND: {
+                    [GamePhase.DEFENDING]: {
                         positions: {
                             "x5_y7": { // Defensive third
                                 players: Object.entries(roles).reduce((acc, [role, pos]) => {
@@ -112,7 +113,7 @@ export function convertLegacyFormationToKickoff(
                             }
                         }
                     },
-                    TRANSITION_ATTACK: {
+                    [GamePhase.NEUTRAL]: {
                         positions: {
                             "x8_y7": {
                                 players: Object.entries(roles).reduce((acc, [role, pos]) => {
@@ -127,22 +128,7 @@ export function convertLegacyFormationToKickoff(
                             }
                         }
                     },
-                    TRANSITION_DEFEND: {
-                        positions: {
-                            "x7_y7": {
-                                players: Object.entries(roles).reduce((acc, [role, pos]) => {
-                                    acc[role as PlayerRole] = {
-                                        x: Math.max(0.05, pos.x - 0.02),
-                                        y: pos.y,
-                                        priority: 7,
-                                        flexibility: 0.3
-                                    }
-                                    return acc
-                                }, {} as any)
-                            }
-                        }
-                    },
-                    SET_PIECE_FOR: {
+                    [GamePhase.SET_PIECE]: {
                         positions: {
                             "x15_y7": {
                                 players: Object.entries(roles).reduce((acc, [role, pos]) => {
@@ -151,21 +137,6 @@ export function convertLegacyFormationToKickoff(
                                         y: pos.y,
                                         priority: 6,
                                         flexibility: 0.2
-                                    }
-                                    return acc
-                                }, {} as any)
-                            }
-                        }
-                    },
-                    SET_PIECE_AGAINST: {
-                        positions: {
-                            "x3_y7": {
-                                players: Object.entries(roles).reduce((acc, [role, pos]) => {
-                                    acc[role as PlayerRole] = {
-                                        x: Math.max(0.05, pos.x - 0.1),
-                                        y: pos.y,
-                                        priority: 9,
-                                        flexibility: 0.1
                                     }
                                     return acc
                                 }, {} as any)

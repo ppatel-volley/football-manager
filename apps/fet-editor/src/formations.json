@@ -10,7 +10,7 @@
       "postures": {
         "ATTACK": {
           "phases": {
-            "ATTACK": {
+            "attacking": {
               "positions": {
                 "x10_y7": {
                   "players": {
@@ -29,7 +29,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -71,7 +71,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -94,7 +94,7 @@
         },
         "DEFEND": {
           "phases": {
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -131,7 +131,7 @@
       "postures": {
         "ATTACK": {
           "phases": {
-            "ATTACK": {
+            "attacking": {
               "positions": {
                 "x10_y7": {
                   "players": {
@@ -173,7 +173,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -229,7 +229,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -271,7 +271,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x7_y7": {
                   "players": {
@@ -308,7 +308,7 @@
       "postures": {
         "ATTACK": {
           "phases": {
-            "ATTACK": {
+            "attacking": {
               "positions": {
                 "x10_y7": {
                   "players": {
@@ -327,7 +327,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -369,7 +369,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {
@@ -411,7 +411,7 @@
                 }
               }
             },
-            "DEFEND": {
+            "defending": {
               "positions": {
                 "x5_y7": {
                   "players": {

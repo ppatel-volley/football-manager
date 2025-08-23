@@ -8,9 +8,9 @@ import type {
     KickoffPositionSet,
     PostureData,
     PhaseData,
-    GamePhase,
     FormationCategory
 } from "../types/Formation"
+import { GamePhase } from "../types/Formation"
 
 function isNumber(v: unknown): v is number
 {
@@ -30,7 +30,7 @@ function isValidPlayerRole(role: string): role is PlayerRole {
 }
 const validPostures: Posture[] = ["ATTACK", "BALANCE", "DEFEND"]
 const validGamePhases: GamePhase[] = [
-    "ATTACK", "DEFEND", "TRANSITION_ATTACK", "TRANSITION_DEFEND", "SET_PIECE_FOR", "SET_PIECE_AGAINST"
+    GamePhase.DEFENDING, GamePhase.NEUTRAL, GamePhase.ATTACKING, GamePhase.SET_PIECE
 ]
 const validFormationCategories: FormationCategory[] = ["Defensive", "Balanced", "Attacking"]
 
