@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { EditorDoc } from "../types/EditorDoc";
-import type { PlayerRole, Posture, Vector2 } from "../types/Formation";
+import type { Posture } from "../types/Formation";
 
 interface ControlsPanelProps
 {

@@ -1,15 +1,14 @@
+// Import the uber formations data
+import uberFormationsJson from "../formations.json"
 import type { 
-    UberFormationData, 
     FormationDefinition, 
     KickoffPositionSet,
     PlayerRole,
+    UberFormationData, 
     Vector2 
 } from "../types/Formation"
 import { GamePhase } from "../types/Formation"
 import { validateUberFormationData } from "./formationSchema"
-
-// Import the uber formations data
-import uberFormationsJson from "../formations.json"
 
 let cachedUberData: UberFormationData | null = null
 
@@ -79,67 +78,71 @@ export function convertLegacyFormationToKickoff(
         formationId,
         name,
         category: "Balanced",
-        playerComposition: Object.keys(roles) as PlayerRole[],
+        playerComposition: Object.keys(roles),
         postures: {
             BALANCE: {
                 phases: {
                     [GamePhase.ATTACKING]: {
                         positions: {
                             "x10_y7": { // Middle of the pitch
-                                players: Object.entries(roles).reduce((acc, [role, pos]) => {
-                                    acc[role as PlayerRole] = {
+                                players: Object.entries(roles).reduce((acc, [role, pos]) => 
+{
+                                    acc[role] = {
                                         x: pos.x,
                                         y: pos.y,
                                         priority: 8,
                                         flexibility: 0.3
                                     }
                                     return acc
-                                }, {} as any)
+                                }, {} as Record<PlayerRole, { x: number; y: number; priority: number; flexibility: number }>)
                             }
                         }
                     },
                     [GamePhase.DEFENDING]: {
                         positions: {
                             "x5_y7": { // Defensive third
-                                players: Object.entries(roles).reduce((acc, [role, pos]) => {
-                                    acc[role as PlayerRole] = {
+                                players: Object.entries(roles).reduce((acc, [role, pos]) => 
+{
+                                    acc[role] = {
                                         x: Math.max(0.05, pos.x - 0.05), // Pull back slightly
                                         y: pos.y,
                                         priority: 8,
                                         flexibility: 0.2
                                     }
                                     return acc
-                                }, {} as any)
+                                }, {} as Record<PlayerRole, { x: number; y: number; priority: number; flexibility: number }>)
                             }
                         }
                     },
                     [GamePhase.NEUTRAL]: {
                         positions: {
                             "x8_y7": {
-                                players: Object.entries(roles).reduce((acc, [role, pos]) => {
-                                    acc[role as PlayerRole] = {
+                                players: Object.entries(roles).reduce((acc, [role, pos]) => 
+{
+                                    acc[role] = {
                                         x: pos.x,
                                         y: pos.y,
                                         priority: 7,
                                         flexibility: 0.4
                                     }
                                     return acc
-                                }, {} as any)
+                                }, {} as Record<PlayerRole, { x: number; y: number; priority: number; flexibility: number }>)
                             }
                         }
                     },
                     [GamePhase.SET_PIECE]: {
                         positions: {
                             "x15_y7": {
-                                players: Object.entries(roles).reduce((acc, [role, pos]) => {
-                                    acc[role as PlayerRole] = {
+                                players: Object.entries(roles).reduce((acc, [role, pos]) => 
+{
+                                    acc[role] = {
                                         x: Math.min(0.95, pos.x + 0.1),
                                         y: pos.y,
                                         priority: 6,
                                         flexibility: 0.2
                                     }
                                     return acc
-                                }, {} as any)
+                                }, {} as Record<PlayerRole, { x: number; y: number; priority: number; flexibility: number }>)
                             }
                         }
                     }

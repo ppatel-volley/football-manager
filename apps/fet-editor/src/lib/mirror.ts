@@ -8,11 +8,12 @@ export function mirrorPointAcrossVerticalMidline(p: Vector2): Vector2
 export function mirrorRolesAcrossVerticalMidline(roles: Record<PlayerRole, Vector2>): Record<PlayerRole, Vector2>
 {
     const out: Record<PlayerRole, Vector2> = { ...roles } as Record<PlayerRole, Vector2>;
-    const keys = Object.keys(out) as PlayerRole[];
+    const keys = Object.keys(out);
     for (const k of keys)
     {
         const point = out[k];
-        if (point) {
+        if (point) 
+{
             out[k] = mirrorPointAcrossVerticalMidline(point);
         }
     }
@@ -32,11 +33,12 @@ export function mirrorPointAcrossHalfway(p: Vector2): Vector2
 export function mirrorRolesAcrossHalfway(roles: Record<PlayerRole, Vector2>): Record<PlayerRole, Vector2>
 {
     const out: Record<PlayerRole, Vector2> = { ...roles } as Record<PlayerRole, Vector2>;
-    const keys = Object.keys(out) as PlayerRole[];
+    const keys = Object.keys(out);
     for (const k of keys)
     {
         const point = out[k];
-        if (point) {
+        if (point) 
+{
             out[k] = mirrorPointAcrossHalfway(point);
         }
     }

@@ -1,15 +1,14 @@
 import type { 
+    FormationCategory,
     FormationData, 
-    PlayerRole, 
-    Posture, 
-    Vector2, 
-    UberFormationData,
     FormationDefinition,
     KickoffPositionSet,
-    PostureData,
     PhaseData,
-    FormationCategory
-} from "../types/Formation"
+    PlayerRole, 
+    Posture, 
+    PostureData,
+    UberFormationData,
+    Vector2} from "../types/Formation"
 import { GamePhase } from "../types/Formation"
 
 function isNumber(v: unknown): v is number
@@ -25,7 +24,8 @@ function isVector2(v: unknown): v is Vector2
 }
 
 // Flexible role validation - any string is now valid for PlayerRole
-function isValidPlayerRole(role: string): role is PlayerRole {
+function isValidPlayerRole(role: string): role is PlayerRole 
+{
     return typeof role === "string" && role.length > 0
 }
 const validPostures: Posture[] = ["ATTACK", "BALANCE", "DEFEND"]
@@ -88,11 +88,13 @@ export function validateUberFormationData(input: unknown): UberFormationData | n
     // Validate each formation
     for (const [formationId, formation] of Object.entries(uber.formations))
     {
-        if (!validateFormationDefinition(formation)) {
+        if (!validateFormationDefinition(formation)) 
+{
             console.error(`Failed to validate formation: ${formationId}`, formation)
             return null
         }
-        if (formation.formationId !== formationId) {
+        if (formation.formationId !== formationId) 
+{
             console.error(`Formation ID mismatch: ${formationId} !== ${formation.formationId}`)
             return null
         }
@@ -118,15 +120,17 @@ export function validateFormationDefinition(input: unknown): FormationDefinition
     if (!def.postures || typeof def.postures !== "object") return null
     
     // Validate playerComposition (optional field for backwards compatibility)
-    if (def.playerComposition) {
+    if (def.playerComposition) 
+{
         if (!Array.isArray(def.playerComposition)) return null
-        for (const role of def.playerComposition) {
+        for (const role of def.playerComposition) 
+{
             if (!isValidPlayerRole(role)) return null
         }
     }
     
     // Validate postures
-    for (const [postureName, postureData] of Object.entries(def.postures))
+    for (const [_postureName, postureData] of Object.entries(def.postures))
     {
         if (!validatePostureData(postureData)) return null
     }
@@ -191,7 +195,8 @@ function validatePhaseData(input: unknown): PhaseData | null
         {
             if (!isValidPlayerRole(playerRole)) return null
             
-            const pos = positionData as any
+            if (!positionData || typeof positionData !== "object") return null
+            const pos = positionData as { x: unknown; y: unknown; priority: unknown; flexibility: unknown }
             if (!isVector2({ x: pos.x, y: pos.y })) return null
             if (!isNumber(pos.priority) || pos.priority < 1 || pos.priority > 10) return null
             if (!isNumber(pos.flexibility) || pos.flexibility < 0 || pos.flexibility > 1) return null
