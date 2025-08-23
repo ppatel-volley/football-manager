@@ -7,12 +7,14 @@ import packageJson from "../../package.json"
 import { useSessionCreation } from "../hooks/useSessionCreation"
 import { PhaseRouter } from "./PhaseRouter"
 
-export const App: React.FC = () => {
+export const App: React.FC = () => 
+{
     console.log("App rendering...")
     
     // Now using full VGF - POC mode removed
     
-    try {
+    try 
+{
         const [sessionId, setSessionId] = useState<string | undefined | null>(
             undefined
         )
@@ -21,7 +23,8 @@ export const App: React.FC = () => {
         const transport = useSessionCreation({ sessionId, setSessionId })
 
         console.log("Transport:", transport)
-        if (!transport) {
+        if (!transport) 
+{
             console.log("No transport, returning null")
             return <div style={{color: 'white', padding: '20px'}}>Loading transport...</div>
         }
@@ -44,7 +47,9 @@ export const App: React.FC = () => {
                 </VGFProvider>
             </PlatformProvider>
         )
-    } catch (error) {
+    }
+ catch (error) 
+{
         console.error("Error in App:", error)
         return <div style={{color: 'white', padding: '20px'}}>App Error: {String(error)}</div>
     }

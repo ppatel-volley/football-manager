@@ -1,21 +1,21 @@
 import type { Phase } from "@volley/vgf/server"
 
 import type { GameState } from "../shared/types/GameState"
+import { MatchPhase } from "../shared/types/GameState"
 import { PhaseName } from "../shared/types/PhaseName"
 
 export const KickoffPhase = {
-    actions: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        takeKickoff: (ctx: any): GameState => 
-{
+    actions: {},
+    thunks: {},
+    reducers: {
+        takeKickoff: (state: GameState): GameState => 
+        {
             console.info("KickoffPhase.takeKickoff - Ball is in play")
             
             return {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ...ctx.session.state as GameState,
+                ...state,
                 ball: {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                    ...(ctx.session.state as GameState).ball,
+                    ...state.ball,
                     isMoving: true,
                     possessor: null // Ball is loose after kickoff
                 },
@@ -26,7 +26,7 @@ export const KickoffPhase = {
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onBegin: (ctx: any): GameState => 
-{
+    {
         console.info("KickoffPhase.onBegin - Preparing for kickoff")
         
         // Set up kickoff positions
@@ -39,13 +39,13 @@ export const KickoffPhase = {
                 isMoving: false,
                 possessor: null
             },
-            matchPhase: 'kickoff' as GameState['matchPhase']
+            matchPhase: MatchPhase.KICKOFF
         }
     },
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onEnd: (ctx: any): GameState => 
-{
+    {
         console.info("KickoffPhase.onEnd - First half begins")
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state as GameState
@@ -54,7 +54,7 @@ export const KickoffPhase = {
     // Transition after kickoff is taken or timeout
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     endIf: (ctx: any): boolean => 
-{
+    {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
         return ctx.session.state.ball.isMoving || ctx.session.state.gameTime >= 35
     },

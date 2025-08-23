@@ -1,6 +1,6 @@
-import type { ReactNode } from "react"
+import type { ColoredCell,GridCell } from "@game/pitch-ui"
 import { GridPitch } from "@game/pitch-ui"
-import type { GridCell, ColoredCell } from "@game/pitch-ui"
+import type { ReactNode } from "react"
 
 interface GridCanvasProps
 {

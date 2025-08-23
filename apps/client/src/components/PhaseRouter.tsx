@@ -1,16 +1,17 @@
-import { PhaseName } from "@game/server"
 import type { ReactNode } from "react"
 
 import { usePhase, useStateSync } from "../hooks/VGF"
 import { FootballMatch } from "./Football/FootballMatch"
 import { Home } from "./Home/Home"
 
-export const PhaseRouter = (): ReactNode => {
+export const PhaseRouter = (): ReactNode => 
+{
     console.log("PhaseRouter rendering...")
     
     // Now using full VGF - POC mode removed
     
-    try {
+    try 
+{
         const phase = usePhase()
         const gameState = useStateSync()
         
@@ -18,7 +19,8 @@ export const PhaseRouter = (): ReactNode => {
         console.log("Game state:", gameState)
         
         // Route to appropriate component based on VGF phase
-        switch (phase) {
+        switch (phase) 
+{
             case "PRE_MATCH":
                 return <FootballMatch phase="pre_match" />
                 
@@ -41,7 +43,9 @@ export const PhaseRouter = (): ReactNode => {
                 console.warn("Unknown phase:", phase)
                 return <Home />
         }
-    } catch (error) {
+    }
+ catch (error) 
+{
         console.error("Error in PhaseRouter:", error)
         return <div style={{color: 'white', padding: '20px'}}>PhaseRouter Error: {String(error)}</div>
     }

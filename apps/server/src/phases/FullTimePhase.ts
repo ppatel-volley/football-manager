@@ -1,25 +1,26 @@
 import type { Phase } from "@volley/vgf/server"
 
 import type { GameState } from "../shared/types/GameState"
+import { MatchPhase } from "../shared/types/GameState"
 import { PhaseName } from "../shared/types/PhaseName"
 
 export const FullTimePhase = {
-    actions: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        restartMatch: (ctx: any): GameState => 
-{
+    actions: {},
+    thunks: {},
+    reducers: {
+        restartMatch: (state: GameState): GameState => 
+        {
             console.info("FullTimePhase.restartMatch - Starting new match")
             
             // Reset to pre-match phase
             return {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                ...ctx.session.state as GameState,
+                ...state,
                 gameTime: 0,
                 footballTime: "00:00",
                 footballHalf: 1,
                 score: { home: 0, away: 0 },
                 ballPossession: null,
-                matchPhase: 'pre_match' as GameState['matchPhase'],
+                matchPhase: MatchPhase.PRE_MATCH,
                 stats: {
                     possessionSeconds: { HOME: 0, AWAY: 0 },
                     shots: { HOME: 0, AWAY: 0 },
@@ -37,7 +38,7 @@ export const FullTimePhase = {
         const finalState = {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             ...ctx.session.state as GameState,
-            matchPhase: 'full_time' as GameState['matchPhase'],
+            matchPhase: MatchPhase.FULL_TIME,
             ballPossession: null
         }
         

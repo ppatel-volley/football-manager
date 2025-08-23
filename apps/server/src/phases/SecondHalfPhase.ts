@@ -1,53 +1,47 @@
 import type { Phase } from "@volley/vgf/server"
 
 import type { GameState } from "../shared/types/GameState"
+import { MatchPhase } from "../shared/types/GameState"
 import { PhaseName } from "../shared/types/PhaseName"
 
 export const SecondHalfPhase = {
-    actions: {
+    actions: {},
+    thunks: {},
+    
+    reducers: {
         // Same actions as first half
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        shootBall: (ctx: any, team: 'HOME' | 'AWAY'): GameState => 
-{
+        shootBall: (state: GameState, team: 'HOME' | 'AWAY'): GameState => 
+        {
             console.info(`SecondHalfPhase.shootBall - ${team} team shoots`)
             
             // Simulate shot attempt
             const isGoal = Math.random() < 0.1 // 10% chance of goal
             
             if (isGoal) 
-{
+            {
                 return {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ...ctx.session.state as GameState,
+                    ...state,
                     score: {
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                        ...(ctx.session.state as GameState).score,
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                        [team === 'HOME' ? 'home' : 'away']: (ctx.session.state as GameState).score[team === 'HOME' ? 'home' : 'away'] + 1
+                        ...state.score,
+                        [team === 'HOME' ? 'home' : 'away']: state.score[team === 'HOME' ? 'home' : 'away'] + 1
                     }
                 }
             }
             
             return {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ...ctx.session.state as GameState,
+                ...state,
                 stats: {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                    ...(ctx.session.state as GameState).stats,
+                    ...state.stats,
                     shots: {
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                        ...(ctx.session.state as GameState).stats.shots,
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                        [team]: (ctx.session.state as GameState).stats.shots[team] + 1
+                        ...state.stats.shots,
+                        [team]: state.stats.shots[team] + 1
                     }
                 }
             }
-        }
-    },
-    
-    reducers: {
+        },
+        
         simulateGameplay: (state: GameState): GameState => 
-{
+        {
             const newGameTime = state.gameTime + 1
             const possessionTeam = Math.random() < 0.5 ? 'HOME' : 'AWAY'
             
@@ -75,7 +69,7 @@ export const SecondHalfPhase = {
         return {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             ...ctx.session.state as GameState,
-            matchPhase: 'second_half' as GameState['matchPhase'],
+            matchPhase: MatchPhase.SECOND_HALF,
             ballPossession: 'AWAY' // Away team gets possession for second half
         }
     },

@@ -8,21 +8,25 @@ vi.mock('uuid', () => ({
 
 import { useUserId } from '../useUserId'
 
-describe('useUserId', () => {
-    beforeEach(() => {
+describe('useUserId', () => 
+{
+    beforeEach(() => 
+{
         vi.clearAllMocks()
         // Clear the global localStorage mock
         localStorage.clear()
         vi.clearAllMocks()
     })
 
-    it('should return existing userId from localStorage', async () => {
+    it('should return existing userId from localStorage', async () => 
+{
         const existingUserId = 'existing-user-123'
         vi.mocked(localStorage.getItem).mockReturnValue(existingUserId)
 
         const { result } = renderHook(() => useUserId())
 
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(result.current).toBe(existingUserId)
         })
 
@@ -30,12 +34,14 @@ describe('useUserId', () => {
         expect(localStorage.setItem).not.toHaveBeenCalled()
     })
 
-    it('should generate and store new userId when not in localStorage', async () => {
+    it('should generate and store new userId when not in localStorage', async () => 
+{
         vi.mocked(localStorage.getItem).mockReturnValue(null)
 
         const { result } = renderHook(() => useUserId())
 
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(result.current).toBe('mock-uuid-123')
         })
 
@@ -43,9 +49,11 @@ describe('useUserId', () => {
         expect(localStorage.setItem).toHaveBeenCalledWith('userId', 'mock-uuid-123')
     })
 
-    it('should handle localStorage setItem errors gracefully', async () => {
+    it('should handle localStorage setItem errors gracefully', async () => 
+{
         vi.mocked(localStorage.getItem).mockReturnValue(null)
-        vi.mocked(localStorage.setItem).mockImplementation(() => {
+        vi.mocked(localStorage.setItem).mockImplementation(() => 
+{
             throw new Error('Storage quota exceeded')
         })
 
@@ -53,7 +61,8 @@ describe('useUserId', () => {
 
         const { result } = renderHook(() => useUserId())
 
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(result.current).toBe('mock-uuid-123')
         })
 
@@ -66,38 +75,44 @@ describe('useUserId', () => {
         consoleSpy.mockRestore()
     })
 
-    it('should eventually set userId when not in localStorage', async () => {
+    it('should eventually set userId when not in localStorage', async () => 
+{
         vi.mocked(localStorage.getItem).mockReturnValue(null)
 
         const { result } = renderHook(() => useUserId())
         
         // Should eventually get the UUID
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(result.current).toBe('mock-uuid-123')
         })
         
         expect(localStorage.setItem).toHaveBeenCalledWith('userId', 'mock-uuid-123')
     })
 
-    it('should handle empty string from localStorage', async () => {
+    it('should handle empty string from localStorage', async () => 
+{
         vi.mocked(localStorage.getItem).mockReturnValue('')
 
         const { result } = renderHook(() => useUserId())
 
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(result.current).toBe('mock-uuid-123')
         })
 
         expect(localStorage.setItem).toHaveBeenCalledWith('userId', 'mock-uuid-123')
     })
 
-    it('should only call useEffect once on mount', async () => {
+    it('should only call useEffect once on mount', async () => 
+{
         const existingUserId = 'stable-user-id'
         localStorage.getItem.mockReturnValue(existingUserId)
 
         const { result, rerender } = renderHook(() => useUserId())
 
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(result.current).toBe(existingUserId)
         })
 

@@ -1,5 +1,5 @@
 import { PlayerDatabaseManager } from "../database/PlayerDatabaseManager"
-import { type GameState, PhaseName } from "../shared"
+import { type GameState, MatchPhase, PhaseName } from "../shared"
 
 export const setupGameState = (
     setupData: Partial<GameState> = {}
@@ -55,7 +55,7 @@ export const setupGameState = (
         },
         
         // Game flow
-        matchPhase: 'pre_match' as 'pre_match' | 'kickoff' | 'first_half' | 'half_time' | 'second_half' | 'full_time',
+        matchPhase: MatchPhase.PRE_MATCH,
         phase: PhaseName.PreMatch,
     }
 

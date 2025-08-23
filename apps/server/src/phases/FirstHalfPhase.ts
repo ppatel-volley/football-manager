@@ -2,47 +2,49 @@
 import type { Phase } from "@volley/vgf/server"
 
 import type { GameState } from "../shared/types/GameState"
+import { MatchPhase } from "../shared/types/GameState"
 import { PhaseName } from "../shared/types/PhaseName"
 
 export const FirstHalfPhase = {
-    actions: {
+    actions: {},
+    thunks: {},
+    
+    reducers: {
         // Actions specific to active gameplay
-        shootBall: (ctx: { session: { state: GameState } }, team: 'HOME' | 'AWAY') => 
-{
+        shootBall: (state: GameState, team: 'HOME' | 'AWAY'): GameState => 
+        {
             console.info(`FirstHalfPhase.shootBall - ${team} team shoots`)
             
             // Simulate shot attempt
             const isGoal = Math.random() < 0.1 // 10% chance of goal for simplicity
             
             if (isGoal) 
-{
+            {
                 return {
-                    ...ctx.session.state,
+                    ...state,
                     score: {
-                        ...ctx.session.state.score,
-                        [team === 'HOME' ? 'home' : 'away']: ctx.session.state.score[team === 'HOME' ? 'home' : 'away'] + 1
+                        ...state.score,
+                        [team === 'HOME' ? 'home' : 'away']: state.score[team === 'HOME' ? 'home' : 'away'] + 1
                     }
                 }
             }
             
             // Update stats for shot attempt
             return {
-                ...ctx.session.state,
+                ...state,
                 stats: {
-                    ...ctx.session.state.stats,
+                    ...state.stats,
                     shots: {
-                        ...ctx.session.state.stats.shots,
-                        [team]: ctx.session.state.stats.shots[team] + 1
+                        ...state.stats.shots,
+                        [team]: state.stats.shots[team] + 1
                     }
                 }
             }
-        }
-    },
-    
-    reducers: {
+        },
+        
         // Phase-specific reducers for match simulation
-        simulateGameplay: (state: GameState) => 
-{
+        simulateGameplay: (state: GameState): GameState => 
+        {
             // Increment game time
             const newGameTime = state.gameTime + 1
             
@@ -65,26 +67,32 @@ export const FirstHalfPhase = {
         }
     },
     
-    onBegin: (ctx: { session: { state: GameState } }) => 
-{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onBegin: (ctx: any): GameState => 
+    {
         console.info("FirstHalfPhase.onBegin - First half active gameplay")
         
         return {
-            ...ctx.session.state,
-            matchPhase: 'first_half' as const,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            ...ctx.session.state as GameState,
+            matchPhase: MatchPhase.FIRST_HALF,
             ballPossession: 'HOME' // Home team gets first possession after kickoff
         }
     },
     
-    onEnd: (ctx: { session: { state: GameState } }) => 
-{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onEnd: (ctx: any): GameState => 
+    {
         console.info("FirstHalfPhase.onEnd - Half time break")
-        return ctx.session.state
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        return ctx.session.state as GameState
     },
     
     // End after 45 minutes (2.25 minutes real time in PRD)
-    endIf: (ctx: { session: { state: GameState } }) => 
-{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    endIf: (ctx: any): boolean => 
+    {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         return ctx.session.state.gameTime >= 2700 // 45 minutes * 60 seconds
     },
     

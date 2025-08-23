@@ -40,47 +40,61 @@ Object.defineProperty(window, 'history', {
 })
 
 // Mock URLSearchParams
-global.URLSearchParams = class URLSearchParams {
+global.URLSearchParams = class URLSearchParams 
+{
     private params: Record<string, string> = {}
     
-    constructor(search: string = '') {
-        if (search.startsWith('?')) {
+    constructor(search: string = '') 
+{
+        if (search.startsWith('?')) 
+{
             search = search.substring(1)
         }
-        if (search) {
+        if (search) 
+{
             const pairs = search.split('&')
-            pairs.forEach(pair => {
+            pairs.forEach(pair => 
+{
                 const [key, value] = pair.split('=')
-                if (key && value) {
+                if (key && value) 
+{
                     this.params[decodeURIComponent(key)] = decodeURIComponent(value)
                 }
             })
         }
     }
     
-    get(key: string) {
+    get(key: string) 
+{
         return this.params[key] || null
     }
     
-    set(key: string, value: string) {
+    set(key: string, value: string) 
+{
         this.params[key] = value
     }
 }
 
 // Mock URL constructor
-global.URL = class URL {
-    searchParams: URLSearchParams
+global.URL = class URL 
+{
     href: string
+
+searchParams: URLSearchParams
     
-    constructor(url: string) {
+    
+    constructor(url: string) 
+{
         this.href = url
         const [base, search] = url.split('?')
         this.searchParams = new URLSearchParams(search || '')
     }
     
-    toString() {
+    toString() 
+{
         const params = []
-        for (const [key, value] of Object.entries((this.searchParams as any).params)) {
+        for (const [key, value] of Object.entries((this.searchParams as any).params)) 
+{
             params.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
         }
         const queryString = params.length > 0 ? `?${params.join('&')}` : ''
@@ -92,18 +106,21 @@ global.URL = class URL {
 vi.stubEnv('VITE_BACKEND_SERVER_ENDPOINT', 'http://localhost:8080')
 vi.stubEnv('VITE_STAGE', 'test')
 
+import { SocketIOTransportClient } from '@volley/vgf/client'
+
 import { useSessionCreation } from '../useSessionCreation'
 import { useUserId } from '../useUserId'
-import { SocketIOTransportClient } from '@volley/vgf/client'
 
 const mockUseUserId = vi.mocked(useUserId)
 const MockSocketIOTransportClient = vi.mocked(SocketIOTransportClient)
 
-describe('useSessionCreation', () => {
+describe('useSessionCreation', () => 
+{
     const mockSetSessionId = vi.fn()
     const mockFetch = vi.mocked(fetch)
     
-    beforeEach(() => {
+    beforeEach(() => 
+{
         vi.clearAllMocks()
         mockFetch.mockClear()
         MockSocketIOTransportClient.mockClear()
@@ -112,7 +129,8 @@ describe('useSessionCreation', () => {
         vi.clearAllTimers()
     })
 
-    it('should return undefined when sessionId is not provided', () => {
+    it('should return undefined when sessionId is not provided', () => 
+{
         const { result } = renderHook(() => 
             useSessionCreation({ 
                 sessionId: null, 
@@ -123,7 +141,8 @@ describe('useSessionCreation', () => {
         expect(result.current).toBeUndefined()
     })
 
-    it('should return undefined when userId is not available', () => {
+    it('should return undefined when userId is not available', () => 
+{
         mockUseUserId.mockReturnValue(undefined)
         
         const { result } = renderHook(() => 
@@ -136,7 +155,8 @@ describe('useSessionCreation', () => {
         expect(result.current).toBeUndefined()
     })
 
-    it('should create SocketIO transport when sessionId and userId are available', () => {
+    it('should create SocketIO transport when sessionId and userId are available', () => 
+{
         mockUseUserId.mockReturnValue('test-user-123')
         
         const { result } = renderHook(() => 
@@ -159,7 +179,8 @@ describe('useSessionCreation', () => {
         expect(result.current).toBe(mockTransport)
     })
 
-    it('should extract sessionId from URL parameters on mount', () => {
+    it('should extract sessionId from URL parameters on mount', () => 
+{
         window.location.search = '?sessionId=url-session-123'
         
         renderHook(() => 
@@ -172,7 +193,8 @@ describe('useSessionCreation', () => {
         expect(mockSetSessionId).toHaveBeenCalledWith('url-session-123')
     })
 
-    it('should create new session in local development environment', async () => {
+    it('should create new session in local development environment', async () => 
+{
         vi.stubEnv('VITE_STAGE', 'local')
         
         mockFetch.mockResolvedValueOnce({
@@ -186,7 +208,8 @@ describe('useSessionCreation', () => {
             })
         )
         
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(mockFetch).toHaveBeenCalledWith(
                 'http://localhost:8080/api/session',
                 { method: 'POST' }
@@ -201,7 +224,8 @@ describe('useSessionCreation', () => {
         )
     })
 
-    it('should not create session in non-local environments', () => {
+    it('should not create session in non-local environments', () => 
+{
         vi.stubEnv('VITE_STAGE', 'production')
         
         renderHook(() => 
@@ -214,7 +238,8 @@ describe('useSessionCreation', () => {
         expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should handle session creation API errors gracefully', async () => {
+    it('should handle session creation API errors gracefully', async () => 
+{
         vi.stubEnv('VITE_STAGE', 'local')
         
         mockFetch.mockRejectedValueOnce(new Error('Network error'))
@@ -228,7 +253,8 @@ describe('useSessionCreation', () => {
             })
         )
         
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(consoleSpy).toHaveBeenCalledWith(
                 'Unable to create game and set party ID',
                 { error: expect.any(Error) }
@@ -238,7 +264,8 @@ describe('useSessionCreation', () => {
         consoleSpy.mockRestore()
     })
 
-    it('should handle non-Error thrown objects in session creation', async () => {
+    it('should handle non-Error thrown objects in session creation', async () => 
+{
         vi.stubEnv('VITE_STAGE', 'local')
         
         mockFetch.mockRejectedValueOnce('String error')
@@ -252,7 +279,8 @@ describe('useSessionCreation', () => {
             })
         )
         
-        await waitFor(() => {
+        await waitFor(() => 
+{
             expect(consoleSpy).toHaveBeenCalledWith(
                 'Unable to create game and set party ID',
                 { error: expect.any(Error) }
@@ -262,7 +290,8 @@ describe('useSessionCreation', () => {
         consoleSpy.mockRestore()
     })
 
-    it('should configure transport event handlers', () => {
+    it('should configure transport event handlers', () => 
+{
         mockUseUserId.mockReturnValue('test-user-123')
         
         renderHook(() => 
@@ -282,7 +311,8 @@ describe('useSessionCreation', () => {
         )
     })
 
-    it('should recreate transport when sessionId or userId changes', () => {
+    it('should recreate transport when sessionId or userId changes', () => 
+{
         mockUseUserId.mockReturnValue('test-user-123')
         
         const { rerender } = renderHook(
@@ -300,7 +330,8 @@ describe('useSessionCreation', () => {
         expect(MockSocketIOTransportClient).toHaveBeenCalledTimes(2)
     })
 
-    it('should not recreate transport when other props change', () => {
+    it('should not recreate transport when other props change', () => 
+{
         mockUseUserId.mockReturnValue('test-user-123')
         
         const { rerender } = renderHook(

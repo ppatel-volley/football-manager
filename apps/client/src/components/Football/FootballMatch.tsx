@@ -1,47 +1,54 @@
+import { PitchCanvas } from "@game/pitch-ui"
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 
-import { PitchCanvas } from "@game/pitch-ui"
 import { useDispatchAction, useStateSync } from "../../hooks/VGF"
 
 interface FootballMatchProps {
     phase: string
 }
 
-export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => {
+export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => 
+{
     const gameState = useStateSync()
     const dispatchAction = useDispatchAction()
     const [autoProgress, setAutoProgress] = useState(true)
     
     // Auto-progress through phases for demo purposes
-    useEffect(() => {
+    useEffect(() => 
+{
         if (!autoProgress) return
         
         let timeout: NodeJS.Timeout
         
-        switch (phase) {
+        switch (phase) 
+{
             case 'pre_match':
                 // Auto-start match after 5 seconds
-                timeout = setTimeout(() => {
+                timeout = setTimeout(() => 
+{
                     dispatchAction('startMatch')
                 }, 5000)
                 break
                 
             case 'kickoff':
                 // Auto-take kickoff after 3 seconds
-                timeout = setTimeout(() => {
+                timeout = setTimeout(() => 
+{
                     dispatchAction('takeKickoff')
                 }, 3000)
                 break
         }
         
-        return () => {
+        return () => 
+{
             if (timeout) clearTimeout(timeout)
         }
     }, [phase, autoProgress, dispatchAction])
     
     // Handle tactical commands
-    const handleTacticalCommand = (commandType: string) => {
+    const handleTacticalCommand = (commandType: string) => 
+{
         dispatchAction('tacticalCommand', {
             type: commandType,
             team: 'HOME' // Assuming player controls HOME team
@@ -49,15 +56,19 @@ export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => {
     }
     
     // Handle specific phase actions
-    const handlePhaseAction = (actionType: string) => {
-        switch (actionType) {
+    const handlePhaseAction = (actionType: string) => 
+{
+        switch (actionType) 
+{
             case 'shoot':
-                if (phase === 'first_half' || phase === 'second_half') {
+                if (phase === 'first_half' || phase === 'second_half') 
+{
                     dispatchAction('shootBall', 'HOME')
                 }
                 break
             case 'restart':
-                if (phase === 'full_time') {
+                if (phase === 'full_time') 
+{
                     dispatchAction('restartMatch')
                 }
                 break

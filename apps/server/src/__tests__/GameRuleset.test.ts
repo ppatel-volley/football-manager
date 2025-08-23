@@ -1,5 +1,6 @@
 import { FootballManagerRuleset } from "../GameRuleset"
 import type { GameState } from "../shared/types/GameState"
+import { MatchPhase } from "../shared/types/GameState"
 import { PhaseName } from "../shared/types/PhaseName"
 
 describe("FootballManagerRuleset", () => 
@@ -40,7 +41,7 @@ describe("FootballManagerRuleset", () =>
                     shots: { HOME: 0, AWAY: 0 },
                     corners: { HOME: 0, AWAY: 0 }
                 },
-                matchPhase: "pre_match" as const,
+                matchPhase: MatchPhase.PRE_MATCH,
                 phase: PhaseName.PreMatch,
                 ...state
             }
@@ -63,16 +64,16 @@ describe("FootballManagerRuleset", () =>
         })
     })
 
-    describe("actions", () => 
-{
+    describe("reducers", () => 
+    {
         describe("tacticalCommand", () => 
-{
+        {
             it("should update home team tactical style", () => 
-{
-                const ctx = createMockContext()
+            {
+                const state = createMockContext().session.state
                 const command = { type: "ATTACK", team: "HOME" as const }
                 
-                const result = FootballManagerRuleset.actions.tacticalCommand(ctx, command)
+                const result = FootballManagerRuleset.reducers.tacticalCommand(state, command)
                 
                 expect(result.homeTeam.tacticalStyle).toBe("ATTACK")
                 expect(result.lastCommand).toEqual({
@@ -83,11 +84,11 @@ describe("FootballManagerRuleset", () =>
             })
 
             it("should update away team tactical style", () => 
-{
-                const ctx = createMockContext()
+            {
+                const state = createMockContext().session.state
                 const command = { type: "DEFEND", team: "AWAY" as const }
                 
-                const result = FootballManagerRuleset.actions.tacticalCommand(ctx, command)
+                const result = FootballManagerRuleset.reducers.tacticalCommand(state, command)
                 
                 expect(result.awayTeam.tacticalStyle).toBe("DEFEND")
                 expect(result.lastCommand).toEqual({
@@ -99,59 +100,59 @@ describe("FootballManagerRuleset", () =>
         })
 
         describe("startMatch", () => 
-{
+        {
             it("should transition to kickoff phase", () => 
-{
-                const ctx = createMockContext()
+            {
+                const state = createMockContext().session.state
                 
-                const result = FootballManagerRuleset.actions.startMatch(ctx)
+                const result = FootballManagerRuleset.reducers.startMatch(state)
                 
-                expect(result.matchPhase).toBe("kickoff")
+                expect(result.matchPhase).toBe(MatchPhase.KICKOFF)
             })
         })
 
         describe("takeKickoff", () => 
-{
+        {
             it("should transition to first half phase", () => 
-{
-                const ctx = createMockContext({ matchPhase: "kickoff" })
+            {
+                const state = createMockContext({ matchPhase: MatchPhase.KICKOFF }).session.state
                 
-                const result = FootballManagerRuleset.actions.takeKickoff(ctx)
+                const result = FootballManagerRuleset.reducers.takeKickoff(state)
                 
-                expect(result.matchPhase).toBe("first_half")
+                expect(result.matchPhase).toBe(MatchPhase.FIRST_HALF)
             })
         })
 
         describe("shootBall", () => 
-{
+        {
             beforeEach(() => 
-{
+            {
                 // Mock Math.random for predictable testing
                 jest.spyOn(Math, "random")
             })
 
             afterEach(() => 
-{
+            {
                 jest.restoreAllMocks()
             })
 
             it("should increase score when shot results in goal", () => 
-{
-                const ctx = createMockContext()
+            {
+                const state = createMockContext().session.state
                 ;(Math.random as jest.Mock).mockReturnValue(0.05) // Less than 0.1 = goal
                 
-                const result = FootballManagerRuleset.actions.shootBall(ctx, "HOME")
+                const result = FootballManagerRuleset.reducers.shootBall(state, "HOME")
                 
                 expect(result.score.home).toBe(1)
                 expect(result.score.away).toBe(0)
             })
 
             it("should increase shots stat when shot misses", () => 
-{
-                const ctx = createMockContext()
+            {
+                const state = createMockContext().session.state
                 ;(Math.random as jest.Mock).mockReturnValue(0.5) // Greater than 0.1 = miss
                 
-                const result = FootballManagerRuleset.actions.shootBall(ctx, "AWAY")
+                const result = FootballManagerRuleset.reducers.shootBall(state, "AWAY")
                 
                 expect(result.score.home).toBe(0)
                 expect(result.score.away).toBe(0)
@@ -160,20 +161,20 @@ describe("FootballManagerRuleset", () =>
         })
 
         describe("restartMatch", () => 
-{
+        {
             it("should reset match to initial state", () => 
-{
-                const ctx = createMockContext({
-                    matchPhase: "full_time",
+            {
+                const state = createMockContext({
+                    matchPhase: MatchPhase.FULL_TIME,
                     score: { home: 2, away: 1 },
                     gameTime: 5400,
                     footballTime: "90:00",
                     footballHalf: 2
-                })
+                }).session.state
                 
-                const result = FootballManagerRuleset.actions.restartMatch(ctx)
+                const result = FootballManagerRuleset.reducers.restartMatch(state)
                 
-                expect(result.matchPhase).toBe("pre_match")
+                expect(result.matchPhase).toBe(MatchPhase.PRE_MATCH)
                 expect(result.score).toEqual({ home: 0, away: 0 })
                 expect(result.gameTime).toBe(0)
                 expect(result.footballTime).toBe("00:00")
@@ -182,8 +183,8 @@ describe("FootballManagerRuleset", () =>
         })
     })
 
-    describe("reducers", () => 
-{
+    describe("utility reducers", () => 
+    {
         describe("updateGameTime", () => 
 {
             it("should update game time and format football time correctly for first half", () => 

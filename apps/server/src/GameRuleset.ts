@@ -7,6 +7,7 @@ import { KickoffPhase } from "./phases/KickoffPhase"
 import { PreMatchPhase } from "./phases/PreMatchPhase"
 import { SecondHalfPhase } from "./phases/SecondHalfPhase"
 import type { GameState } from "./shared/types/GameState"
+import { MatchPhase } from "./shared/types/GameState"
 import { PhaseName } from "./shared/types/PhaseName"
 import {
     processAdvancedShoot,
@@ -21,24 +22,36 @@ import { setupGameState } from "./utils/setupGame"
 export const FootballManagerRuleset = {
     setup: setupGameState,
     
-    // Actions that can be called during any phase
-    actions: {
+    // Actions are empty in new VGF - use reducers instead
+    actions: {},
+    
+    // Thunks for complex async operations
+    thunks: {
+        processMatchSimulation,
+        setupTacticalChange,
+        processAdvancedShoot,
+        setupMatchRestart,
+        processSubstitution,
+        updateMatchStatistics
+    },
+    
+    // Reducers for simple state updates
+    reducers: {
         // Tactical commands from voice/button input
-        tacticalCommand: (ctx: { session: { state: GameState } }, command: { type: string; team: 'HOME' | 'AWAY' }): GameState =>
+        tacticalCommand: (state: GameState, command: { type: string; team: 'HOME' | 'AWAY' }): GameState => 
         {
             console.log(`Tactical command: ${command.type} for ${command.team}`)
             
-            // Update team tactical style
-            const updatedState = { ...ctx.session.state }
+            const updatedState = { ...state }
             
-            if (command.team === 'HOME')
+            if (command.team === 'HOME') 
             {
                 updatedState.homeTeam = {
                     ...updatedState.homeTeam,
                     tacticalStyle: command.type as 'ATTACK' | 'DEFEND' | 'BALANCE'
                 }
-            }
-            else
+            } 
+            else 
             {
                 updatedState.awayTeam = {
                     ...updatedState.awayTeam, 
@@ -56,37 +69,36 @@ export const FootballManagerRuleset = {
             return updatedState
         },
 
-        // Start match action
-        startMatch: (ctx: { session: { state: GameState } }): GameState =>
+        // Start match
+        startMatch: (state: GameState): GameState => 
         {
             console.log('Starting match')
             return {
-                ...ctx.session.state,
-                matchPhase: 'kickoff' as 'pre_match' | 'kickoff' | 'first_half' | 'half_time' | 'second_half' | 'full_time'
+                ...state,
+                matchPhase: MatchPhase.KICKOFF
             }
         },
 
-        // Take kickoff action  
-        takeKickoff: (ctx: { session: { state: GameState } }): GameState =>
+        // Take kickoff
+        takeKickoff: (state: GameState): GameState => 
         {
             console.log('Taking kickoff')
             return {
-                ...ctx.session.state,
-                matchPhase: 'first_half' as 'pre_match' | 'kickoff' | 'first_half' | 'half_time' | 'second_half' | 'full_time'
+                ...state,
+                matchPhase: MatchPhase.FIRST_HALF
             }
         },
 
-        // Shoot ball action
-        shootBall: (ctx: { session: { state: GameState } }, team: 'HOME' | 'AWAY'): GameState =>
+        // Shoot ball
+        shootBall: (state: GameState, team: 'HOME' | 'AWAY'): GameState => 
         {
             console.log(`${team} team shoots`)
             
             // Simple goal simulation - 10% chance
             const isGoal = Math.random() < 0.1
             
-            if (isGoal)
+            if (isGoal) 
             {
-                const state = ctx.session.state
                 return {
                     ...state,
                     score: {
@@ -96,7 +108,6 @@ export const FootballManagerRuleset = {
                 }
             }
             
-            const state = ctx.session.state
             return {
                 ...state,
                 stats: {
@@ -109,33 +120,20 @@ export const FootballManagerRuleset = {
             }
         },
 
-        // Restart match action
-        restartMatch: (ctx: { session: { state: GameState } }): GameState =>
+        // Restart match
+        restartMatch: (state: GameState): GameState => 
         {
             console.log('Restarting match')
             return {
-                ...ctx.session.state,
-                matchPhase: 'pre_match' as 'pre_match' | 'kickoff' | 'first_half' | 'half_time' | 'second_half' | 'full_time',
+                ...state,
+                matchPhase: MatchPhase.PRE_MATCH,
                 score: { home: 0, away: 0 },
                 gameTime: 0,
                 footballTime: "00:00",
                 footballHalf: 1
             }
-        }
-    },
-    
-    // Thunks for complex async operations
-    thunks: {
-        processMatchSimulation,
-        setupTacticalChange,
-        processAdvancedShoot,
-        setupMatchRestart,
-        processSubstitution,
-        updateMatchStatistics
-    },
-    
-    // Reducers for simple state updates
-    reducers: {
+        },
+
         updateGameTime: (state: GameState, newTime: number): GameState => ({
             ...state,
             gameTime: newTime,

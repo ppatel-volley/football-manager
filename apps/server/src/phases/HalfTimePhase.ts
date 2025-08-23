@@ -1,10 +1,13 @@
 import type { Phase } from "@volley/vgf/server"
 
 import type { GameState } from "../shared/types/GameState"
+import { MatchPhase } from "../shared/types/GameState"
 import { PhaseName } from "../shared/types/PhaseName"
 
 export const HalfTimePhase = {
     actions: {},
+    thunks: {},
+    reducers: {},
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onBegin: (ctx: any): GameState => 
@@ -16,7 +19,7 @@ export const HalfTimePhase = {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             ...ctx.session.state as GameState,
             footballHalf: 2,
-            matchPhase: 'half_time' as GameState['matchPhase'],
+            matchPhase: MatchPhase.HALF_TIME,
             // Reset ball for second half kickoff
             ball: {
                 position: { x: 0.5, y: 0.5 },
