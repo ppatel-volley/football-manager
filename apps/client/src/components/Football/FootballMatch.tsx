@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 
+import { PitchCanvas } from "@game/pitch-ui"
 import { useDispatchAction, useStateSync } from "../../hooks/VGF"
 
 interface FootballMatchProps {
@@ -104,6 +105,24 @@ export const FootballMatch = ({ phase }: FootballMatchProps): ReactNode => {
                     <p>Ball: {gameState?.ballPossession || 'None'}</p>
                     <p>Half: {gameState?.footballHalf || 1}</p>
                 </div>
+            </div>
+            
+            {/* Pitch visualization */}
+            <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                flex: 1,
+                padding: '20px'
+            }}>
+                <PitchCanvas 
+                    width={800} 
+                    height={600}
+                    style={{ 
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                    }}
+                />
             </div>
             
             {/* Phase-specific content */}
