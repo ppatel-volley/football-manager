@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
-import type { PlayerRole, Vector2 } from "../types/Formation"
+
 import { getAvailableFormations, getKickoffPositions } from "../lib/uberFormationLoader"
+import type { PlayerRole, Vector2 } from "../types/Formation"
 
 interface FormationDropdownProps
 {
@@ -16,16 +17,20 @@ export function FormationDropdown(props: FormationDropdownProps): ReactNode
     const availableFormations = getAvailableFormations()
     console.log("Available formations:", availableFormations)
     
-    const handleFormationSelect = (formationId: string) => {
+    const handleFormationSelect = (formationId: string): void => 
+{
         const kickoffPositions = getKickoffPositions(formationId)
-        if (kickoffPositions) {
+        if (kickoffPositions) 
+{
             onSelectionChange(formationId, kickoffPositions)
         }
     }
     
-    const handleApplyKickoff = () => {
+    const handleApplyKickoff = (): void => 
+{
         const kickoffPositions = getKickoffPositions(selectedFormationId)
-        if (kickoffPositions) {
+        if (kickoffPositions) 
+{
             onApplyKickoff(kickoffPositions)
         }
     }

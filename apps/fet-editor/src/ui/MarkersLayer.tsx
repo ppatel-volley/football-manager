@@ -27,7 +27,7 @@ export const MarkersLayer = ({ size, grid, snapToGrid, roles, onChange, onDragSt
     const items = useMemo(() => 
         Object.entries(roles)
             .filter(([_, position]) => position != null) // Filter out undefined positions
-            .map(([role, position]) => ({ role: role as PlayerRole, p: position }))
+            .map(([role, position]) => ({ role: role, p: position }))
     , [roles])
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void =>

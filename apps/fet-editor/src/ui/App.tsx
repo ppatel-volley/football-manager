@@ -24,11 +24,12 @@ export const App = (): ReactNode =>
     const clampOwnHalf = (roles: Record<PlayerRole, Vector2>): Record<PlayerRole, Vector2> =>
     {
         const out: Record<PlayerRole, Vector2> = { ...roles }
-        const keys = Object.keys(out) as PlayerRole[]
+        const keys = Object.keys(out)
         for (const k of keys)
         {
             const p = out[k]
-            if (p) {
+            if (p) 
+{
                 out[k] = { x: Math.min(0.48, p.x), y: p.y }
             }
         }
@@ -202,7 +203,7 @@ export const App = (): ReactNode =>
         // Build compact export for ATTACK/BALANCE/DEFEND phases
         const phases: Record<string, { zones: number[]; positions: number[]; priorities: number[]; flexibility: number[] }> = {}
 
-        const roleOrder = Object.keys(doc.formation.roles) as PlayerRole[]
+        const roleOrder = Object.keys(doc.formation.roles)
         const gridWidth = doc.grid.cols
         const toIndex = (c: number, r: number): number => r * gridWidth + c
 
@@ -221,7 +222,8 @@ export const App = (): ReactNode =>
                 for (const r of roleOrder)
                 {
                     const p = set[r]
-                    if (p) {
+                    if (p) 
+{
                         positions.push(p.x, p.y)
                     }
                     priorities.push(5)
@@ -323,7 +325,7 @@ export const App = (): ReactNode =>
                 // Move all players by the delta amount, except goalkeeper
                 Object.keys(updatedRoles).forEach((roleKey) =>
                 {
-                    const role = roleKey as PlayerRole
+                    const role = roleKey
                     
                     // Skip goalkeeper - GK stays in position
                     if (role === 'GK')
@@ -332,7 +334,8 @@ export const App = (): ReactNode =>
                     }
                     
                     const currentPos = updatedRoles[role]
-                    if (currentPos) {
+                    if (currentPos) 
+{
                         updatedRoles[role] = {
                             x: Math.max(0, Math.min(1, currentPos.x + adjustedDeltaX)),
                             y: Math.max(0, Math.min(1, currentPos.y + adjustedDeltaY))
@@ -383,18 +386,20 @@ export const App = (): ReactNode =>
                     break
                 case 's':
                 case 'S':
-                    e.preventDefault()
-                    // Stage current formation at ball position
-                    if (!doc.ball) return
-                    const key = cellKey(doc.grid, doc.ball)
-                    setPending((p) => ({ ...p, [key]: { ...doc.formation.roles } }))
-                    break
+                    {
+                        e.preventDefault()
+                        // Stage current formation at ball position
+                        if (!doc.ball) return
+                        const key = cellKey(doc.grid, doc.ball)
+                        setPending((p) => ({ ...p, [key]: { ...doc.formation.roles } }))
+                        break
+                    }
             }
         }
 
         document.addEventListener('keydown', handleKeyDown)
         return () => document.removeEventListener('keydown', handleKeyDown)
-    }, [doc.ball, doc.grid])
+    }, [doc.ball, doc.grid, doc.formation.roles])
 
     // Painting helpers (deduped handlers)
     const paintHandlers = usePaintHandlers({
