@@ -60,7 +60,7 @@ const transport = new SocketIOTransport({
     httpServer,
     redisClient,
     storage,
-    socketIOConfig
+    socketOptions: socketIOConfig
 })
 
 // Create VGF server with configuration

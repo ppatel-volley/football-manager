@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --filter fet-editor lint)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm install:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(pnpm typecheck:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm --filter fet-editor dev)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm --filter server dev)",
+      "Bash(find:*)",
+      "Bash(docker run:*)",
+      "Bash(redis-server:*)",
+      "Read(/C:\\volley\\dev\\vgf/**)",
+      "Read(/C:\\volley\\dev\\vgf\\apps\\server\\src/**)",
+      "Read(/C:\\volley\\dev\\vgf\\apps\\server\\src/**)",
+      "Read(/C:\\volley\\dev\\vgf\\apps\\server\\src/**)",
+      "Bash(winget install:*)",
+      "Bash(choco install:*)",
+      "Read(/C:\\volley\\dev\\vgf\\apps\\server\\src/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

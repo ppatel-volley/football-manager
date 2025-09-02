@@ -85,6 +85,7 @@ This is a real-time multiplayer game built on Volley's VGF framework with:
 - Use spaces instead of tabs and use 4 spaces to represent a single tab indentation
 - No fucking emojis in code ever!!!
 - Write unit tests for any new code. Remove tests for any old code that's deleted
+- No single line 'if' statements. Code must use braces and formatted correctly
 
 ## Comments
 

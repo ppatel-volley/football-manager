@@ -98,7 +98,7 @@ export const App = (): ReactNode =>
             },
         },
         posture: "BALANCE",
-        mapping: { ATTACK: {}, BALANCE: {}, DEFEND: {} },
+        mapping: { ATTACK: {}, BALANCE: {}, DEFEND: {} } as Record<Posture, Record<string, Record<PlayerRole, Vector2>>>,
         ball: { x: 0.5, y: 0.5 },
     })
     const [pending, setPending] = useState<Record<string, typeof doc.formation.roles>>({})
@@ -239,8 +239,9 @@ export const App = (): ReactNode =>
                 for (const k of keys)
                 {
                     const [cStr, rStr] = k.split("_")
-                    const c = Number.parseInt(cStr ?? "0", 10)
-                    const r = Number.parseInt(rStr ?? "0", 10)
+                    if (!cStr || !rStr) continue
+                    const c = Number.parseInt(cStr, 10)
+                    const r = Number.parseInt(rStr, 10)
                     pushSet(mapping[k]!, toIndex(c, r))
                 }
             }
